@@ -1,0 +1,297 @@
+{
+  "version": "1.0.0",
+  "name": "ECommerce Platform",
+  "description": "A complete e-commerce business application with products, customers, orders, and categories",
+  "concepts": [
+    {
+      "name": "Product",
+      "pluralName": "Products",
+      "description": "A product available for sale in the e-commerce platform",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "unique": false,
+          "minLength": 2,
+          "maxLength": 100,
+          "description": "The name of the product"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "maxLength": 1000,
+          "description": "Detailed description of the product"
+        },
+        {
+          "name": "price",
+          "type": "decimal",
+          "required": true,
+          "precision": 10,
+          "scale": 2,
+          "min": 0.01,
+          "description": "Price of the product"
+        },
+        {
+          "name": "stockQuantity",
+          "type": "integer",
+          "required": true,
+          "min": 0,
+          "default": 0,
+          "description": "Available stock quantity"
+        },
+        {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "unique": true,
+          "minLength": 3,
+          "maxLength": 50,
+          "description": "Stock Keeping Unit - unique identifier"
+        },
+        {
+          "name": "status",
+          "type": "enum",
+          "required": true,
+          "enumValues": ["draft", "published", "archived"],
+          "default": "draft",
+          "description": "Current status of the product"
+        },
+        {
+          "name": "isFeatured",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "Whether the product is featured"
+        },
+        {
+          "name": "createdAt",
+          "type": "datetime",
+          "required": false,
+          "description": "When the product was created"
+        },
+        {
+          "name": "updatedAt",
+          "type": "datetime",
+          "required": false,
+          "description": "When the product was last updated"
+        }
+      ]
+    },
+    {
+      "name": "Category",
+      "pluralName": "Categories",
+      "description": "Product categories for organizing the catalog",
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "unique": true,
+          "minLength": 2,
+          "maxLength": 50,
+          "description": "Name of the category"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "maxLength": 500,
+          "description": "Description of the category"
+        },
+        {
+          "name": "slug",
+          "type": "string",
+          "required": true,
+          "unique": true,
+          "minLength": 2,
+          "maxLength": 50,
+          "description": "URL-friendly slug for the category"
+        },
+        {
+          "name": "parentId",
+          "type": "integer",
+          "required": false,
+          "description": "Parent category ID for hierarchical categories"
+        }
+      ],
+      "relationships": [
+        {
+          "type": "many-to-many",
+          "target": "Product",
+          "fieldName": "products",
+          "targetFieldName": "categories",
+          "ownership": false,
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Customer",
+      "pluralName": "Customers",
+      "description": "Customers who purchase products",
+      "fields": [
+        {
+          "name": "firstName",
+          "type": "string",
+          "required": true,
+          "minLength": 1,
+          "maxLength": 50,
+          "description": "Customer's first name"
+        },
+        {
+          "name": "lastName",
+          "type": "string",
+          "required": true,
+          "minLength": 1,
+          "maxLength": 50,
+          "description": "Customer's last name"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "required": true,
+          "unique": true,
+          "minLength": 5,
+          "maxLength": 100,
+          "description": "Customer's email address"
+        },
+        {
+          "name": "phone",
+          "type": "string",
+          "required": false,
+          "minLength": 10,
+          "maxLength": 20,
+          "description": "Customer's phone number"
+        },
+        {
+          "name": "address",
+          "type": "string",
+          "required": false,
+          "maxLength": 200,
+          "description": "Customer's shipping address"
+        },
+        {
+          "name": "createdAt",
+          "type": "datetime",
+          "required": false,
+          "description": "When the customer account was created"
+        }
+      ]
+    },
+    {
+      "name": "Order",
+      "pluralName": "Orders",
+      "description": "Customer orders containing products",
+      "fields": [
+        {
+          "name": "orderNumber",
+          "type": "string",
+          "required": true,
+          "unique": true,
+          "minLength": 5,
+          "maxLength": 20,
+          "description": "Unique order number"
+        },
+        {
+          "name": "orderDate",
+          "type": "datetime",
+          "required": true,
+          "description": "When the order was placed"
+        },
+        {
+          "name": "totalAmount",
+          "type": "decimal",
+          "required": true,
+          "precision": 10,
+          "scale": 2,
+          "min": 0,
+          "description": "Total order amount"
+        },
+        {
+          "name": "status",
+          "type": "enum",
+          "required": true,
+          "enumValues": ["pending", "processing", "shipped", "delivered", "cancelled"],
+          "default": "pending",
+          "description": "Current order status"
+        },
+        {
+          "name": "shippingAddress",
+          "type": "string",
+          "required": true,
+          "maxLength": 200,
+          "description": "Shipping address for the order"
+        },
+        {
+          "name": "billingAddress",
+          "type": "string",
+          "required": false,
+          "maxLength": 200,
+          "description": "Billing address for the order"
+        }
+      ],
+      "relationships": [
+        {
+          "type": "belongs-to",
+          "target": "Customer",
+          "fieldName": "customer",
+          "targetFieldName": "orders",
+          "ownership": false,
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "OrderItem",
+      "pluralName": "OrderItems",
+      "description": "Individual items within an order",
+      "fields": [
+        {
+          "name": "quantity",
+          "type": "integer",
+          "required": true,
+          "min": 1,
+          "description": "Quantity of the product"
+        },
+        {
+          "name": "unitPrice",
+          "type": "decimal",
+          "required": true,
+          "precision": 10,
+          "scale": 2,
+          "min": 0,
+          "description": "Price per unit at time of purchase"
+        },
+        {
+          "name": "totalPrice",
+          "type": "decimal",
+          "required": true,
+          "precision": 10,
+          "scale": 2,
+          "min": 0,
+          "description": "Total price for this order item"
+        }
+      ],
+      "relationships": [
+        {
+          "type": "belongs-to",
+          "target": "Order",
+          "fieldName": "order",
+          "targetFieldName": "items",
+          "ownership": true,
+          "required": true
+        },
+        {
+          "type": "belongs-to",
+          "target": "Product",
+          "fieldName": "product",
+          "targetFieldName": "orderItems",
+          "ownership": false,
+          "required": true
+        }
+      ]
+    }
+  ]
+}

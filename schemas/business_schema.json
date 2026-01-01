@@ -1,0 +1,160 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Business Application Schema",
+  "description": "Schema for defining business concepts and their relationships",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Schema version",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "name": {
+      "type": "string",
+      "description": "Name of the business application"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the business application"
+    },
+    "concepts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the concept (singular, PascalCase)",
+            "pattern": "^[A-Z][a-zA-Z0-9]*$"
+          },
+          "pluralName": {
+            "type": "string",
+            "description": "Plural name of the concept (PascalCase)"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of the concept"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Field name (camelCase)",
+                  "pattern": "^[a-z][a-zA-Z0-9]*$"
+                },
+                "type": {
+                  "type": "string",
+                  "description": "Field type",
+                  "enum": ["string", "integer", "decimal", "enum", "boolean", "date", "datetime"]
+                },
+                "required": {
+                  "type": "boolean",
+                  "description": "Whether the field is required",
+                  "default": false
+                },
+                "unique": {
+                  "type": "boolean",
+                  "description": "Whether the field must be unique",
+                  "default": false
+                },
+                "default": {
+                  "type": ["string", "number", "boolean", "null"],
+                  "description": "Default value for the field"
+                },
+                "minLength": {
+                  "type": "integer",
+                  "description": "Minimum length for string fields",
+                  "minimum": 0
+                },
+                "maxLength": {
+                  "type": "integer",
+                  "description": "Maximum length for string fields",
+                  "minimum": 1
+                },
+                "min": {
+                  "type": "number",
+                  "description": "Minimum value for numeric fields"
+                },
+                "max": {
+                  "type": "number",
+                  "description": "Maximum value for numeric fields"
+                },
+                "precision": {
+                  "type": "integer",
+                  "description": "Precision for decimal fields",
+                  "minimum": 1,
+                  "maximum": 10
+                },
+                "scale": {
+                  "type": "integer",
+                  "description": "Scale for decimal fields",
+                  "minimum": 0,
+                  "maximum": 10
+                },
+                "enumValues": {
+                  "type": "array",
+                  "description": "Allowed values for enum fields",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Description of the field"
+                }
+              },
+              "required": ["name", "type"],
+              "additionalProperties": false
+            }
+          },
+          "relationships": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Relationship type",
+                  "enum": ["one-to-many", "many-to-many", "belongs-to"]
+                },
+                "target": {
+                  "type": "string",
+                  "description": "Target concept name"
+                },
+                "fieldName": {
+                  "type": "string",
+                  "description": "Field name for the relationship (camelCase)"
+                },
+                "targetFieldName": {
+                  "type": "string",
+                  "description": "Field name on the target concept"
+                },
+                "ownership": {
+                  "type": "boolean",
+                  "description": "Whether this is an ownership relationship",
+                  "default": false
+                },
+                "required": {
+                  "type": "boolean",
+                  "description": "Whether the relationship is required",
+                  "default": false
+                }
+              },
+              "required": ["type", "target"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["name", "fields"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["version", "name", "concepts"],
+  "additionalProperties": false
+}

@@ -1,0 +1,369 @@
+# UniBizKit - Business Application Generator
+
+UniBizKit is a proof of concept for generating complete business applications from JSON definitions. It generates both Supabase (PostgreSQL) database schemas and React-Admin frontend applications.
+
+## Table of Contents
+
+- [Installation](#installation)
+- [JSON Schema Format](#json-schema-format)
+- [CLI Usage](#cli-usage)
+- [Examples](#examples)
+- [Generated Output](#generated-output)
+- [Running the Generated Application](#running-the-generated-application)
+- [Testing](#testing)
+- [Architecture](#architecture)
+
+## Installation
+
+### Prerequisites
+
+- Python 3.8+
+- Node.js (for running the generated React-Admin application)
+- PostgreSQL (for running the generated Supabase schema)
+
+### Install UniBizKit
+
+```bash
+# Clone the repository
+git clone https://github.com/unibizkit/unibizkit.git
+cd unibizkit
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Linux/Mac
+# venv\Scripts\activate  # On Windows
+
+# Install dependencies
+pip install -e .
+```
+
+## JSON Schema Format
+
+UniBizKit uses a JSON schema to define business concepts, their fields, and relationships.
+
+### Basic Structure
+
+```json
+{
+  "version": "1.0.0",
+  "name": "My Business Application",
+  "description": "Description of the application",
+  "concepts": [
+    {
+      "name": "ConceptName",
+      "pluralName": "ConceptNames",
+      "description": "Description of the concept",
+      "fields": [],
+      "relationships": []
+    }
+  ]
+}
+```
+
+### Field Types
+
+Supported field types:
+
+- `string`: Text fields
+- `integer`: Whole numbers
+- `decimal`: Decimal numbers (with precision and scale)
+- `boolean`: True/false values
+- `date`: Date values
+- `datetime`: Date and time values
+- `enum`: Enumerated values with explicit allowed values
+
+### Field Properties
+
+```json
+{
+  "name": "fieldName",
+  "type": "string",
+  "required": true,
+  "unique": true,
+  "default": "default value",
+  "minLength": 2,
+  "maxLength": 100,
+  "min": 0,
+  "max": 100,
+  "precision": 10,
+  "scale": 2,
+  "enumValues": ["value1", "value2"],
+  "description": "Field description"
+}
+```
+
+### Relationship Types
+
+- `belongs-to`: One-to-one or many-to-one relationship (foreign key)
+- `one-to-many`: One-to-many relationship (inverse of belongs-to)
+- `many-to-many`: Many-to-many relationship (creates join table)
+
+### Relationship Properties
+
+```json
+{
+  "type": "belongs-to",
+  "target": "TargetConcept",
+  "fieldName": "targetField",
+  "targetFieldName": "inverseField",
+  "ownership": true,
+  "required": true
+}
+```
+
+## CLI Usage
+
+### Validate a Schema
+
+```bash
+unibizkit validate path/to/schema.json
+```
+
+### Generate a Complete Application
+
+```bash
+unibizkit generate path/to/schema.json
+```
+
+### Generate with Custom Output Directory
+
+```bash
+unibizkit generate path/to/schema.json --output-dir my-app
+```
+
+### Skip Frontend Generation
+
+```bash
+unibizkit generate path/to/schema.json --skip-frontend
+```
+
+### Skip Backend Generation
+
+```bash
+unibizkit generate path/to/schema.json --skip-backend
+```
+
+## Examples
+
+### ECommerce Schema
+
+The repository includes a complete e-commerce example in `examples/ecommerce_schema.json` that demonstrates:
+
+- Products with various field types
+- Categories with hierarchical relationships
+- Customers with contact information
+- Orders with status tracking
+- Order items with product relationships
+- Many-to-many relationships between products and categories
+
+Generate the e-commerce application:
+
+```bash
+unibizkit generate examples/ecommerce_schema.json --output-dir ecommerce-app
+```
+
+### Simple CRM Schema
+
+Here's a simple CRM example:
+
+```json
+{
+  "version": "1.0.0",
+  "name": "Simple CRM",
+  "concepts": [
+    {
+      "name": "Contact",
+      "fields": [
+        {"name": "firstName", "type": "string", "required": true},
+        {"name": "lastName", "type": "string", "required": true},
+        {"name": "email", "type": "string", "required": true, "unique": true},
+        {"name": "phone", "type": "string"},
+        {"name": "company", "type": "string"},
+        {"name": "status", "type": "enum", "enumValues": ["lead", "customer", "inactive"], "default": "lead"}
+      ]
+    },
+    {
+      "name": "Deal",
+      "fields": [
+        {"name": "name", "type": "string", "required": true},
+        {"name": "amount", "type": "decimal", "precision": 10, "scale": 2},
+        {"name": "stage", "type": "enum", "enumValues": ["proposal", "negotiation", "closed-won", "closed-lost"], "default": "proposal"},
+        {"name": "closeDate", "type": "date"}
+      ],
+      "relationships": [
+        {
+          "type": "belongs-to",
+          "target": "Contact",
+          "fieldName": "contact",
+          "required": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Generated Output
+
+When you run the generate command, UniBizKit creates:
+
+```
+generated-app/
+├── supabase_schema.sql          # PostgreSQL database schema
+├── supabase_sample_data.sql    # Sample data for testing
+└── frontend/                   # React-Admin frontend application
+    ├── package.json
+    ├── public/
+    ├── src/
+    │   ├── App.js
+    │   ├── dataProvider.js
+    │   ├── index.js
+    │   ├── resources/           # One directory per concept
+    │   │   └── Product/
+    │   │       └── Product.js
+    │   ├── components/
+    │   ├── utils/
+    │   └── layout/
+    └── ...
+```
+
+### Database Schema Features
+
+- Tables for each concept with proper field types
+- Primary keys and auto-incrementing IDs
+- Unique constraints for unique fields
+- Enum constraints for enum fields
+- Foreign key constraints for relationships
+- Join tables for many-to-many relationships
+- Timestamps (created_at, updated_at)
+- Sample data for testing
+
+### React-Admin Frontend Features
+
+- Complete Create-Read-Update-Delete (CRUD) interface
+- List, Create, Edit, and Show views for each concept
+- Proper field components based on field types
+- Relationship handling in the UI
+- Form validation for required fields
+- Supabase data provider configuration
+- Ready-to-run React application
+
+## Running the Generated Application
+
+### Backend (Supabase/PostgreSQL)
+
+1. Install PostgreSQL
+2. Create a database
+3. Run the generated SQL schema:
+
+```bash
+psql -U username -d database_name -f supabase_schema.sql
+psql -U username -d database_name -f supabase_sample_data.sql
+```
+
+### Frontend (React-Admin)
+
+1. Navigate to the frontend directory:
+
+```bash
+cd generated-app/frontend
+```
+
+2. Install dependencies:
+
+```bash
+npm install
+```
+
+3. Create a `.env` file with your Supabase credentials:
+
+```
+REACT_APP_SUPABASE_URL=your-supabase-url
+REACT_APP_SUPABASE_KEY=your-supabase-key
+```
+
+4. Start the development server:
+
+```bash
+npm start
+```
+
+The application will be available at `http://localhost:3000`
+
+## Testing
+
+Run the test suite:
+
+```bash
+# Install test dependencies
+pip install -r requirements-dev.txt
+
+# Run tests
+pytest
+
+# Run tests with coverage
+pytest --cov=src/unibizkit --cov-report=term-missing
+```
+
+### Test Categories
+
+- **Schema Validation**: Tests for JSON schema validation
+- **Supabase Generation**: Tests for database schema generation
+- **React-Admin Generation**: Tests for frontend code generation
+- **CLI Functionality**: Tests for command line interface
+
+## Architecture
+
+UniBizKit follows a modular architecture:
+
+```
+src/unibizkit/
+├── __init__.py           # Package initialization
+├── schema_loader.py     # Schema loading and validation
+├── supabase_generator.py # Supabase database schema generation
+├── react_admin_generator.py # React-Admin frontend generation
+├── cli.py               # Command line interface
+└── main.py              # Main entry point
+```
+
+### Key Components
+
+1. **Schema Loader**: Validates business schemas against the JSON schema definition
+2. **Supabase Generator**: Generates PostgreSQL database schemas with tables, constraints, and relationships
+3. **React-Admin Generator**: Generates complete React-Admin applications with CRUD interfaces
+4. **CLI**: Provides a user-friendly command line interface
+
+### Design Principles
+
+- **Explicitness**: Clear, well-documented JSON schema format
+- **Extensibility**: Easy to add new field types and features
+- **Testability**: Comprehensive test coverage
+- **Modularity**: Clear separation of concerns between components
+
+## Limitations
+
+This is a proof of concept with the following limitations:
+
+- Basic relationship handling (no complex join conditions)
+- Simple field type mapping
+- Basic React-Admin configuration
+- No authentication/authorization generation
+- Limited customization options
+
+## Future Enhancements
+
+Potential areas for future development:
+
+- More field types (arrays, JSON, etc.)
+- Advanced relationship configurations
+- Custom validation rules
+- Theming and branding options
+- Authentication integration
+- API generation
+- Mobile app generation
+- More database backends
+- More frontend frameworks
+
+## License
+
+MIT License - See LICENSE file for details.
