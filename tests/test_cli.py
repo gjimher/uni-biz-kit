@@ -10,8 +10,8 @@ import json
 import os
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from src.unibizkit.cli import CLI
-from src.unibizkit.schema_loader import SchemaValidationError
+from unibizkit.cli import CLI
+from unibizkit.schema_loader import SchemaValidationError
 
 class TestCLI:
     """Test cases for CLI functionality."""

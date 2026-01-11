@@ -69,6 +69,9 @@ class ReactAdminGenerator:
         
         # Create public directory
         (self.output_dir / "public").mkdir(exist_ok=True)
+        
+        # Generate index.html in public directory
+        self._generate_index_html()
     
     def _generate_package_json(self):
         """Generate package.json file."""
@@ -79,23 +82,30 @@ class ReactAdminGenerator:
   "dependencies": {
     "@mui/material": "^5.15.0",
     "@mui/x-date-pickers": "^6.19.0",
+    "@supabase/supabase-js": "^2.89.0",
     "react": "^18.2.0",
     "react-admin": "^4.16.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
-    "ra-data-supabase": "^1.0.0"
+    "ra-supabase": "^3.5.2"
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix"
   },
   "eslintConfig": {
     "extends": [
       "react-app",
       "react-app/jest"
     ]
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.1"
   },
   "browserslist": {
     "production": [
@@ -130,6 +140,25 @@ root.render(
         with open(self.output_dir / "src" / "index.js", 'w', encoding='utf-8') as f:
             f.write(index_js_content)
     
+    def _generate_index_html(self):
+        """Generate index.html file in public directory."""
+        index_html_content = """<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <title>UniBizKit React-Admin</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>"""
+        
+        with open(self.output_dir / "public" / "index.html", 'w', encoding='utf-8') as f:
+            f.write(index_html_content)
+    
     def _generate_app_js(self):
         """Generate App.js file."""
         # Import statements for all resources
@@ -138,7 +167,7 @@ root.render(
         
         for concept in self.concepts:
             resource_name = concept['name']
-            import_statements.append(f"import {{ {resource_name}List, {resource_name}Create, {resource_name}Edit, {resource_name}Show }} from './resources/{resource_name}';")
+            import_statements.append(f"import {{ {resource_name}List, {resource_name}Create, {resource_name}Edit, {resource_name}Show }} from './resources/{resource_name}/{resource_name}.js';")
             resource_components.append(f"    <Resource name=\"{resource_name.lower()}\" list={{ {resource_name}List }} create={{ {resource_name}Create }} edit={{ {resource_name}Edit }} show={{ {resource_name}Show }} />")
         
         app_js_content = f"""import * as React from 'react';
@@ -159,14 +188,21 @@ export default App;"""
     
     def _generate_data_provider(self):
         """Generate data provider configuration."""
-        data_provider_content = """import { supabaseDataProvider } from 'ra-data-supabase';
+        data_provider_content = """import { supabaseDataProvider } from 'ra-supabase';
+import { createClient } from '@supabase/supabase-js';
 
-const supabaseClient = {
-  url: process.env.REACT_APP_SUPABASE_URL,
-  key: process.env.REACT_APP_SUPABASE_KEY,
-};
+// Use the correct Supabase URL format and ensure the key is properly configured
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
 
-export const dataProvider = supabaseDataProvider(supabaseClient);"""
+const supabaseClient = createClient(supabaseUrl, supabaseKey);
+
+// Create the data provider with the correct parameters
+export const dataProvider = supabaseDataProvider({
+  instanceUrl: supabaseUrl,
+  apiKey: supabaseKey,
+  supabaseClient: supabaseClient
+});"""
         
         with open(self.output_dir / "src" / "dataProvider.js", 'w', encoding='utf-8') as f:
             f.write(data_provider_content)
@@ -198,16 +234,19 @@ export const dataProvider = supabaseDataProvider(supabaseClient);"""
         # Generate field components based on field types
         field_components = self._generate_field_components(concept)
         
+        # Get optimized imports based on actual field types used
+        react_admin_imports = self._get_optimized_react_admin_imports(concept)
+        
         resource_content = f"""import * as React from 'react';
-import {{ List, Create, Edit, Show, SimpleShowLayout, SimpleForm, TextField, DateField, BooleanField, NumberField, ReferenceField, ReferenceInput, SelectInput, TextInput, BooleanInput, NumberInput, DateInput, required, useRecordContext }} from 'react-admin';
+import {{ {react_admin_imports} }} from 'react-admin';
 {field_components['imports']}
 
 export const {resource_name}List = (props) => (
   <List {{...props}}>
-    <SimpleShowLayout>
+    <Datagrid>
       <TextField source="id" />
       {field_components['list_fields']}
-    </SimpleShowLayout>
+    </Datagrid>
   </List>
 );
 
@@ -240,6 +279,48 @@ export const {resource_name}Show = (props) => (
         with open(resource_dir / f"{resource_name}.js", 'w', encoding='utf-8') as f:
             f.write(resource_content)
     
+    def _get_optimized_react_admin_imports(self, concept: Dict[str, Any]) -> str:
+        """
+        Generate optimized React-Admin imports based on actual field types used.
+        
+        Args:
+            concept: Concept definition
+            
+        Returns:
+            String of optimized imports
+        """
+        # Base components always needed
+        needed_components = {
+            'List', 'Create', 'Edit', 'Show',
+            'SimpleShowLayout', 'SimpleForm', 'Datagrid',
+            'TextField', 'TextInput', 'required'
+        }
+        
+        # Add components based on field types
+        for field in concept['fields']:
+            field_type = field['type']
+            if field_type == 'date' or field_type == 'datetime':
+                needed_components.add('DateField')
+                needed_components.add('DateInput')
+            elif field_type == 'boolean':
+                needed_components.add('BooleanField')
+                needed_components.add('BooleanInput')
+            elif field_type == 'integer' or field_type == 'decimal':
+                needed_components.add('NumberField')
+                needed_components.add('NumberInput')
+            elif field_type == 'enum':
+                needed_components.add('SelectInput')
+        
+        # Add relationship components if needed
+        if 'relationships' in concept:
+            for relationship in concept['relationships']:
+                if relationship['type'] in ['belongs-to', 'many-to-many']:
+                    needed_components.add('ReferenceField')
+                    needed_components.add('ReferenceInput')
+                    break  # Only need to add once
+        
+        return ', '.join(sorted(needed_components))
+    
     def _generate_field_components(self, concept: Dict[str, Any]) -> Dict[str, str]:
         """
         Generate field components for a concept based on field types.
@@ -256,12 +337,12 @@ export const {resource_name}Show = (props) => (
         edit_fields = []
         show_fields = []
         
-        # Add special imports for relationship fields
-        if 'relationships' in concept:
-            for relationship in concept['relationships']:
-                if relationship['type'] in ['belongs-to', 'many-to-many']:
-                    target_concept = relationship['target']
-                    imports.append(f"import {{ {target_concept}ReferenceField, {target_concept}ReferenceInput }} from '../resources/{target_concept}';")
+        # No need for special imports for relationship fields - we use standard react-admin components
+        # if 'relationships' in concept:
+        #     for relationship in concept['relationships']:
+        #         if relationship['type'] in ['belongs-to', 'many-to-many']:
+        #             target_concept = relationship['target']
+        #             imports.append(f"import {{ {target_concept}ReferenceField, {target_concept}ReferenceInput }} from '../{target_concept}/{target_concept}.js';")
         
         for field in concept['fields']:
             field_name = field['name']
@@ -271,49 +352,55 @@ export const {resource_name}Show = (props) => (
             # Generate appropriate field component based on type
             if field_type == 'string':
                 list_fields.append(f"      <TextField source=\"{field_name}\" />")
-                create_fields.append(f"      <TextInput source=\"{field_name}\" {'validate={[required()]}' if is_required else ''} />")
-                edit_fields.append(f"      <TextInput source=\"{field_name}\" {'validate={[required()]}' if is_required else ''} />")
+                validation = ' validate={[required()]}' if is_required else ''
+                create_fields.append(f"      <TextInput source=\"{field_name}\"{validation} />")
+                edit_fields.append(f"      <TextInput source=\"{field_name}\"{validation} />")
                 show_fields.append(f"      <TextField source=\"{field_name}\" />")
             
             elif field_type == 'integer':
                 list_fields.append(f"      <NumberField source=\"{field_name}\" />")
-                create_fields.append(f"      <NumberInput source=\"{field_name}\" {'validate={[required()]}' if is_required else ''} />")
-                edit_fields.append(f"      <NumberInput source=\"{field_name}\" {'validate={[required()]}' if is_required else ''} />")
+                validation = ' validate={[required()]}' if is_required else ''
+                create_fields.append(f"      <NumberInput source=\"{field_name}\"{validation} />")
+                edit_fields.append(f"      <NumberInput source=\"{field_name}\"{validation} />")
                 show_fields.append(f"      <NumberField source=\"{field_name}\" />")
             
             elif field_type == 'decimal':
-                list_fields.append(f"      <NumberField source=\"{field_name}\" options={{ style: 'currency', currency: 'USD' }} />")
-                create_fields.append(f"      <NumberInput source=\"{field_name}\" {'validate={[required()]}' if is_required else ''} />")
-                edit_fields.append(f"      <NumberInput source=\"{field_name}\" {'validate={[required()]}' if is_required else ''} />")
-                show_fields.append(f"      <NumberField source=\"{field_name}\" options={{ style: 'currency', currency: 'USD' }} />")
+                list_fields.append(f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />")
+                validation = ' validate={[required()]}' if is_required else ''
+                create_fields.append(f"      <NumberInput source=\"{field_name}\"{validation} />")
+                edit_fields.append(f"      <NumberInput source=\"{field_name}\"{validation} />")
+                show_fields.append(f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />")
             
             elif field_type == 'boolean':
                 list_fields.append(f"      <BooleanField source=\"{field_name}\" />")
-                create_fields.append(f"      <BooleanInput source=\"{field_name}\" {'validate={[required()]}' if is_required else ''} />")
-                edit_fields.append(f"      <BooleanInput source=\"{field_name}\" {'validate={[required()]}' if is_required else ''} />")
+                validation = ' validate={[required()]}' if is_required else ''
+                create_fields.append(f"      <BooleanInput source=\"{field_name}\"{validation} />")
+                edit_fields.append(f"      <BooleanInput source=\"{field_name}\"{validation} />")
                 show_fields.append(f"      <BooleanField source=\"{field_name}\" />")
             
             elif field_type == 'date':
-                imports.append("import { DateField, DateInput } from 'react-admin';")
                 list_fields.append(f"      <DateField source=\"{field_name}\" />")
-                create_fields.append(f"      <DateInput source=\"{field_name}\" {'validate={[required()]}' if is_required else ''} />")
-                edit_fields.append(f"      <DateInput source=\"{field_name}\" {'validate={[required()]}' if is_required else ''} />")
+                validation = ' validate={[required()]}' if is_required else ''
+                create_fields.append(f"      <DateInput source=\"{field_name}\"{validation} />")
+                edit_fields.append(f"      <DateInput source=\"{field_name}\"{validation} />")
                 show_fields.append(f"      <DateField source=\"{field_name}\" />")
             
             elif field_type == 'datetime':
-                imports.append("import { DateField, DateInput } from 'react-admin';")
                 list_fields.append(f"      <DateField source=\"{field_name}\" showTime />")
-                create_fields.append(f"      <DateInput source=\"{field_name}\" {'validate={[required()]}' if is_required else ''} />")
-                edit_fields.append(f"      <DateInput source=\"{field_name}\" {'validate={[required()]}' if is_required else ''} />")
+                validation = ' validate={[required()]}' if is_required else ''
+                create_fields.append(f"      <DateInput source=\"{field_name}\"{validation} />")
+                edit_fields.append(f"      <DateInput source=\"{field_name}\"{validation} />")
                 show_fields.append(f"      <DateField source=\"{field_name}\" showTime />")
             
             elif field_type == 'enum':
                 enum_values = field.get('enumValues', [])
                 if enum_values:
-                    choices_str = ', '.join([f"['{val}', '{val}']" for val in enum_values])
+                    choices_str = ', '.join([f"{{ id: '{val}', name: '{val}' }}" for val in enum_values])
                     list_fields.append(f"      <TextField source=\"{field_name}\" />")
-                    create_fields.append(f"      <SelectInput source=\"{field_name}\" choices={{{choices_str}}} {'validate={[required()]}' if is_required else ''} />")
-                    edit_fields.append(f"      <SelectInput source=\"{field_name}\" choices={{{choices_str}}} {'validate={[required()]}' if is_required else ''} />")
+                    validation = ' validate={[required()]}' if is_required else ''
+                    choices_array = f"[{choices_str}]"
+                    create_fields.append("      <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + validation + " />")
+                    edit_fields.append("      <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + validation + " />")
                     show_fields.append(f"      <TextField source=\"{field_name}\" />")
         
         # Add relationship fields
@@ -323,10 +410,10 @@ export const {resource_name}Show = (props) => (
                     target_concept = relationship['target']
                     field_name = relationship.get('fieldName', f"{target_concept.lower()}_id")
                     
-                    list_fields.append(f"      <{target_concept}ReferenceField source=\"{field_name}\" reference=\"{target_concept.lower()}\" />")
-                    create_fields.append(f"      <{target_concept}ReferenceInput source=\"{field_name}\" reference=\"{target_concept.lower()}\" />")
-                    edit_fields.append(f"      <{target_concept}ReferenceInput source=\"{field_name}\" reference=\"{target_concept.lower()}\" />")
-                    show_fields.append(f"      <{target_concept}ReferenceField source=\"{field_name}\" reference=\"{target_concept.lower()}\" />")
+                    list_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept.lower()}\" />")
+                    create_fields.append(f"      <ReferenceInput source=\"{field_name}\" reference=\"{target_concept.lower()}\" />")
+                    edit_fields.append(f"      <ReferenceInput source=\"{field_name}\" reference=\"{target_concept.lower()}\" />")
+                    show_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept.lower()}\" />")
         
         return {
             'imports': '\n'.join(imports),

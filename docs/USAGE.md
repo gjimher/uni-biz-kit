@@ -10,6 +10,8 @@ UniBizKit is a proof of concept for generating complete business applications fr
 - [Examples](#examples)
 - [Generated Output](#generated-output)
 - [Running the Generated Application](#running-the-generated-application)
+  - [Option 1: Using Docker with Supabase (Recommended)](#option-1-using-docker-with-supabase-recommended)
+  - [Option 2: Using PostgreSQL Directly](#option-2-using-postgresql-directly)
 - [Testing](#testing)
 - [Architecture](#architecture)
 
@@ -156,12 +158,6 @@ The repository includes a complete e-commerce example in `examples/ecommerce_sch
 - Order items with product relationships
 - Many-to-many relationships between products and categories
 
-Generate the e-commerce application:
-
-```bash
-unibizkit generate examples/ecommerce_schema.json --output-dir ecommerce-app
-```
-
 ### Simple CRM Schema
 
 Here's a simple CRM example:
@@ -250,45 +246,82 @@ generated-app/
 
 ## Running the Generated Application
 
-### Backend (Supabase/PostgreSQL)
+### Install Docker
 
-1. Install PostgreSQL
-2. Create a database
-3. Run the generated SQL schema:
-
+Install Docker and Docker Compose.
+For example, on Ubuntu 22.04, run the following commands to install Docker, add your user to the Docker group, and reboot the system:
 ```bash
-psql -U username -d database_name -f supabase_schema.sql
-psql -U username -d database_name -f supabase_sample_data.sql
+sudo apt install -y docker.io docker-compose
+sudo usermod -aG docker $USER
+sudo init 6
+docker --version # example output: 28.2.2
 ```
 
-### Frontend (React-Admin)
-
-1. Navigate to the frontend directory:
+### Install Nvm, Npm and Supabase
 
 ```bash
-cd generated-app/frontend
+# nvm https://github.com/nvm-sh/nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc
+nvm --version # 0.40.3
+nvm install --lts --default 24.11.0 
+npm --version # 11.6.1
+
+# supabase https://supabase.com/docs/guides/local-development/cli/getting-started
+nvm use node
+# npx checks for latest version in every execution
+npx -y supabase --version # example output: 2.70.5
 ```
 
-2. Install dependencies:
+### Generate the e-commerce application
 
 ```bash
+unibizkit generate examples/ecommerce_schema.json --output-dir ecommerce-app
+```
+
+### configure supabase instance
+
+Create a supabase instance for the application:
+```bash
+cd ecommerce-app
+
+# clean previous instance: npx supabase stop --no-backup
+npx supabase init
+npx supabase start
+npx supabase status -o json # view urls and keys
+# view containter logs: docker ps --format '{{.Names}}' | grep '^supabase_' | xargs -I {} docker logs -f {} 
+
+# save api key
+cat > frontend/.env << EOF
+REACT_APP_SUPABASE_URL=$(npx supabase status -o json | jq -r '.API_URL')
+REACT_APP_SUPABASE_KEY=$(npx supabase status -o json | jq -r '.ANON_KEY')
+EOF
+```
+
+### Load the Generated Schema and Data
+
+```bash
+npx supabase migration new schema
+cp supabase_schema.sql supabase/migrations/*_schema.sql
+cp supabase_sample_data.sql supabase/seed.sql
+npx supabase db reset
+# check data
+source frontend/.env
+curl -X GET -H "apikey: $REACT_APP_SUPABASE_KEY" "$REACT_APP_SUPABASE_URL/rest/v1/customer?select=*" | jq '.' # ok, 3 customers
+```
+
+### Start the React-Admin Application
+
+```bash
+# Navigate to the frontend directory
+cd frontend
+# Install dependencies
 npm install
-```
-
-3. Create a `.env` file with your Supabase credentials:
-
-```
-REACT_APP_SUPABASE_URL=your-supabase-url
-REACT_APP_SUPABASE_KEY=your-supabase-key
-```
-
-4. Start the development server:
-
-```bash
+# Run
 npm start
 ```
 
-The application will be available at `http://localhost:3000`
+The application will be available at `http://localhost:3000` (or another port if 3000 is occupied)
 
 ## Testing
 
@@ -363,7 +396,3 @@ Potential areas for future development:
 - Mobile app generation
 - More database backends
 - More frontend frameworks
-
-## License
-
-MIT License - See LICENSE file for details.

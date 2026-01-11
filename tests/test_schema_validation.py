@@ -9,7 +9,7 @@ import json
 import tempfile
 import os
 from pathlib import Path
-from src.unibizkit.schema_loader import SchemaLoader, SchemaValidationError
+from unibizkit.schema_loader import SchemaLoader, SchemaValidationError
 
 class TestSchemaValidation:
     """Test cases for schema validation."""
@@ -186,7 +186,7 @@ class TestEcommerceSchema:
         
         # Verify concepts
         concept_names = [concept["name"] for concept in result["concepts"]]
-        expected_concepts = ["Product", "Category", "Customer", "Order", "OrderItem"]
+        expected_concepts = ["Product", "Category", "Customer", "CustomerOrder", "OrderItem"]
         assert concept_names == expected_concepts
     
     def test_ecommerce_schema_concepts(self):

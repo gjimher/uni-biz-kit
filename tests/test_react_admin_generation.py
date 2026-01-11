@@ -9,8 +9,8 @@ import tempfile
 import os
 import shutil
 from pathlib import Path
-from src.unibizkit.schema_loader import SchemaLoader
-from src.unibizkit.react_admin_generator import ReactAdminGenerator
+from unibizkit.schema_loader import SchemaLoader
+from unibizkit.react_admin_generator import ReactAdminGenerator
 
 class TestReactAdminGeneration:
     """Test cases for React-Admin generation."""
@@ -53,6 +53,7 @@ class TestReactAdminGeneration:
         assert os.path.exists(os.path.join(self.temp_dir, "src", "index.js"))
         assert os.path.exists(os.path.join(self.temp_dir, "src", "App.js"))
         assert os.path.exists(os.path.join(self.temp_dir, "src", "dataProvider.js"))
+        assert os.path.exists(os.path.join(self.temp_dir, "public", "index.html"))
     
     def test_generate_frontend_creates_resource_files(self):
         """Test that the frontend generation creates resource files for each concept."""
@@ -75,8 +76,9 @@ class TestReactAdminGeneration:
         
         # Check required dependencies
         assert '"react-admin"' in content
-        assert '"ra-data-supabase"' in content
+        assert '"ra-supabase"' in content
         assert '"@mui/material"' in content
+        assert '"@supabase/supabase-js"' in content
         
         # Check scripts
         assert '"start"' in content
@@ -99,7 +101,7 @@ class TestReactAdminGeneration:
         for concept in concepts:
             resource_name = concept['name']
             assert f"import {{ {resource_name}List, {resource_name}Create, {resource_name}Edit, {resource_name}Show }}" in content
-            assert f"from './resources/{resource_name}'" in content
+            assert f"from './resources/{resource_name}/{resource_name}.js'" in content
         
         # Check Admin component
         assert "<Admin dataProvider={dataProvider}>" in content
@@ -181,13 +183,13 @@ class TestReactAdminGeneration:
         """Test that the Order resource handles relationships correctly."""
         self.generator.generate_frontend()
         
-        order_resource_path = os.path.join(self.temp_dir, "src", "resources", "Order", "Order.js")
+        order_resource_path = os.path.join(self.temp_dir, "src", "resources", "CustomerOrder", "CustomerOrder.js")
         with open(order_resource_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Check that Customer relationship is handled
-        assert "CustomerReferenceField" in content
-        assert "CustomerReferenceInput" in content
+        # Check that Customer relationship is handled with standard react-admin components
+        assert "ReferenceField" in content
+        assert "ReferenceInput" in content
         assert 'source="customer"' in content
         assert 'reference="customer"' in content
     
@@ -206,6 +208,19 @@ class TestReactAdminGeneration:
         assert "ReactDOM.createRoot" in content
         assert "<React.StrictMode>" in content
         assert "<App />" in content
+    
+    def test_index_html_content(self):
+        """Test that index.html has the correct content."""
+        self.generator.generate_frontend()
+        
+        index_html_path = os.path.join(self.temp_dir, "public", "index.html")
+        with open(index_html_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        assert "<!DOCTYPE html>" in content
+        assert "<html lang=\"en\">" in content
+        assert "<title>UniBizKit React-Admin</title>" in content
+        assert '<div id="root"></div>' in content
     
     def test_enum_field_handling(self):
         """Test that enum fields are handled correctly."""

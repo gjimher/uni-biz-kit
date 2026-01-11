@@ -6,8 +6,8 @@ Tests for Supabase database schema generation functionality.
 
 import pytest
 from pathlib import Path
-from src.unibizkit.schema_loader import SchemaLoader
-from src.unibizkit.supabase_generator import SupabaseGenerator
+from unibizkit.schema_loader import SchemaLoader
+from unibizkit.supabase_generator import SupabaseGenerator
 
 class TestSupabaseGeneration:
     """Test cases for Supabase schema generation."""
@@ -95,17 +95,17 @@ class TestSupabaseGeneration:
         """Test that foreign key constraints are generated."""
         sql_schema = self.generator.generate_sql_schema()
         
-        # Order belongs-to Customer relationship
-        assert "ALTER TABLE order" in sql_schema
-        assert "ADD COLUMN IF NOT EXISTS customer_id INTEGER" in sql_schema
-        assert "ADD CONSTRAINT fk_order_customer_id" in sql_schema
-        assert "FOREIGN KEY (customer_id) REFERENCES customer(id)" in sql_schema
+        # CustomerOrder belongs-to Customer relationship
+        assert "ALTER TABLE customerorder" in sql_schema
+        assert "ADD COLUMN IF NOT EXISTS customer INTEGER" in sql_schema
+        assert "ADD CONSTRAINT fk_customerorder_customer" in sql_schema
+        assert "FOREIGN KEY (customer) REFERENCES customer(id)" in sql_schema
         
-        # OrderItem belongs-to Order relationship
+        # OrderItem belongs-to CustomerOrder relationship
         assert "ALTER TABLE orderitem" in sql_schema
-        assert "ADD COLUMN IF NOT EXISTS order_id INTEGER" in sql_schema
-        assert "ADD CONSTRAINT fk_orderitem_order_id" in sql_schema
-        assert "FOREIGN KEY (order_id) REFERENCES order(id)" in sql_schema
+        assert "ADD COLUMN IF NOT EXISTS CustomerOrder INTEGER" in sql_schema
+        assert "ADD CONSTRAINT fk_orderitem_CustomerOrder" in sql_schema
+        assert "FOREIGN KEY (CustomerOrder) REFERENCES customerorder(id)" in sql_schema
     
     def test_generate_sample_data(self):
         """Test that sample data is generated."""
