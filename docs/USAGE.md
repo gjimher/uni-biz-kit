@@ -301,8 +301,9 @@ EOF
 ### Load the Generated Schema and Data
 
 ```bash
-npx supabase migration new schema
-cp supabase_schema.sql supabase/migrations/*_schema.sql
+rm -rf supabase/migrations/*
+npx supabase migration new init_schema
+cp supabase_schema.sql supabase/migrations/*_init_schema.sql
 cp supabase_sample_data.sql supabase/seed.sql
 npx supabase db reset
 # check data
