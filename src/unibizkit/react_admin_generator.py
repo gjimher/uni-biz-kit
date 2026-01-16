@@ -314,7 +314,7 @@ export const {resource_name}Show = (props) => (
         # Add relationship components if needed
         if 'relationships' in concept:
             for relationship in concept['relationships']:
-                if relationship['type'] in ['belongs-to', 'many-to-many']:
+                if relationship['type'] == 'belongs-to':
                     needed_components.add('ReferenceField')
                     needed_components.add('ReferenceInput')
                     break  # Only need to add once

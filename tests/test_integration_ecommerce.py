@@ -50,7 +50,7 @@ class TestEcommerceIntegration:
             for sql_file in output_dir.glob('*.sql'):
                 sql_file.unlink()
             
-            # Remove frontend/src directory
+            # Remove frontend/src directory to force regeneration
             frontend_src = output_dir / 'frontend' / 'src'
             if frontend_src.exists():
                 shutil.rmtree(frontend_src)
