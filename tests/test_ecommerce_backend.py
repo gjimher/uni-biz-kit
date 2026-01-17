@@ -1,13 +1,13 @@
 """
-Integration Test for Ecommerce App Generation and Compilation
+Backend Integration Test for Ecommerce App Generation
 
-This test generates a complete ecommerce application and compiles it to ensure
-the generated code is valid and can be built successfully.
+This test generates a complete ecommerce application backend and sets up the database.
 """
 
 import pytest
 import json
 import os
+import sys
 import shutil
 import time
 import re
@@ -17,18 +17,18 @@ from unittest.mock import patch
 from unibizkit.cli import CLI
 
 
-class TestEcommerceIntegration:
-    """Integration tests for ecommerce app generation."""
+class TestEcommerceBackend:
+    """Backend integration tests for ecommerce app generation."""
     
     @pytest.mark.integration
     @pytest.mark.timeout(600)  # 10 minutes timeout
-    def test_generate_ecommerce_app_and_compile(self):
-        """Test generating a complete ecommerce app and compiling it.
+    def test_generate_ecommerce_backend_and_setup_database(self):
+        """Test generating a complete ecommerce app backend and setting up the database.
         
         This integration test:
         1. Generates a complete ecommerce application from schema
-        2. Compiles the React frontend using npm
-        3. Verifies the build is successful
+        2. Sets up Supabase database with schema and sample data
+        3. Verifies the database setup is successful
         
         Note: This test may take several minutes to run.
         """
@@ -57,6 +57,7 @@ class TestEcommerceIntegration:
             if frontend_src.exists():
                 shutil.rmtree(frontend_src)
         
+        print("Executing unibizkit: generating a complete ecommerce application from schema")
         with patch('sys.argv', ['unibizkit', 'generate', str(schema_path), '--output-dir', test_output_dir]):
             # Should not raise an exception
             cli.run()
@@ -74,7 +75,7 @@ class TestEcommerceIntegration:
         assert (frontend_dir / 'package.json').exists()
         assert (frontend_dir / 'src' / 'App.js').exists()
         
-        # Change to frontend directory
+        # Change to output directory
         original_cwd = os.getcwd()
         
         try:
@@ -87,15 +88,12 @@ class TestEcommerceIntegration:
                 # Initialize supabase
                 init_result = subprocess.run(
                     ['npx', '-y', 'supabase', 'init'],
-                    capture_output=True,
-                    text=True,
+                    stdout=sys.stdout, 
+                    stderr=sys.stderr, 
                     timeout=300
                 )
+                assert init_result.returncode == 0, f"Supabase init failed with {init_result=}"
                 
-                if init_result.returncode != 0:
-                    print(f"Supabase init failed: {init_result.stderr}")
-                    assert False, f"Supabase init failed with return code {init_result.returncode}"
-
                 print("Changing Supabase ports from 54xxx to 55xxx in supabase/config.toml")
                 config_path = Path("supabase/config.toml")
                 text = config_path.read_text()
@@ -106,14 +104,11 @@ class TestEcommerceIntegration:
                 print("Starting Supabase...")
                 start_result = subprocess.run(
                     ['npx', 'supabase', 'start'],
-                    capture_output=True,
-                    text=True,
+                    stdout=sys.stdout, 
+                    stderr=sys.stderr, 
                     timeout=300
                 )
-                
-                if start_result.returncode != 0:
-                    print(f"Supabase start failed: {start_result.stderr}")
-                    assert False, f"Supabase start failed with return code {start_result.returncode}"
+                assert start_result.returncode == 0, f"Supabase start failed with {start_result=}"
                 
                 # Wait a bit for supabase to be ready
                 time.sleep(10)
@@ -121,25 +116,18 @@ class TestEcommerceIntegration:
                 # Create .env file with supabase credentials
                 print("Creating .env file...")
                 env_content = ""
-                try:
-                    status_result = subprocess.run(
-                        ['npx', 'supabase', 'status', '-o', 'json'],
-                        capture_output=True,
-                        text=True,
-                        timeout=60
-                    )
-                    
-                    if status_result.returncode == 0:
-                        status_data = json.loads(status_result.stdout)
-                        api_url = status_data.get('API_URL', '')
-                        anon_key = status_data.get('ANON_KEY', '')
-                        
-                        env_content = f"REACT_APP_SUPABASE_URL={api_url}\nREACT_APP_SUPABASE_KEY={anon_key}\n"
-                    else:
-                        print(f"Could not get supabase status: {status_result.stderr}")
-                except Exception as e:
-                    print(f"Error creating .env file: {e}")
+                status_result = subprocess.run(
+                    ['npx', 'supabase', 'status', '-o', 'json'],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                assert status_result.returncode == 0, f"Could not get supabase status: {status_result=}"
+                status_data = json.loads(status_result.stdout)
+                api_url = status_data.get('API_URL', '')
+                anon_key = status_data.get('ANON_KEY', '')
                 
+                env_content = f"REACT_APP_SUPABASE_URL={api_url}\nREACT_APP_SUPABASE_KEY={anon_key}\n"
                 # Write .env file
                 with open('frontend/.env', 'w') as env_file:
                     env_file.write(env_content)
@@ -150,7 +138,7 @@ class TestEcommerceIntegration:
                 print("Supabase directory already exists, skipping initialization")
             
             print("Setting up database schema...")
-
+            
             # Clean migrations and create new schema
             migrations_dir = supabase_dir / 'migrations'
             if migrations_dir.exists():
@@ -162,12 +150,12 @@ class TestEcommerceIntegration:
             print("Supabase new migration...")
             migration_result = subprocess.run(
                 ['npx', 'supabase', 'migration', 'new', 'init_schema'],
-                capture_output=True,
-                text=True,
+                stdout=sys.stdout, 
+                stderr=sys.stderr, 
                 timeout=300
             )
             assert migration_result.returncode == 0, f"Supabase new migration failed with return code {migration_result.returncode}"
-
+            
             # Create new migration from schema
             schema_file = 'supabase_schema.sql'
             # Find the first migration file (should be the one we just created)
@@ -185,70 +173,16 @@ class TestEcommerceIntegration:
             print(f"Copied sample data to {seed_file}")
             
             # Reset database
+            print("Executing: 'npx supabase db reset'")
             reset_result = subprocess.run(
                 ['npx', 'supabase', 'db', 'reset'],
-                capture_output=True,
-                text=True,
+                stdout=sys.stdout, 
+                stderr=sys.stderr, 
                 timeout=300
             )
             assert reset_result.returncode == 0, f"Supabase reset failed with return code {reset_result.returncode}"
-                        
-            # Go to frontend directory
-            os.chdir(original_cwd)
-            os.chdir(frontend_dir)
-        
-            # Install dependencies (only if node_modules doesn't exist)
-            node_modules = frontend_dir / 'node_modules'
-            if not node_modules.exists():
-                print("Installing npm dependencies...")
-                install_result = subprocess.run(
-                    ['npm', 'install', '--silent'],
-                    capture_output=True,
-                    text=True,
-                    timeout=600  # 10 minutes timeout
-                )
-                
-                # Always show stderr for debugging, even on success
-                if install_result.stderr:
-                    print(f"npm install stderr: {install_result.stderr}")
-                
-                # Also show stdout for debugging
-                if install_result.stdout:
-                    print(f"npm install stdout: {install_result.stdout}")
-                
-                # Check if npm install succeeded
-                if install_result.returncode != 0:
-                    assert False, f"npm install failed with return code {install_result.returncode}. stderr: {install_result.stderr}"
             
-            # Try to build the project
-            print("Building frontend...")
-            build_result = subprocess.run(
-                ['npm', 'run', 'build'],
-                capture_output=True,
-                text=True,
-                timeout=600  # 10 minutes timeout
-            )
-            
-            # Always show stderr for debugging, even on success
-            if build_result.stderr:
-                print(f"Build stderr: {build_result.stderr}")
-            
-            # Also show stdout for debugging
-            if build_result.stdout:
-                print(f"Build stdout: {build_result.stdout}")
-            
-            # Check if build succeeded
-            if build_result.returncode != 0:
-                assert False, f"Build failed with return code {build_result.returncode}. stderr: {build_result.stderr}"
-            
-            # Check that build directory was created
-            build_dir = Path("build")
-            assert build_dir.exists()
-            assert (build_dir / 'index.html').exists()
-            assert (build_dir / 'static').exists()
-            
-            print("✓ Ecommerce app generated and compiled successfully!")
+            print("✓ Ecommerce backend generated and database setup successfully!")
             
         finally:
             os.chdir(original_cwd)
-            
