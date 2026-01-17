@@ -61,8 +61,8 @@ class SupabaseGenerator:
         table_name = concept['name'].lower()
         
         # Start with table creation
-        sql_lines = [f"CREATE TABLE {table_name} ("]
-        sql_lines.append("  id SERIAL PRIMARY KEY,")
+        sql_lines = [f'CREATE TABLE "{table_name}" (']
+        sql_lines.append('  "id" SERIAL PRIMARY KEY,')
         
         # Add fields
         for field in concept['fields']:
@@ -70,8 +70,8 @@ class SupabaseGenerator:
             sql_lines.append(f"  {field_sql},")
         
         # Add created_at and updated_at timestamps
-        sql_lines.append("  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,")
-        sql_lines.append("  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP")
+        sql_lines.append('  "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,')
+        sql_lines.append('  "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP')
         
         # Close table definition
         sql_lines.append(");")
@@ -81,7 +81,7 @@ class SupabaseGenerator:
         for field in unique_fields:
             field_name = field['name']
             constraint_name = f"{table_name}_{field_name}_unique"
-            sql_lines.append(f"CREATE UNIQUE INDEX {constraint_name} ON {table_name} ({field_name});")
+            sql_lines.append(f'CREATE UNIQUE INDEX "{constraint_name}" ON "{table_name}" ("{field_name}");')
         
         return '\n'.join(sql_lines)
     
@@ -122,7 +122,7 @@ class SupabaseGenerator:
             sql_type = base_type
         
         # Build field definition
-        field_parts = [f"{field_name} {sql_type}"]
+        field_parts = [f'"{field_name}" {sql_type}']
         
         # Add constraints
         if field.get('required', False):
@@ -169,13 +169,13 @@ class SupabaseGenerator:
                     
                     # Only create the join table once
                     if join_table_name not in [jt.split('(')[0].strip() for jt in join_tables]:
-                        sql = f"""CREATE TABLE {join_table_name} (
-  {table1}_id INTEGER NOT NULL,
-  {table2}_id INTEGER NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY ({table1}_id, {table2}_id),
-  FOREIGN KEY ({table1}_id) REFERENCES {table1}(id) ON DELETE CASCADE,
-  FOREIGN KEY ({table2}_id) REFERENCES {table2}(id) ON DELETE CASCADE
+                        sql = f"""CREATE TABLE "{join_table_name}" (
+  "{table1}_id" INTEGER NOT NULL,
+  "{table2}_id" INTEGER NOT NULL,
+  "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY ("{table1}_id", "{table2}_id"),
+  FOREIGN KEY ("{table1}_id") REFERENCES "{table1}"("id") ON DELETE CASCADE,
+  FOREIGN KEY ("{table2}_id") REFERENCES "{table2}"("id") ON DELETE CASCADE
 );"""
                         join_tables.append(sql)
         
@@ -213,10 +213,10 @@ class SupabaseGenerator:
                     
                     # For belongs-to relationships, add the foreign key to the current table
                     if relationship['type'] == 'belongs-to':
-                        fk_sql = f"""ALTER TABLE {table_name}
-  ADD COLUMN IF NOT EXISTS {field_name} INTEGER,
-  ADD CONSTRAINT {constraint_name}
-  FOREIGN KEY ({field_name}) REFERENCES {target_table}(id);"""
+                        fk_sql = f"""ALTER TABLE "{table_name}"
+  ADD COLUMN IF NOT EXISTS "{field_name}" INTEGER,
+  ADD CONSTRAINT "{constraint_name}"
+  FOREIGN KEY ("{field_name}") REFERENCES "{target_table}"("id");"""
                         fk_constraints.append(fk_sql)
                     
                     # For one-to-many relationships, we might need to add the foreign key to the target table
@@ -294,7 +294,7 @@ class SupabaseGenerator:
             field_names.extend(['created_at', 'updated_at'])
             field_values.extend([f"'2023-01-{i:02d}T10:00:00Z'", f"'2023-01-{i:02d}T10:00:00Z'"])
             
-            fields_str = ', '.join(field_names)
+            fields_str = ', '.join([f'"{field_name}"' for field_name in field_names])
             values_str = ', '.join(field_values)
             
             sample_records.append(f"({values_str})")
@@ -302,4 +302,4 @@ class SupabaseGenerator:
         if not sample_records:
             return ""
         
-        return f"INSERT INTO {table_name} ({', '.join(field_names)}) VALUES\n" + ",\n".join(sample_records) + ";"
+        return f'INSERT INTO "{table_name}" ({fields_str}) VALUES\n' + ",\n".join(sample_records) + ";"
