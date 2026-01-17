@@ -181,8 +181,8 @@
       ]
     },
     {
-      "name": "CustomerOrder",
-      "pluralName": "CustomerOrders",
+      "name": "Order",
+      "pluralName": "Orders",
       "description": "Customer orders containing products",
       "fields": [
         {
@@ -277,8 +277,8 @@
       "relationships": [
         {
           "type": "belongs-to",
-          "target": "CustomerOrder",
-          "fieldName": "CustomerOrder",
+          "target": "Order",
+          "fieldName": "Order",
           "targetFieldName": "items",
           "ownership": true,
           "required": true
