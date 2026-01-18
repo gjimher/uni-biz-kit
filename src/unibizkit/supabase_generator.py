@@ -69,6 +69,35 @@ class SupabaseGenerator:
             field_sql = self._generate_field_sql(field)
             sql_lines.append(f"  {field_sql},")
         
+        # Add id_presentation column if presentation_fields are defined
+        if 'presentation_fields' in concept:
+            presentation_fields = concept['presentation_fields']
+            if presentation_fields:
+                # Create concatenated field references
+                field_refs = []
+                for field_name in presentation_fields:
+                    # Check if field exists in the concept
+                    field_exists = any(field['name'] == field_name for field in concept['fields'])
+                    if field_exists:
+                        # Find the field to get its type
+                        field = next(field for field in concept['fields'] if field['name'] == field_name)
+                        field_type = field['type']
+                        
+                        # Convert non-text fields to text
+                        if field_type in ['integer', 'decimal', 'boolean', 'date', 'datetime']:
+                            field_refs.append(f'COALESCE("{field_name}"::TEXT, \'\')')
+                        else:
+                            field_refs.append(f'COALESCE("{field_name}", \'\')')
+                    else:
+                        # Handle relationship fields (e.g., "product" in order_item)
+                        # For now, we'll skip them as they require joins
+                        pass
+                
+                if field_refs:
+                    # Create the concatenated expression
+                    concat_expr = ' || \' \' || '.join(field_refs)
+                    sql_lines.append(f'  "id_presentation" TEXT GENERATED ALWAYS AS ({concat_expr}) STORED,')
+        
         # Add created_at and updated_at timestamps
         sql_lines.append('  "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,')
         sql_lines.append('  "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP')

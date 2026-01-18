@@ -7,6 +7,7 @@
       "name": "product",
       "pluralName": "products",
       "description": "A product available for sale in the e-commerce platform",
+      "presentation_fields": ["name"],
       "fields": [
         {
           "name": "name",
@@ -71,6 +72,7 @@
       "name": "category",
       "pluralName": "categories",
       "description": "Product categories for organizing the catalog",
+      "presentation_fields": ["name"],
       "fields": [
         {
           "name": "name",
@@ -119,6 +121,7 @@
       "name": "customer",
       "pluralName": "customers",
       "description": "Customers who purchase products",
+      "presentation_fields": ["first_name", "last_name"],
       "fields": [
         {
           "name": "first_name",
@@ -166,6 +169,7 @@
       "name": "order",
       "pluralName": "orders",
       "description": "Customer orders containing products",
+      "presentation_fields": ["order_number"],
       "fields": [
         {
           "name": "order_number",
@@ -229,6 +233,7 @@
       "name": "order_item",
       "pluralName": "order_items",
       "description": "Individual items within an order",
+      "presentation_fields": ["quantity", "product"],
       "fields": [
         {
           "name": "quantity",

@@ -35,6 +35,13 @@
             "type": "string",
             "description": "Description of the concept"
           },
+          "presentation_fields": {
+            "type": "array",
+            "description": "Fields to use for generating the id_presentation column",
+            "items": {
+              "type": "string"
+            }
+          },
           "fields": {
             "type": "array",
             "items": {
