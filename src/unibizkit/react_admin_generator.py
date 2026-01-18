@@ -320,6 +320,7 @@ export const {resource_name}_show = (props) => (
                 if relationship['type'] == 'belongs-to':
                     needed_components.add('ReferenceField')
                     needed_components.add('ReferenceInput')
+                    needed_components.add('SelectInput')
                     break  # Only need to add once
         
         return ', '.join(sorted(needed_components))
@@ -413,10 +414,22 @@ export const {resource_name}_show = (props) => (
                     target_concept = relationship['target']
                     field_name = relationship.get('fieldName', f"{target_concept}_id")
                     
-                    list_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\" />")
-                    create_fields.append(f"      <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\" />")
-                    edit_fields.append(f"      <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\" />")
-                    show_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\" />")
+                    # Always use id_presentation for display in relationship fields
+                    list_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\">")
+                    list_fields.append(f"        <TextField source=\"id_presentation\" />")
+                    list_fields.append(f"      </ReferenceField>")
+                    
+                    create_fields.append(f"      <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
+                    create_fields.append(f"        <SelectInput optionText=\"id_presentation\" />")
+                    create_fields.append(f"      </ReferenceInput>")
+                    
+                    edit_fields.append(f"      <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
+                    edit_fields.append(f"        <SelectInput optionText=\"id_presentation\" />")
+                    edit_fields.append(f"      </ReferenceInput>")
+                    
+                    show_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\">")
+                    show_fields.append(f"        <TextField source=\"id_presentation\" />")
+                    show_fields.append(f"      </ReferenceField>")
         
         return {
             'imports': '\n'.join(imports),
