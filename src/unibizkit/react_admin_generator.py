@@ -246,7 +246,7 @@ import {{ {react_admin_imports} }} from 'react-admin';
 
 export const {resource_name}_list = (props) => (
   <List {{...props}}>
-    <Datagrid>
+    <Datagrid rowClick="edit">
       <TextField source="id" />
       {field_components['list_fields']}
     </Datagrid>
