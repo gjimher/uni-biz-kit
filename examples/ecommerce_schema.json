@@ -4,8 +4,8 @@
   "description": "A complete e-commerce business application with products, customers, orders, and categories",
   "concepts": [
     {
-      "name": "Product",
-      "pluralName": "Products",
+      "name": "product",
+      "pluralName": "products",
       "description": "A product available for sale in the e-commerce platform",
       "fields": [
         {
@@ -34,7 +34,7 @@
           "description": "Price of the product"
         },
         {
-          "name": "stockQuantity",
+          "name": "stock_quantity",
           "type": "integer",
           "required": true,
           "min": 0,
@@ -59,7 +59,7 @@
           "description": "Current status of the product"
         },
         {
-          "name": "isFeatured",
+          "name": "is_featured",
           "type": "boolean",
           "required": false,
           "default": false,
@@ -68,8 +68,8 @@
       ]
     },
     {
-      "name": "Category",
-      "pluralName": "Categories",
+      "name": "category",
+      "pluralName": "categories",
       "description": "Product categories for organizing the catalog",
       "fields": [
         {
@@ -98,7 +98,7 @@
           "description": "URL-friendly slug for the category"
         },
         {
-          "name": "parentId",
+          "name": "parent_id",
           "type": "integer",
           "required": false,
           "description": "Parent category ID for hierarchical categories"
@@ -107,7 +107,7 @@
       "relationships": [
         {
           "type": "many-to-many",
-          "target": "Product",
+          "target": "product",
           "fieldName": "products",
           "targetFieldName": "categories",
           "ownership": false,
@@ -116,12 +116,12 @@
       ]
     },
     {
-      "name": "Customer",
-      "pluralName": "Customers",
+      "name": "customer",
+      "pluralName": "customers",
       "description": "Customers who purchase products",
       "fields": [
         {
-          "name": "firstName",
+          "name": "first_name",
           "type": "string",
           "required": true,
           "minLength": 1,
@@ -129,7 +129,7 @@
           "description": "Customer's first name"
         },
         {
-          "name": "lastName",
+          "name": "last_name",
           "type": "string",
           "required": true,
           "minLength": 1,
@@ -163,12 +163,12 @@
       ]
     },
     {
-      "name": "Order",
-      "pluralName": "Orders",
+      "name": "order",
+      "pluralName": "orders",
       "description": "Customer orders containing products",
       "fields": [
         {
-          "name": "orderNumber",
+          "name": "order_number",
           "type": "string",
           "required": true,
           "unique": true,
@@ -177,13 +177,13 @@
           "description": "Unique order number"
         },
         {
-          "name": "orderDate",
+          "name": "order_date",
           "type": "datetime",
           "required": true,
           "description": "When the order was placed"
         },
         {
-          "name": "totalAmount",
+          "name": "total_amount",
           "type": "decimal",
           "required": true,
           "precision": 10,
@@ -200,14 +200,14 @@
           "description": "Current order status"
         },
         {
-          "name": "shippingAddress",
+          "name": "shipping_address",
           "type": "string",
           "required": true,
           "maxLength": 200,
           "description": "Shipping address for the order"
         },
         {
-          "name": "billingAddress",
+          "name": "billing_address",
           "type": "string",
           "required": false,
           "maxLength": 200,
@@ -217,7 +217,7 @@
       "relationships": [
         {
           "type": "belongs-to",
-          "target": "Customer",
+          "target": "customer",
           "fieldName": "customer",
           "targetFieldName": "orders",
           "ownership": false,
@@ -226,8 +226,8 @@
       ]
     },
     {
-      "name": "OrderItem",
-      "pluralName": "OrderItems",
+      "name": "order_item",
+      "pluralName": "order_items",
       "description": "Individual items within an order",
       "fields": [
         {
@@ -238,7 +238,7 @@
           "description": "Quantity of the product"
         },
         {
-          "name": "unitPrice",
+          "name": "unit_price",
           "type": "decimal",
           "required": true,
           "precision": 10,
@@ -247,7 +247,7 @@
           "description": "Price per unit at time of purchase"
         },
         {
-          "name": "totalPrice",
+          "name": "total_price",
           "type": "decimal",
           "required": true,
           "precision": 10,
@@ -259,17 +259,17 @@
       "relationships": [
         {
           "type": "belongs-to",
-          "target": "Order",
-          "fieldName": "Order",
+          "target": "order",
+          "fieldName": "order",
           "targetFieldName": "items",
           "ownership": true,
           "required": true
         },
         {
           "type": "belongs-to",
-          "target": "Product",
+          "target": "product",
           "fieldName": "product",
-          "targetFieldName": "orderItems",
+          "targetFieldName": "order_items",
           "ownership": false,
           "required": true
         }

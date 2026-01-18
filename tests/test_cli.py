@@ -45,10 +45,10 @@ class TestCLI:
             "name": "Test App",
             "concepts": [
                 {
-                    "name": "TestConcept",
+                    "name": "test_concept",
                     "fields": [
                         {
-                            "name": "testField",
+                            "name": "test_field",
                             "type": "string",
                             "required": True
                         }
@@ -111,10 +111,10 @@ class TestCLI:
             "name": "Test App",
             "concepts": [
                 {
-                    "name": "TestConcept",
+                    "name": "test_concept",
                     "fields": [
                         {
-                            "name": "testField",
+                            "name": "test_field",
                             "type": "string",
                             "required": True
                         }
@@ -144,7 +144,6 @@ class TestCLI:
             
             # Clean up
             shutil.rmtree(output_dir)
-            
         finally:
             os.unlink(temp_path)
     
@@ -160,10 +159,10 @@ class TestCLI:
             "name": "Test App",
             "concepts": [
                 {
-                    "name": "TestConcept",
+                    "name": "test_concept",
                     "fields": [
                         {
-                            "name": "testField",
+                            "name": "test_field",
                             "type": "string",
                             "required": True
                         }
@@ -195,10 +194,12 @@ class TestCLI:
             assert output_dir.exists()
             assert not (output_dir / 'supabase_schema.sql').exists()
             assert (output_dir / 'frontend').exists()
-                        
-        finally:
+
             # Clean up
+            shutil.rmtree(output_dir)                        
+        finally:
             os.unlink(temp_path)
+            
     
     def test_cli_generate_command_custom_output_dir(self):
         """Test generate command with custom output directory."""
@@ -210,10 +211,10 @@ class TestCLI:
             "name": "Test App",
             "concepts": [
                 {
-                    "name": "TestConcept",
+                    "name": "test_concept",
                     "fields": [
                         {
-                            "name": "testField",
+                            "name": "test_field",
                             "type": "string",
                             "required": True
                         }
@@ -238,7 +239,6 @@ class TestCLI:
             
             # Clean up
             shutil.rmtree(output_dir)
-            
         finally:
             os.unlink(temp_path)
     

@@ -170,8 +170,8 @@ root.render(
         
         for concept in self.concepts:
             resource_name = concept['name']
-            import_statements.append(f"import {{ {resource_name}List, {resource_name}Create, {resource_name}Edit, {resource_name}Show }} from './resources/{resource_name}/{resource_name}.js';")
-            resource_components.append(f"    <Resource name=\"{resource_name}\" list={{ {resource_name}List }} create={{ {resource_name}Create }} edit={{ {resource_name}Edit }} show={{ {resource_name}Show }} />")
+            import_statements.append(f"import {{ {resource_name}_list, {resource_name}_create, {resource_name}_edit, {resource_name}_show }} from './resources/{resource_name}/{resource_name}.js';")
+            resource_components.append(f"    <Resource name=\"{resource_name}\" list={{ {resource_name}_list }} create={{ {resource_name}_create }} edit={{ {resource_name}_edit }} show={{ {resource_name}_show }} />")
         
         app_js_content = f"""import * as React from 'react';
 import {{ Admin, Resource }} from 'react-admin';
@@ -244,7 +244,7 @@ export const dataProvider = supabaseDataProvider({
 import {{ {react_admin_imports} }} from 'react-admin';
 {field_components['imports']}
 
-export const {resource_name}List = (props) => (
+export const {resource_name}_list = (props) => (
   <List {{...props}}>
     <Datagrid>
       <TextField source="id" />
@@ -253,7 +253,7 @@ export const {resource_name}List = (props) => (
   </List>
 );
 
-export const {resource_name}Create = (props) => (
+export const {resource_name}_create = (props) => (
   <Create {{...props}}>
     <SimpleForm>
       {field_components['create_fields']}
@@ -261,7 +261,7 @@ export const {resource_name}Create = (props) => (
   </Create>
 );
 
-export const {resource_name}Edit = (props) => (
+export const {resource_name}_edit = (props) => (
   <Edit {{...props}}>
     <SimpleForm>
       <TextInput source="id" disabled />
@@ -270,7 +270,7 @@ export const {resource_name}Edit = (props) => (
   </Edit>
 );
 
-export const {resource_name}Show = (props) => (
+export const {resource_name}_show = (props) => (
   <Show {{...props}}>
     <SimpleShowLayout>
       <TextField source="id" />

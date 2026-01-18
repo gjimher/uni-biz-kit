@@ -25,12 +25,11 @@
         "properties": {
           "name": {
             "type": "string",
-            "description": "Name of the concept (singular, PascalCase)",
-            "pattern": "^[A-Z][a-zA-Z0-9]*$"
+            "description": "Name of the concept (singular, snake_case recommended)"
           },
           "pluralName": {
             "type": "string",
-            "description": "Plural name of the concept (PascalCase)"
+            "description": "Plural name of the concept (snake_case recommended)"
           },
           "description": {
             "type": "string",
@@ -43,8 +42,7 @@
               "properties": {
                 "name": {
                   "type": "string",
-                  "description": "Field name (camelCase)",
-                  "pattern": "^[a-z][a-zA-Z0-9]*$"
+                  "description": "Field name (snake_case recommended)"
                 },
                 "type": {
                   "type": "string",
@@ -128,11 +126,11 @@
                 },
                 "fieldName": {
                   "type": "string",
-                  "description": "Field name for the relationship (camelCase)"
+                  "description": "Field name for the relationship (snake_case recommended)"
                 },
                 "targetFieldName": {
                   "type": "string",
-                  "description": "Field name on the target concept"
+                  "description": "Field name on the target concept (snake_case recommended)"
                 },
                 "ownership": {
                   "type": "boolean",
