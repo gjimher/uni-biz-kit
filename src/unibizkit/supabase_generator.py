@@ -58,7 +58,7 @@ class SupabaseGenerator:
         Returns:
             SQL CREATE TABLE statement
         """
-        table_name = concept['name'].lower()
+        table_name = concept['name']
         
         # Start with table creation
         sql_lines = [f'CREATE TABLE "{table_name}" (']
@@ -76,6 +76,21 @@ class SupabaseGenerator:
         # Close table definition
         sql_lines.append(");")
         
+        # Add trigger to update updated_at timestamp on row updates
+        trigger_name = f"{table_name}_update_updated_at"
+        sql_lines.append(f"""CREATE OR REPLACE FUNCTION "update_{table_name}_updated_at"()
+RETURNS TRIGGER AS $$BEGIN
+    NEW."updated_at" = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "{trigger_name}"
+BEFORE UPDATE ON "{table_name}"
+FOR EACH ROW
+EXECUTE FUNCTION "update_{table_name}_updated_at"();
+""")
+
         # Add unique constraints
         unique_fields = [field for field in concept['fields'] if field.get('unique', False)]
         for field in unique_fields:
@@ -163,8 +178,8 @@ class SupabaseGenerator:
                     target_concept = relationship['target']
                     
                     # Create join table name (alphabetical order to avoid duplicates)
-                    table1 = concept['name'].lower()
-                    table2 = target_concept.lower()
+                    table1 = concept['name']
+                    table2 = target_concept
                     join_table_name = f"{min(table1, table2)}_{max(table1, table2)}"
                     
                     # Only create the join table once
@@ -194,12 +209,12 @@ class SupabaseGenerator:
             if 'relationships' not in concept:
                 continue
             
-            table_name = concept['name'].lower()
+            table_name = concept['name']
             
             for relationship in concept['relationships']:
                 if relationship['type'] in ['belongs-to', 'one-to-many']:
                     target_concept = relationship['target']
-                    target_table = target_concept.lower()
+                    target_table = target_concept
                     
                     # Determine field name
                     if 'fieldName' in relationship:
@@ -250,7 +265,7 @@ class SupabaseGenerator:
         Returns:
             SQL INSERT statements
         """
-        table_name = concept['name'].lower()
+        table_name = concept['name']
         
         # Generate 3 sample records
         sample_records = []

@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 from unibizkit.cli import CLI
 from unibizkit.schema_loader import SchemaValidationError
+import shutil
 
 class TestCLI:
     """Test cases for CLI functionality."""
@@ -100,6 +101,8 @@ class TestCLI:
     
     def test_cli_generate_command_valid_schema(self):
         """Test generate command with valid schema."""
+        output_dir = Path('generated-app')
+        shutil.rmtree(output_dir, ignore_errors=True)
         cli = CLI()
         
         # Create a valid schema
@@ -130,18 +133,16 @@ class TestCLI:
                 cli.run()
                 
             # Check that output directory was created
-            output_dir = Path('generated-app')
             assert output_dir.exists()
             
             # Check that SQL files were generated
-            assert (output_dir / 'supabase_schema.sql').exists()
-            assert (output_dir / 'supabase_sample_data.sql').exists()
+            assert (output_dir / 'backend' / 'supabase_schema.sql').exists()
+            assert (output_dir / 'backend' / 'supabase_sample_data.sql').exists()
             
             # Check that frontend was generated
             assert (output_dir / 'frontend').exists()
             
             # Clean up
-            import shutil
             shutil.rmtree(output_dir)
             
         finally:
@@ -149,6 +150,8 @@ class TestCLI:
     
     def test_cli_generate_command_skip_options(self):
         """Test generate command with skip options."""
+        output_dir = Path('generated-app')
+        shutil.rmtree(output_dir, ignore_errors=True)
         cli = CLI()
         
         # Create a valid schema
@@ -178,13 +181,11 @@ class TestCLI:
             with patch('sys.argv', ['unibizkit', 'generate', temp_path, '--skip-frontend']):
                 cli.run()
                 
-            output_dir = Path('generated-app')
             assert output_dir.exists()
-            assert (output_dir / 'supabase_schema.sql').exists()
+            assert (output_dir / 'backend' / 'supabase_schema.sql').exists()
             assert not (output_dir / 'frontend').exists()
             
             # Clean up
-            import shutil
             shutil.rmtree(output_dir)
             
             # Test skip backend
@@ -194,11 +195,9 @@ class TestCLI:
             assert output_dir.exists()
             assert not (output_dir / 'supabase_schema.sql').exists()
             assert (output_dir / 'frontend').exists()
-            
-            # Clean up
-            shutil.rmtree(output_dir)
-            
+                        
         finally:
+            # Clean up
             os.unlink(temp_path)
     
     def test_cli_generate_command_custom_output_dir(self):
@@ -234,11 +233,10 @@ class TestCLI:
                 
             output_dir = Path(custom_dir)
             assert output_dir.exists()
-            assert (output_dir / 'supabase_schema.sql').exists()
+            assert (output_dir / 'backend' / 'supabase_schema.sql').exists()
             assert (output_dir / 'frontend').exists()
             
             # Clean up
-            import shutil
             shutil.rmtree(output_dir)
             
         finally:

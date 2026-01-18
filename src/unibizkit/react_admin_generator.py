@@ -8,6 +8,7 @@ from typing import Dict, Any, List
 from .schema_loader import SchemaLoader
 import os
 import logging
+import shutil
 from pathlib import Path
 
 # Set up logging
@@ -57,15 +58,17 @@ class ReactAdminGenerator:
         # Create main directories
         self.output_dir.mkdir(exist_ok=True)
         
-        # Create src directory structure
+        # Remove and create src directory structure
         src_dir = self.output_dir / "src"
-        src_dir.mkdir(exist_ok=True)
+        if src_dir.exists():
+          shutil.rmtree(src_dir)
+        src_dir.mkdir()
         
         # Create subdirectories
-        (src_dir / "resources").mkdir(exist_ok=True)
-        (src_dir / "components").mkdir(exist_ok=True)
-        (src_dir / "utils").mkdir(exist_ok=True)
-        (src_dir / "layout").mkdir(exist_ok=True)
+        (src_dir / "resources").mkdir()
+        (src_dir / "components").mkdir()
+        (src_dir / "utils").mkdir()
+        (src_dir / "layout").mkdir()
         
         # Create public directory
         (self.output_dir / "public").mkdir(exist_ok=True)
@@ -168,7 +171,7 @@ root.render(
         for concept in self.concepts:
             resource_name = concept['name']
             import_statements.append(f"import {{ {resource_name}List, {resource_name}Create, {resource_name}Edit, {resource_name}Show }} from './resources/{resource_name}/{resource_name}.js';")
-            resource_components.append(f"    <Resource name=\"{resource_name.lower()}\" list={{ {resource_name}List }} create={{ {resource_name}Create }} edit={{ {resource_name}Edit }} show={{ {resource_name}Show }} />")
+            resource_components.append(f"    <Resource name=\"{resource_name}\" list={{ {resource_name}List }} create={{ {resource_name}Create }} edit={{ {resource_name}Edit }} show={{ {resource_name}Show }} />")
         
         app_js_content = f"""import * as React from 'react';
 import {{ Admin, Resource }} from 'react-admin';
@@ -408,12 +411,12 @@ export const {resource_name}Show = (props) => (
             for relationship in concept['relationships']:
                 if relationship['type'] == 'belongs-to':
                     target_concept = relationship['target']
-                    field_name = relationship.get('fieldName', f"{target_concept.lower()}_id")
+                    field_name = relationship.get('fieldName', f"{target_concept}_id")
                     
-                    list_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept.lower()}\" />")
-                    create_fields.append(f"      <ReferenceInput source=\"{field_name}\" reference=\"{target_concept.lower()}\" />")
-                    edit_fields.append(f"      <ReferenceInput source=\"{field_name}\" reference=\"{target_concept.lower()}\" />")
-                    show_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept.lower()}\" />")
+                    list_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\" />")
+                    create_fields.append(f"      <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\" />")
+                    edit_fields.append(f"      <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\" />")
+                    show_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\" />")
         
         return {
             'imports': '\n'.join(imports),

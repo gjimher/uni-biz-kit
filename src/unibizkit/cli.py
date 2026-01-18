@@ -115,16 +115,19 @@ Examples:
         if not args.skip_backend:
             logger.info("Generating Supabase database schema...")
             supabase_generator = SupabaseGenerator(schema_loader)
+
+            backend_dir = output_dir / "backend"
+            backend_dir.mkdir(exist_ok=True)
             
             # Write SQL schema
             sql_schema = supabase_generator.generate_sql_schema()
-            sql_file = output_dir / "supabase_schema.sql"
+            sql_file =  backend_dir / "supabase_schema.sql"
             with open(sql_file, 'w', encoding='utf-8') as f:
                 f.write(sql_schema)
             
             # Write sample data
             sample_data = supabase_generator.generate_sample_data_sql()
-            sample_data_file = output_dir / "supabase_sample_data.sql"
+            sample_data_file = backend_dir / "supabase_sample_data.sql"
             with open(sample_data_file, 'w', encoding='utf-8') as f:
                 f.write(sample_data)
             

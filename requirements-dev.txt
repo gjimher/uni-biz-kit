@@ -10,3 +10,5 @@ isort>=5.0.0
 
 # Testing dependencies
 pytest-mock>=3.0.0
+dotenv
+psycopg2-binary

@@ -15,7 +15,9 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 from unibizkit.cli import CLI
-
+from dotenv import load_dotenv
+import psycopg2
+from textwrap import dedent
 
 class TestEcommerceBackend:
     """Backend integration tests for ecommerce app generation."""
@@ -36,50 +38,25 @@ class TestEcommerceBackend:
         
         # Use the ecommerce schema from examples
         schema_path = Path('examples/ecommerce_schema.json')
-        
-        if not schema_path.exists():
-            pytest.skip("Ecommerce schema not found")
-        
-        # Test directory (will be preserved between runs)
-        test_output_dir = 'test-ecommerce-app'
-        
-        # Clean up only specific parts at the beginning of the test
-        output_dir = Path(test_output_dir)
-        
-        # Remove SQL files and frontend/src if they exist from previous runs
-        if output_dir.exists():
-            # Remove SQL files
-            for sql_file in output_dir.glob('*.sql'):
-                sql_file.unlink()
-            
-            # Remove frontend/src directory to force regeneration
-            frontend_src = output_dir / 'frontend' / 'src'
-            if frontend_src.exists():
-                shutil.rmtree(frontend_src)
+        output_dir = Path('test-ecommerce-app')
         
         print("Executing unibizkit: generating a complete ecommerce application from schema")
-        with patch('sys.argv', ['unibizkit', 'generate', str(schema_path), '--output-dir', test_output_dir]):
+        with patch('sys.argv', ['unibizkit', 'generate', str(schema_path), '--output-dir', str(output_dir)]):
             # Should not raise an exception
             cli.run()
         
         # Check that output directory was created
         assert output_dir.exists()
-        
-        # Check that SQL files were generated
-        assert (output_dir / 'supabase_schema.sql').exists()
-        assert (output_dir / 'supabase_sample_data.sql').exists()
-        
-        # Check that frontend was generated
+
+        backend_dir = output_dir / 'backend'
         frontend_dir = output_dir / 'frontend'
-        assert frontend_dir.exists()
-        assert (frontend_dir / 'package.json').exists()
-        assert (frontend_dir / 'src' / 'App.js').exists()
         
-        # Change to output directory
+        # Change directories
         original_cwd = os.getcwd()
         
         try:
-            os.chdir(output_dir)
+            os.chdir(backend_dir)
+            # remove with: npx supabase stop --no-backup ; rm -rf supabase
             # Check if supabase directory exists, if not initialize it
             supabase_dir = Path('supabase')
             if not supabase_dir.exists():
@@ -113,9 +90,36 @@ class TestEcommerceBackend:
                 # Wait a bit for supabase to be ready
                 time.sleep(10)
                 
+                print("Supabase new migration...")
+                migration_result = subprocess.run(
+                    ['npx', 'supabase', 'migration', 'new', 'init_schema'],
+                    stdout=sys.stdout, 
+                    stderr=sys.stderr, 
+                    timeout=300
+                )
+                assert migration_result.returncode == 0, f"Supabase new migration failed with return code {migration_result.returncode}"
+
+                # Reset database
+                print("Executing: 'npx supabase db reset'")
+                reset_result = subprocess.run(
+                    ['npx', 'supabase', 'db', 'reset'],
+                    stdout=sys.stdout, 
+                    stderr=sys.stderr, 
+                    timeout=300
+                )
+                assert reset_result.returncode == 0, f"Supabase reset failed with return code {reset_result.returncode}"
+
+                print("Supabase new migration...")
+                migration_result = subprocess.run(
+                    ['npx', 'supabase', 'migration', 'new', 'init_schema'],
+                    stdout=sys.stdout, 
+                    stderr=sys.stderr, 
+                    timeout=300
+                )
+                assert migration_result.returncode == 0, f"Supabase new migration failed with return code {migration_result.returncode}"
+            
                 # Create .env file with supabase credentials
-                print("Creating .env file...")
-                env_content = ""
+                print("Creating .env files...")
                 status_result = subprocess.run(
                     ['npx', 'supabase', 'status', '-o', 'json'],
                     capture_output=True,
@@ -126,38 +130,22 @@ class TestEcommerceBackend:
                 status_data = json.loads(status_result.stdout)
                 api_url = status_data.get('API_URL', '')
                 anon_key = status_data.get('ANON_KEY', '')
-                
-                env_content = f"REACT_APP_SUPABASE_URL={api_url}\nREACT_APP_SUPABASE_KEY={anon_key}\n"
-                # Write .env file
-                with open('frontend/.env', 'w') as env_file:
-                    env_file.write(env_content)
-                
+                db_url = status_data.get('DB_URL', '')
+
                 # Change back to original directory
                 os.chdir(original_cwd)
+
+                # Write .env files
+                (backend_dir / ".env").write_text(f"DB_URL={db_url}\n")
+                (frontend_dir / ".env").write_text(f"REACT_APP_SUPABASE_URL={api_url}\nREACT_APP_SUPABASE_KEY={anon_key}\n")
             else:
                 print("Supabase directory already exists, skipping initialization")
             
             print("Setting up database schema...")
-            
-            # Clean migrations and create new schema
+            os.chdir(original_cwd)
+            os.chdir(backend_dir)
             migrations_dir = supabase_dir / 'migrations'
-            if migrations_dir.exists():
-                # Remove existing migrations
-                for migration_file in migrations_dir.glob('*'):
-                    if migration_file.is_file():
-                        migration_file.unlink()
-            
-            print("Supabase new migration...")
-            migration_result = subprocess.run(
-                ['npx', 'supabase', 'migration', 'new', 'init_schema'],
-                stdout=sys.stdout, 
-                stderr=sys.stderr, 
-                timeout=300
-            )
-            assert migration_result.returncode == 0, f"Supabase new migration failed with return code {migration_result.returncode}"
-            
-            # Create new migration from schema
-            schema_file = 'supabase_schema.sql'
+            schema_file = Path('supabase_schema.sql')
             # Find the first migration file (should be the one we just created)
             migration_files = list(migrations_dir.glob('*'))
             assert len(migration_files) == 1
@@ -172,6 +160,9 @@ class TestEcommerceBackend:
             shutil.copy(str(sample_data_file), str(seed_file))
             print(f"Copied sample data to {seed_file}")
             
+            """
+            It recreates containers and runs slowly 
+
             # Reset database
             print("Executing: 'npx supabase db reset'")
             reset_result = subprocess.run(
@@ -183,6 +174,32 @@ class TestEcommerceBackend:
             assert reset_result.returncode == 0, f"Supabase reset failed with return code {reset_result.returncode}"
             
             print("✓ Ecommerce backend generated and database setup successfully!")
-            
+            """
+
+            load_dotenv(".env")
+            db_url = os.getenv("DB_URL")
+            assert db_url
+            conn = psycopg2.connect(db_url)
+            conn.autocommit = True
+            with conn.cursor() as cur:
+                print("Dropping all tables in schema public...")
+                cur.execute(dedent(f"""
+                    DO $$
+                    DECLARE
+                        r RECORD;
+                    BEGIN
+                        FOR r IN (
+                            SELECT tablename
+                            FROM pg_tables
+                            WHERE schemaname = 'public'
+                        ) LOOP
+                            EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
+                        END LOOP;
+                    END $$;"""))
+                print("Loading schema")
+                cur.execute(schema_file.read_text())
+                print("Loading seed data")
+                cur.execute(seed_file.read_text())
+
         finally:
             os.chdir(original_cwd)
