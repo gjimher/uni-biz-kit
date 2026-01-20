@@ -155,6 +155,20 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
         
         base_type = type_mapping.get(field_type, 'TEXT')
         
+        # Handle text field sizes
+        if field_type == 'string':
+            field_size = field.get('size')
+            if field_size == 's':
+                sql_type = 'VARCHAR(255)'  # Small text fields
+            elif field_size == 'm':
+                sql_type = 'TEXT'  # Medium text fields (default)
+            elif field_size == 'l':
+                sql_type = 'TEXT'  # Large text fields (same as medium but can be handled differently in UI)
+            else:
+                sql_type = base_type
+        else:
+            sql_type = base_type
+        
         # Handle special cases
         if field_type == 'decimal':
             precision = field.get('precision', 10)
@@ -162,8 +176,6 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
             sql_type = f"DECIMAL({precision}, {scale})"
         elif field_type == 'enum':
             sql_type = 'TEXT'  # We'll add CHECK constraint later
-        else:
-            sql_type = base_type
         
         # Build field definition
         field_parts = [f'"{field_name}" {sql_type}']

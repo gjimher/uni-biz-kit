@@ -16,6 +16,7 @@
           "unique": false,
           "minLength": 2,
           "maxLength": 100,
+          "size": "s",
           "description": "The name of the product"
         },
         {
@@ -23,6 +24,7 @@
           "type": "string",
           "required": false,
           "maxLength": 1000,
+          "size": "l",
           "description": "Detailed description of the product"
         },
         {
@@ -161,6 +163,7 @@
           "type": "string",
           "required": false,
           "maxLength": 200,
+          "size": "m",
           "description": "Customer's shipping address"
         }
       ]
@@ -208,6 +211,7 @@
           "type": "string",
           "required": true,
           "maxLength": 200,
+          "size": "m",
           "description": "Shipping address for the order"
         },
         {
@@ -215,6 +219,7 @@
           "type": "string",
           "required": false,
           "maxLength": 200,
+          "size": "m",
           "description": "Billing address for the order"
         }
       ],

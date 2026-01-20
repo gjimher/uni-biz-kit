@@ -80,6 +80,11 @@
                   "description": "Maximum length for string fields",
                   "minimum": 1
                 },
+                "size": {
+                  "type": "string",
+                  "description": "Size of text field (s, m, l) - only applicable to string fields",
+                  "enum": ["s", "m", "l"]
+                },
                 "min": {
                   "type": "number",
                   "description": "Minimum value for numeric fields"

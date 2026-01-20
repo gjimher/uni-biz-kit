@@ -357,8 +357,22 @@ export const {resource_name}_show = (props) => (
             if field_type == 'string':
                 list_fields.append(f"      <TextField source=\"{field_name}\" />")
                 validation = ' validate={[required()]}' if is_required else ''
-                create_fields.append(f"      <TextInput source=\"{field_name}\"{validation} />")
-                edit_fields.append(f"      <TextInput source=\"{field_name}\"{validation} />")
+                
+                # Get size property if available
+                field_size = field.get('size')
+                if field_size == 'l':
+                    # Large text fields use multiline
+                    create_fields.append(f"      <TextInput source=\"{field_name}\" multiline fullWidth{validation} />")
+                    edit_fields.append(f"      <TextInput source=\"{field_name}\" multiline fullWidth{validation} />")
+                elif field_size == 'm':
+                    # Medium text fields use fullWidth
+                    create_fields.append(f"      <TextInput source=\"{field_name}\" fullWidth{validation} />")
+                    edit_fields.append(f"      <TextInput source=\"{field_name}\" fullWidth{validation} />")
+                else:
+                    # Small text fields (default)
+                    create_fields.append(f"      <TextInput source=\"{field_name}\"{validation} />")
+                    edit_fields.append(f"      <TextInput source=\"{field_name}\"{validation} />")
+                
                 show_fields.append(f"      <TextField source=\"{field_name}\" />")
             
             elif field_type == 'integer':
