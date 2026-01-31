@@ -242,6 +242,7 @@ export const dataProvider = supabaseDataProvider({
         
         resource_content = f"""import * as React from 'react';
 import {{ {react_admin_imports} }} from 'react-admin';
+import {{ Grid }} from '@mui/material';
 {field_components['imports']}
 
 export const {resource_name}_list = (props) => (
@@ -256,7 +257,9 @@ export const {resource_name}_list = (props) => (
 export const {resource_name}_create = (props) => (
   <Create {{...props}}>
     <SimpleForm>
-      {field_components['create_fields']}
+      <Grid container spacing={{2}}>
+        {field_components['create_fields']}
+      </Grid>
     </SimpleForm>
   </Create>
 );
@@ -264,8 +267,12 @@ export const {resource_name}_create = (props) => (
 export const {resource_name}_edit = (props) => (
   <Edit {{...props}}>
     <SimpleForm>
-      <TextInput source="id" disabled />
-      {field_components['edit_fields']}
+      <Grid container spacing={{2}}>
+        <Grid item xs={{12}} sm={{6}}>
+          <TextInput source="id" disabled fullWidth />
+        </Grid>
+        {field_components['edit_fields']}
+      </Grid>
     </SimpleForm>
   </Edit>
 );
@@ -342,72 +349,106 @@ export const {resource_name}_show = (props) => (
         show_fields = []
         
         # No need for special imports for relationship fields - we use standard react-admin components
-        # if 'relationships' in concept:
-        #     for relationship in concept['relationships']:
-        #         if relationship['type'] in ['belongs-to', 'many-to-many']:
-        #             target_concept = relationship['target']
-        #             imports.append(f"import {{ {target_concept}ReferenceField, {target_concept}ReferenceInput }} from '../{target_concept}/{target_concept}.js';")
         
         for field in concept['fields']:
             field_name = field['name']
             field_type = field['type']
             is_required = field.get('required', False)
+            field_size = field.get('size', 's')
+            
+            # Determine grid props
+            if field_size in ['m', 'l']:
+                grid_props = "xs={12} sm={12}"
+            else:
+                grid_props = "xs={12} sm={6}"
             
             # Generate appropriate field component based on type
             if field_type == 'string':
                 list_fields.append(f"      <TextField source=\"{field_name}\" />")
                 validation = ' validate={[required()]}' if is_required else ''
                 
-                # Get size property if available
-                field_size = field.get('size')
-                if field_size == 'l':
-                    # Large text fields use multiline
-                    create_fields.append(f"      <TextInput source=\"{field_name}\" multiline fullWidth{validation} />")
-                    edit_fields.append(f"      <TextInput source=\"{field_name}\" multiline fullWidth{validation} />")
-                elif field_size == 'm':
-                    # Medium text fields use fullWidth
-                    create_fields.append(f"      <TextInput source=\"{field_name}\" fullWidth{validation} />")
-                    edit_fields.append(f"      <TextInput source=\"{field_name}\" fullWidth{validation} />")
-                else:
-                    # Small text fields (default)
-                    create_fields.append(f"      <TextInput source=\"{field_name}\"{validation} />")
-                    edit_fields.append(f"      <TextInput source=\"{field_name}\"{validation} />")
+                # Setup input component props
+                is_multiline = ' multiline' if field_size == 'l' else ''
+                input_props = f"{is_multiline} fullWidth{validation}"
+                
+                create_fields.append(f"        <Grid item {grid_props}>")
+                create_fields.append(f"          <TextInput source=\"{field_name}\"{input_props} />")
+                create_fields.append(f"        </Grid>")
+                
+                edit_fields.append(f"        <Grid item {grid_props}>")
+                edit_fields.append(f"          <TextInput source=\"{field_name}\"{input_props} />")
+                edit_fields.append(f"        </Grid>")
                 
                 show_fields.append(f"      <TextField source=\"{field_name}\" />")
             
             elif field_type == 'integer':
                 list_fields.append(f"      <NumberField source=\"{field_name}\" />")
                 validation = ' validate={[required()]}' if is_required else ''
-                create_fields.append(f"      <NumberInput source=\"{field_name}\"{validation} />")
-                edit_fields.append(f"      <NumberInput source=\"{field_name}\"{validation} />")
+                
+                create_fields.append(f"        <Grid item {grid_props}>")
+                create_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
+                create_fields.append(f"        </Grid>")
+                
+                edit_fields.append(f"        <Grid item {grid_props}>")
+                edit_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
+                edit_fields.append(f"        </Grid>")
+                
                 show_fields.append(f"      <NumberField source=\"{field_name}\" />")
             
             elif field_type == 'decimal':
                 list_fields.append(f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />")
                 validation = ' validate={[required()]}' if is_required else ''
-                create_fields.append(f"      <NumberInput source=\"{field_name}\"{validation} />")
-                edit_fields.append(f"      <NumberInput source=\"{field_name}\"{validation} />")
+                
+                create_fields.append(f"        <Grid item {grid_props}>")
+                create_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
+                create_fields.append(f"        </Grid>")
+                
+                edit_fields.append(f"        <Grid item {grid_props}>")
+                edit_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
+                edit_fields.append(f"        </Grid>")
+                
                 show_fields.append(f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />")
             
             elif field_type == 'boolean':
                 list_fields.append(f"      <BooleanField source=\"{field_name}\" />")
                 validation = ' validate={[required()]}' if is_required else ''
-                create_fields.append(f"      <BooleanInput source=\"{field_name}\"{validation} />")
-                edit_fields.append(f"      <BooleanInput source=\"{field_name}\"{validation} />")
+                
+                create_fields.append(f"        <Grid item {grid_props}>")
+                create_fields.append(f"          <BooleanInput source=\"{field_name}\"{validation} />")
+                create_fields.append(f"        </Grid>")
+                
+                edit_fields.append(f"        <Grid item {grid_props}>")
+                edit_fields.append(f"          <BooleanInput source=\"{field_name}\"{validation} />")
+                edit_fields.append(f"        </Grid>")
+                
                 show_fields.append(f"      <BooleanField source=\"{field_name}\" />")
             
             elif field_type == 'date':
                 list_fields.append(f"      <DateField source=\"{field_name}\" />")
                 validation = ' validate={[required()]}' if is_required else ''
-                create_fields.append(f"      <DateInput source=\"{field_name}\"{validation} />")
-                edit_fields.append(f"      <DateInput source=\"{field_name}\"{validation} />")
+                
+                create_fields.append(f"        <Grid item {grid_props}>")
+                create_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
+                create_fields.append(f"        </Grid>")
+                
+                edit_fields.append(f"        <Grid item {grid_props}>")
+                edit_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
+                edit_fields.append(f"        </Grid>")
+                
                 show_fields.append(f"      <DateField source=\"{field_name}\" />")
             
             elif field_type == 'datetime':
                 list_fields.append(f"      <DateField source=\"{field_name}\" showTime />")
                 validation = ' validate={[required()]}' if is_required else ''
-                create_fields.append(f"      <DateInput source=\"{field_name}\"{validation} />")
-                edit_fields.append(f"      <DateInput source=\"{field_name}\"{validation} />")
+                
+                create_fields.append(f"        <Grid item {grid_props}>")
+                create_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
+                create_fields.append(f"        </Grid>")
+                
+                edit_fields.append(f"        <Grid item {grid_props}>")
+                edit_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
+                edit_fields.append(f"        </Grid>")
+                
                 show_fields.append(f"      <DateField source=\"{field_name}\" showTime />")
             
             elif field_type == 'enum':
@@ -417,8 +458,15 @@ export const {resource_name}_show = (props) => (
                     list_fields.append(f"      <TextField source=\"{field_name}\" />")
                     validation = ' validate={[required()]}' if is_required else ''
                     choices_array = f"[{choices_str}]"
-                    create_fields.append("      <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + validation + " />")
-                    edit_fields.append("      <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + validation + " />")
+                    
+                    create_fields.append(f"        <Grid item {grid_props}>")
+                    create_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " />")
+                    create_fields.append(f"        </Grid>")
+                    
+                    edit_fields.append(f"        <Grid item {grid_props}>")
+                    edit_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " />")
+                    edit_fields.append(f"        </Grid>")
+                    
                     show_fields.append(f"      <TextField source=\"{field_name}\" />")
         
         # Add relationship fields
@@ -428,18 +476,25 @@ export const {resource_name}_show = (props) => (
                     target_concept = relationship['target']
                     field_name = relationship.get('fieldName', f"{target_concept}_id")
                     
+                    # Relationships usually 's' or 'm'. Default to 's' (half width)
+                    grid_props = "xs={12} sm={6}"
+                    
                     # Always use id_presentation for display in relationship fields
                     list_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\">")
                     list_fields.append(f"        <TextField source=\"id_presentation\" />")
                     list_fields.append(f"      </ReferenceField>")
                     
-                    create_fields.append(f"      <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
-                    create_fields.append(f"        <SelectInput optionText=\"id_presentation\" />")
-                    create_fields.append(f"      </ReferenceInput>")
+                    create_fields.append(f"        <Grid item {grid_props}>")
+                    create_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
+                    create_fields.append(f"            <SelectInput optionText=\"id_presentation\" fullWidth />")
+                    create_fields.append(f"          </ReferenceInput>")
+                    create_fields.append(f"        </Grid>")
                     
-                    edit_fields.append(f"      <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
-                    edit_fields.append(f"        <SelectInput optionText=\"id_presentation\" />")
-                    edit_fields.append(f"      </ReferenceInput>")
+                    edit_fields.append(f"        <Grid item {grid_props}>")
+                    edit_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
+                    edit_fields.append(f"            <SelectInput optionText=\"id_presentation\" fullWidth />")
+                    edit_fields.append(f"          </ReferenceInput>")
+                    edit_fields.append(f"        </Grid>")
                     
                     show_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\">")
                     show_fields.append(f"        <TextField source=\"id_presentation\" />")
