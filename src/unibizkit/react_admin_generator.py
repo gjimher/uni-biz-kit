@@ -238,7 +238,8 @@ export const dataProvider = supabaseDataProvider({
         resource_name = concept['name']
         
         # Check if ID should be shown
-        show_id = 'presentation_id_fields' not in concept
+        presentation_config = concept.get('presentation_id')
+        show_id = not presentation_config or 'fields' not in presentation_config
         
         # Check for owned children (ownership: true in child's belongs-to relationship)
         owned_children = self._find_owned_children(resource_name)
@@ -264,7 +265,8 @@ export const dataProvider = supabaseDataProvider({
                 fk_field_name = child_info['field_name']
                 
                 # Check if child ID should be shown
-                show_child_id = 'presentation_id_fields' not in child_concept
+                child_presentation_config = child_concept.get('presentation_id')
+                show_child_id = not child_presentation_config or 'fields' not in child_presentation_config
                 
                 # Generate create/edit fields for the child, excluding the foreign key to parent
                 child_fields_res = self._generate_field_components(child_concept, exclude_fields=[fk_field_name])
@@ -534,6 +536,12 @@ export const {resource_name}_show = (props) => (
             elif field_type == 'enum':
                 needed_components.add('SelectInput')
         
+        # Add id_presentation components if needed
+        presentation_config = concept.get('presentation_id')
+        if presentation_config and presentation_config.get('show', False):
+            needed_components.add('TextField')
+            needed_components.add('TextInput')
+        
         # Add relationship components if needed
         if 'relationships' in concept:
             for relationship in concept['relationships']:
@@ -567,6 +575,17 @@ export const {resource_name}_show = (props) => (
         # Ensure exclude_fields is a list
         exclude_fields = exclude_fields or []
         
+        # Add id_presentation if configured
+        presentation_config = concept.get('presentation_id')
+        if presentation_config and presentation_config.get('show', False):
+            list_fields.append('      <TextField source="id_presentation" label="Presentation" />')
+            show_fields.append('      <TextField source="id_presentation" label="Presentation" />')
+            
+            # Add to edit fields (read-only), but not create fields (it's generated)
+            edit_fields.append('        <Grid item xs={12} sm={12}>')
+            edit_fields.append('          <TextInput source="id_presentation" disabled fullWidth label="Presentation" />')
+            edit_fields.append('        </Grid>')
+        
         # Generate child tabs if any
         if owned_children:
             for child_info in owned_children:
@@ -579,7 +598,8 @@ export const {resource_name}_show = (props) => (
                 # Generate columns for the child list
                 # Use presentation fields + id
                 child_columns = []
-                if 'presentation_id_fields' not in child_concept:
+                child_presentation_config = child_concept.get('presentation_id')
+                if not child_presentation_config or 'fields' not in child_presentation_config:
                     child_columns.append(f'<TextField source="id" />')
                 
                 # Filter out the foreign key to parent (redundant in the list)

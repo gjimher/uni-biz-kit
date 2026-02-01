@@ -73,10 +73,11 @@ class SupabaseGenerator:
             field_sql = self._generate_field_sql(field)
             sql_lines.append(f"  {field_sql},")
         
-        # Add id_presentation column if presentation_id_fields are defined
+        # Add id_presentation column if presentation_id is defined
         trigger_sql = ""
-        if 'presentation_id_fields' in concept:
-            presentation_fields = concept['presentation_id_fields']
+        presentation_config = concept.get('presentation_id')
+        if presentation_config and 'fields' in presentation_config:
+            presentation_fields = presentation_config['fields']
             if presentation_fields:
                 # Check if complex (recursive/relationships)
                 is_complex = False
@@ -108,7 +109,10 @@ class SupabaseGenerator:
                 
                     if field_refs:
                         # Create the concatenated expression
-                        concat_expr = ' || \' \' || '.join(field_refs)
+                        separator = presentation_config.get('separator', ' ')
+                        # Escape single quotes in separator
+                        separator = separator.replace("'", "''")
+                        concat_expr = f" || '{separator}' || ".join(field_refs)
                         sql_lines.append(f'  "id_presentation" TEXT GENERATED ALWAYS AS ({concat_expr}) STORED,')
                 else:
                     # Complex case: use trigger (generated later)
@@ -435,10 +439,11 @@ ALTER TABLE "{table_name}"
         triggers = []
         
         for concept in self.concepts:
-            if 'presentation_id_fields' not in concept:
+            presentation_config = concept.get('presentation_id')
+            if not presentation_config or 'fields' not in presentation_config:
                 continue
                 
-            presentation_fields = concept['presentation_id_fields']
+            presentation_fields = presentation_config['fields']
             if not presentation_fields:
                 continue
                 
@@ -496,7 +501,10 @@ ALTER TABLE "{table_name}"
                     else:
                         parts.append("''")
             
-            concat_expr = " || ' ' || ".join(parts)
+            separator = presentation_config.get('separator', ' ')
+            # Escape single quotes in separator
+            separator = separator.replace("'", "''")
+            concat_expr = f" || '{separator}' || ".join(parts)
             
             trigger_sql = f"""
 

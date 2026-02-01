@@ -35,12 +35,30 @@
             "type": "string",
             "description": "Description of the concept"
           },
-    "presentation_id_fields": {
-      "type": "array",
-      "items": {
-        "type": "string"
+    "presentation_id": {
+      "type": "object",
+      "properties": {
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Fields to be used for the generated presentation string (e.g. ['first_name', 'last_name'] for 'John Doe')"
+        },
+        "separator": {
+          "type": "string",
+          "description": "Separator to use between fields in id_presentation",
+          "default": " "
+        },
+        "show": {
+          "type": "boolean",
+          "description": "Whether to show the id_presentation field in list and edit views",
+          "default": false
+        }
       },
-      "description": "Fields to be used for the generated presentation string (e.g. ['first_name', 'last_name'] for 'John Doe')"
+      "required": ["fields"],
+      "additionalProperties": false,
+      "description": "Configuration for the presentation ID (id_presentation) of the concept"
     },
           "fields": {
             "type": "array",

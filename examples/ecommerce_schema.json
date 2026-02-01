@@ -7,7 +7,9 @@
       "name": "product",
       "pluralName": "products",
       "description": "A product available for sale in the e-commerce platform",
-      "presentation_id_fields": ["name"],
+      "presentation_id": {
+        "fields": ["name"]
+      },
       "fields": [
         {
           "name": "name",
@@ -73,7 +75,11 @@
     {
       "name": "category",
       "pluralName": "categories",
-      "presentation_id_fields": ["parent.id_presentation", "name"],
+      "presentation_id": {
+        "fields": ["parent.id_presentation", "name"],
+        "separator": "/",
+        "show": true
+      },
       "fields": [
         {
           "name": "name",
@@ -124,7 +130,10 @@
       "name": "customer",
       "pluralName": "customers",
       "description": "Customers who purchase products",
-      "presentation_id_fields": ["first_name", "last_name"],
+      "presentation_id": {
+        "fields": ["first_name", "last_name"],
+        "separator": ","
+      },
       "fields": [
         {
           "name": "first_name",
@@ -229,7 +238,9 @@
       "name": "order_item",
       "pluralName": "order_items",
       "description": "Individual items within an order",
-      "presentation_id_fields": ["quantity", "product"],
+      "presentation_id": {
+        "fields": ["quantity", "product"]
+      },
       "fields": [
         {
           "name": "quantity",
