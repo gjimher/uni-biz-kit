@@ -257,15 +257,16 @@ export const dataProvider = supabaseDataProvider({
                 child_name = child_concept['name']
                 fk_field_name = child_info['field_name']
                 
-                # Generate create fields for the child
-                child_fields_res = self._generate_field_components(child_concept)
+                # Generate create/edit fields for the child, excluding the foreign key to parent
+                child_fields_res = self._generate_field_components(child_concept, exclude_fields=[fk_field_name])
                 child_create_fields = child_fields_res['create_fields']
+                child_edit_fields = child_fields_res['edit_fields']
                 
-                # Component Name
-                comp_name = f"Create{child_name.capitalize()}For{resource_name.capitalize()}"
+                # Create Component Name
+                create_comp_name = f"Create{child_name.capitalize()}For{resource_name.capitalize()}"
                 
                 child_dialog_components += f"""
-const {comp_name} = () => {{
+const {create_comp_name} = () => {{
   const {{ id }} = useRecordContext();
   const [open, setOpen] = React.useState(false);
   const notify = useNotify();
@@ -299,6 +300,64 @@ const {comp_name} = () => {{
   );
 }};
 """
+                # Edit Component Name
+                edit_comp_name = f"Edit{child_name.capitalize()}For{resource_name.capitalize()}"
+                
+                child_dialog_components += f"""
+const {edit_comp_name} = () => {{
+  const record = useRecordContext();
+  const [open, setOpen] = React.useState(false);
+  const notify = useNotify();
+  const refresh = useRefresh();
+  const [update] = useUpdate();
+  
+  const handleClick = (e) => {{
+    e.stopPropagation();
+    setOpen(true);
+  }};
+  
+  const handleClose = () => setOpen(false);
+  
+  const onSubmit = (data) => {{
+    update(
+      '{child_name}',
+      {{ id: record.id, data: data, previousData: record }},
+      {{
+        onSuccess: () => {{
+          notify('{child_name} updated', {{ type: 'info', messageArgs: {{ smart_count: 1 }} }});
+          setOpen(false);
+          refresh();
+        }},
+        onError: (error) => {{
+          notify('Error: ' + error.message, {{ type: 'warning' }});
+        }}
+      }}
+    );
+  }};
+  
+  if (!record) return null;
+
+  return (
+    <>
+      <Button onClick={{handleClick}} size="small" color="primary">Edit</Button>
+      <Dialog open={{open}} onClose={{handleClose}} fullWidth maxWidth="md" onClick={{(e) => e.stopPropagation()}}>
+        <DialogTitle>Edit {child_name}</DialogTitle>
+        <DialogContent>
+          <SimpleForm record={{record}} onSubmit={{onSubmit}}>
+              <Grid container spacing={{2}}>
+                <Grid item xs={{12}} sm={{6}}>
+                  <TextInput source="id" disabled fullWidth />
+                </Grid>
+{child_edit_fields}
+              </Grid>
+            </SimpleForm>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}};
+"""
+
 
         # Determine if we use SimpleForm or TabbedForm for Edit
         if owned_children:
@@ -419,6 +478,7 @@ export const {resource_name}_show = (props) => (
             needed_components.add('useRecordContext')
             needed_components.add('useNotify')
             needed_components.add('useRefresh')
+            needed_components.add('useUpdate')
             # CreateButton might not be needed if we use our own button, 
             # but we might use EditButton in the list
             needed_components.add('EditButton')
@@ -471,13 +531,14 @@ export const {resource_name}_show = (props) => (
         
         return ', '.join(sorted(needed_components))
     
-    def _generate_field_components(self, concept: Dict[str, Any], owned_children: List[Dict[str, Any]] = None) -> Dict[str, str]:
+    def _generate_field_components(self, concept: Dict[str, Any], owned_children: List[Dict[str, Any]] = None, exclude_fields: List[str] = None) -> Dict[str, str]:
         """
         Generate field components for a concept based on field types.
         
         Args:
             concept: Concept definition
             owned_children: List of owned child concepts (optional)
+            exclude_fields: List of field names to exclude from inputs (optional)
             
         Returns:
             Dictionary with field components for different views
@@ -488,6 +549,9 @@ export const {resource_name}_show = (props) => (
         edit_fields = []
         show_fields = []
         child_tabs = []
+        
+        # Ensure exclude_fields is a list
+        exclude_fields = exclude_fields or []
         
         # Generate child tabs if any
         if owned_children:
@@ -525,11 +589,12 @@ export const {resource_name}_show = (props) => (
                         child_columns.append(f'<TextField source="{fname}" />')
                     count += 1
                 
-                child_columns.append('<EditButton />')
-                child_columns_str = '\n        '.join(child_columns)
-                
                 # Name of the custom component we generated in _generate_resource_main_file
                 dialog_comp_name = f"Create{child_name.capitalize()}For{parent_name.capitalize()}"
+                edit_dialog_comp_name = f"Edit{child_name.capitalize()}For{parent_name.capitalize()}"
+                
+                child_columns.append(f"<{edit_dialog_comp_name} />")
+                child_columns_str = '\n        '.join(child_columns)
                 
                 # Create the tab content
                 tab_content = f"""
@@ -552,6 +617,9 @@ export const {resource_name}_show = (props) => (
             is_required = field.get('required', False)
             field_size = field.get('size', 's')
             
+            # Skip if field is in exclude_fields
+            is_excluded = field_name in exclude_fields
+            
             # Determine grid props
             if field_size in ['m', 'l']:
                 grid_props = "xs={12} sm={12}"
@@ -567,13 +635,14 @@ export const {resource_name}_show = (props) => (
                 is_multiline = ' multiline' if field_size == 'l' else ''
                 input_props = f"{is_multiline} fullWidth{validation}"
                 
-                create_fields.append(f"        <Grid item {grid_props}>")
-                create_fields.append(f"          <TextInput source=\"{field_name}\"{input_props} />")
-                create_fields.append(f"        </Grid>")
-                
-                edit_fields.append(f"        <Grid item {grid_props}>")
-                edit_fields.append(f"          <TextInput source=\"{field_name}\"{input_props} />")
-                edit_fields.append(f"        </Grid>")
+                if not is_excluded:
+                    create_fields.append(f"        <Grid item {grid_props}>")
+                    create_fields.append(f"          <TextInput source=\"{field_name}\"{input_props} />")
+                    create_fields.append(f"        </Grid>")
+                    
+                    edit_fields.append(f"        <Grid item {grid_props}>")
+                    edit_fields.append(f"          <TextInput source=\"{field_name}\"{input_props} />")
+                    edit_fields.append(f"        </Grid>")
                 
                 show_fields.append(f"      <TextField source=\"{field_name}\" />")
             
@@ -581,13 +650,14 @@ export const {resource_name}_show = (props) => (
                 list_fields.append(f"      <NumberField source=\"{field_name}\" />")
                 validation = ' validate={[required()]}' if is_required else ''
                 
-                create_fields.append(f"        <Grid item {grid_props}>")
-                create_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
-                create_fields.append(f"        </Grid>")
-                
-                edit_fields.append(f"        <Grid item {grid_props}>")
-                edit_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
-                edit_fields.append(f"        </Grid>")
+                if not is_excluded:
+                    create_fields.append(f"        <Grid item {grid_props}>")
+                    create_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
+                    create_fields.append(f"        </Grid>")
+                    
+                    edit_fields.append(f"        <Grid item {grid_props}>")
+                    edit_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
+                    edit_fields.append(f"        </Grid>")
                 
                 show_fields.append(f"      <NumberField source=\"{field_name}\" />")
             
@@ -595,13 +665,14 @@ export const {resource_name}_show = (props) => (
                 list_fields.append(f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />")
                 validation = ' validate={[required()]}' if is_required else ''
                 
-                create_fields.append(f"        <Grid item {grid_props}>")
-                create_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
-                create_fields.append(f"        </Grid>")
-                
-                edit_fields.append(f"        <Grid item {grid_props}>")
-                edit_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
-                edit_fields.append(f"        </Grid>")
+                if not is_excluded:
+                    create_fields.append(f"        <Grid item {grid_props}>")
+                    create_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
+                    create_fields.append(f"        </Grid>")
+                    
+                    edit_fields.append(f"        <Grid item {grid_props}>")
+                    edit_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
+                    edit_fields.append(f"        </Grid>")
                 
                 show_fields.append(f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />")
             
@@ -609,13 +680,14 @@ export const {resource_name}_show = (props) => (
                 list_fields.append(f"      <BooleanField source=\"{field_name}\" />")
                 validation = ' validate={[required()]}' if is_required else ''
                 
-                create_fields.append(f"        <Grid item {grid_props}>")
-                create_fields.append(f"          <BooleanInput source=\"{field_name}\"{validation} />")
-                create_fields.append(f"        </Grid>")
-                
-                edit_fields.append(f"        <Grid item {grid_props}>")
-                edit_fields.append(f"          <BooleanInput source=\"{field_name}\"{validation} />")
-                edit_fields.append(f"        </Grid>")
+                if not is_excluded:
+                    create_fields.append(f"        <Grid item {grid_props}>")
+                    create_fields.append(f"          <BooleanInput source=\"{field_name}\"{validation} />")
+                    create_fields.append(f"        </Grid>")
+                    
+                    edit_fields.append(f"        <Grid item {grid_props}>")
+                    edit_fields.append(f"          <BooleanInput source=\"{field_name}\"{validation} />")
+                    edit_fields.append(f"        </Grid>")
                 
                 show_fields.append(f"      <BooleanField source=\"{field_name}\" />")
             
@@ -623,13 +695,14 @@ export const {resource_name}_show = (props) => (
                 list_fields.append(f"      <DateField source=\"{field_name}\" />")
                 validation = ' validate={[required()]}' if is_required else ''
                 
-                create_fields.append(f"        <Grid item {grid_props}>")
-                create_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
-                create_fields.append(f"        </Grid>")
-                
-                edit_fields.append(f"        <Grid item {grid_props}>")
-                edit_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
-                edit_fields.append(f"        </Grid>")
+                if not is_excluded:
+                    create_fields.append(f"        <Grid item {grid_props}>")
+                    create_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
+                    create_fields.append(f"        </Grid>")
+                    
+                    edit_fields.append(f"        <Grid item {grid_props}>")
+                    edit_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
+                    edit_fields.append(f"        </Grid>")
                 
                 show_fields.append(f"      <DateField source=\"{field_name}\" />")
             
@@ -637,13 +710,14 @@ export const {resource_name}_show = (props) => (
                 list_fields.append(f"      <DateField source=\"{field_name}\" showTime />")
                 validation = ' validate={[required()]}' if is_required else ''
                 
-                create_fields.append(f"        <Grid item {grid_props}>")
-                create_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
-                create_fields.append(f"        </Grid>")
-                
-                edit_fields.append(f"        <Grid item {grid_props}>")
-                edit_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
-                edit_fields.append(f"        </Grid>")
+                if not is_excluded:
+                    create_fields.append(f"        <Grid item {grid_props}>")
+                    create_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
+                    create_fields.append(f"        </Grid>")
+                    
+                    edit_fields.append(f"        <Grid item {grid_props}>")
+                    edit_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
+                    edit_fields.append(f"        </Grid>")
                 
                 show_fields.append(f"      <DateField source=\"{field_name}\" showTime />")
             
@@ -655,13 +729,14 @@ export const {resource_name}_show = (props) => (
                     validation = ' validate={[required()]}' if is_required else ''
                     choices_array = f"[{choices_str}]"
                     
-                    create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " />")
-                    create_fields.append(f"        </Grid>")
-                    
-                    edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " />")
-                    edit_fields.append(f"        </Grid>")
+                    if not is_excluded:
+                        create_fields.append(f"        <Grid item {grid_props}>")
+                        create_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " />")
+                        create_fields.append(f"        </Grid>")
+                        
+                        edit_fields.append(f"        <Grid item {grid_props}>")
+                        edit_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " />")
+                        edit_fields.append(f"        </Grid>")
                     
                     show_fields.append(f"      <TextField source=\"{field_name}\" />")
         
@@ -671,6 +746,9 @@ export const {resource_name}_show = (props) => (
                 if relationship['type'] == 'belongs-to':
                     target_concept = relationship['target']
                     field_name = relationship.get('fieldName', f"{target_concept}_id")
+                    
+                    # Skip if relationship field is in exclude_fields
+                    is_excluded = field_name in exclude_fields
                     
                     # Relationships usually 's' or 'm'. Default to 's' (half width)
                     grid_props = "xs={12} sm={6}"
@@ -684,17 +762,18 @@ export const {resource_name}_show = (props) => (
                     list_fields.append(f"        <TextField source=\"id_presentation\" />")
                     list_fields.append(f"      </ReferenceField>")
                     
-                    create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
-                    create_fields.append(f"            <SelectInput optionText=\"id_presentation\" fullWidth{validation} />")
-                    create_fields.append(f"          </ReferenceInput>")
-                    create_fields.append(f"        </Grid>")
-                    
-                    edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
-                    edit_fields.append(f"            <SelectInput optionText=\"id_presentation\" fullWidth{validation} />")
-                    edit_fields.append(f"          </ReferenceInput>")
-                    edit_fields.append(f"        </Grid>")
+                    if not is_excluded:
+                        create_fields.append(f"        <Grid item {grid_props}>")
+                        create_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
+                        create_fields.append(f"            <SelectInput optionText=\"id_presentation\" fullWidth{validation} />")
+                        create_fields.append(f"          </ReferenceInput>")
+                        create_fields.append(f"        </Grid>")
+                        
+                        edit_fields.append(f"        <Grid item {grid_props}>")
+                        edit_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
+                        edit_fields.append(f"            <SelectInput optionText=\"id_presentation\" fullWidth{validation} />")
+                        edit_fields.append(f"          </ReferenceInput>")
+                        edit_fields.append(f"        </Grid>")
                     
                     show_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\">")
                     show_fields.append(f"        <TextField source=\"id_presentation\" />")
