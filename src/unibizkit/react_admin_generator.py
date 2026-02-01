@@ -234,17 +234,105 @@ export const dataProvider = supabaseDataProvider({
         """
         resource_name = concept['name']
         
+        # Check for owned children (ownership: true in child's belongs-to relationship)
+        owned_children = self._find_owned_children(resource_name)
+        
         # Generate field components based on field types
-        field_components = self._generate_field_components(concept)
+        field_components = self._generate_field_components(concept, owned_children)
         
         # Get optimized imports based on actual field types used
-        react_admin_imports = self._get_optimized_react_admin_imports(concept)
+        react_admin_imports = self._get_optimized_react_admin_imports(concept, owned_children)
         
+        # Determine MUI imports
+        mui_imports = ["Grid"]
+        if owned_children:
+            mui_imports.extend(["Box", "Button", "Dialog", "DialogTitle", "DialogContent", "DialogActions"])
+        mui_imports_str = ", ".join(mui_imports)
+        
+        # Generate Dialog Components for Children
+        child_dialog_components = ""
+        if owned_children:
+            for child_info in owned_children:
+                child_concept = child_info['concept']
+                child_name = child_concept['name']
+                fk_field_name = child_info['field_name']
+                
+                # Generate create fields for the child
+                child_fields_res = self._generate_field_components(child_concept)
+                child_create_fields = child_fields_res['create_fields']
+                
+                # Component Name
+                comp_name = f"Create{child_name.capitalize()}For{resource_name.capitalize()}"
+                
+                child_dialog_components += f"""
+const {comp_name} = () => {{
+  const {{ id }} = useRecordContext();
+  const [open, setOpen] = React.useState(false);
+  const notify = useNotify();
+  const refresh = useRefresh();
+  
+  const handleClick = () => setOpen(true);
+  const handleClose = () => setOpen(false);
+  
+  const onSuccess = () => {{
+    notify('{child_name} created', {{ type: 'info', messageArgs: {{ smart_count: 1 }} }});
+    setOpen(false);
+    refresh();
+  }};
+  
+  return (
+    <>
+      <Button onClick={{handleClick}} variant="contained" size="small">Add {child_name}</Button>
+      <Dialog open={{open}} onClose={{handleClose}} fullWidth maxWidth="md">
+        <DialogTitle>Create {child_name}</DialogTitle>
+        <DialogContent>
+          <Create resource="{child_name}" redirect={{false}} mutationOptions={{{{ onSuccess }}}} title=" ">
+            <SimpleForm defaultValues={{{{ {fk_field_name}: id }}}}>
+              <Grid container spacing={{2}}>
+{child_create_fields}
+              </Grid>
+            </SimpleForm>
+          </Create>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}};
+"""
+
+        # Determine if we use SimpleForm or TabbedForm for Edit
+        if owned_children:
+            edit_component = f"""<Edit {{...props}}>
+    <TabbedForm>
+      <FormTab label="Summary">
+        <Grid container spacing={{2}}>
+          <Grid item xs={{12}} sm={{6}}>
+            <TextInput source="id" disabled fullWidth />
+          </Grid>
+          {field_components['edit_fields']}
+        </Grid>
+      </FormTab>
+      {field_components['child_tabs']}
+    </TabbedForm>
+  </Edit>"""
+        else:
+            edit_component = f"""<Edit {{...props}}>
+    <SimpleForm>
+      <Grid container spacing={{2}}>
+        <Grid item xs={{12}} sm={{6}}>
+          <TextInput source="id" disabled fullWidth />
+        </Grid>
+        {field_components['edit_fields']}
+      </Grid>
+    </SimpleForm>
+  </Edit>"""
+
         resource_content = f"""import * as React from 'react';
 import {{ {react_admin_imports} }} from 'react-admin';
-import {{ Grid }} from '@mui/material';
+import {{ {mui_imports_str} }} from '@mui/material';
 {field_components['imports']}
 
+{child_dialog_components}
 export const {resource_name}_list = (props) => (
   <List {{...props}}>
     <Datagrid rowClick="edit">
@@ -265,16 +353,7 @@ export const {resource_name}_create = (props) => (
 );
 
 export const {resource_name}_edit = (props) => (
-  <Edit {{...props}}>
-    <SimpleForm>
-      <Grid container spacing={{2}}>
-        <Grid item xs={{12}} sm={{6}}>
-          <TextInput source="id" disabled fullWidth />
-        </Grid>
-        {field_components['edit_fields']}
-      </Grid>
-    </SimpleForm>
-  </Edit>
+  {edit_component}
 );
 
 export const {resource_name}_show = (props) => (
@@ -289,12 +368,38 @@ export const {resource_name}_show = (props) => (
         with open(resource_dir / f"{resource_name}.js", 'w', encoding='utf-8') as f:
             f.write(resource_content)
     
-    def _get_optimized_react_admin_imports(self, concept: Dict[str, Any]) -> str:
+    def _find_owned_children(self, parent_concept_name: str) -> List[Dict[str, Any]]:
+        """
+        Find all concepts that have an ownership relationship with the parent concept.
+        
+        Args:
+            parent_concept_name: Name of the parent concept
+            
+        Returns:
+            List of dicts containing child concept info
+        """
+        children = []
+        for concept in self.concepts:
+            if 'relationships' in concept:
+                for rel in concept['relationships']:
+                    if rel['type'] == 'belongs-to' and rel.get('ownership') is True:
+                         if rel['target'] == parent_concept_name:
+                             # Found a child
+                             field_name = rel.get('fieldName', f"{parent_concept_name}_id")
+                             children.append({
+                                 'concept': concept,
+                                 'field_name': field_name,
+                                 'rel': rel
+                             })
+        return children
+
+    def _get_optimized_react_admin_imports(self, concept: Dict[str, Any], owned_children: List[Dict[str, Any]] = None) -> str:
         """
         Generate optimized React-Admin imports based on actual field types used.
         
         Args:
             concept: Concept definition
+            owned_children: List of owned child concepts
             
         Returns:
             String of optimized imports
@@ -305,6 +410,40 @@ export const {resource_name}_show = (props) => (
             'SimpleShowLayout', 'SimpleForm', 'Datagrid',
             'TextField', 'TextInput', 'required'
         }
+        
+        # Add TabbedForm components if needed
+        if owned_children:
+            needed_components.add('TabbedForm')
+            needed_components.add('FormTab')
+            needed_components.add('ReferenceManyField')
+            needed_components.add('useRecordContext')
+            needed_components.add('useNotify')
+            needed_components.add('useRefresh')
+            # CreateButton might not be needed if we use our own button, 
+            # but we might use EditButton in the list
+            needed_components.add('EditButton')
+            
+            for child in owned_children:
+                 # Add child field types
+                 for field in child['concept']['fields']:
+                    ctype = self._map_field_type_to_component(field['type'])
+                    if 'Number' in ctype: needed_components.add('NumberField')
+                    if 'Date' in ctype: needed_components.add('DateField')
+                    if 'Boolean' in ctype: needed_components.add('BooleanField')
+                    
+                    # Add imports needed for child form fields (like SelectInput for enums)
+                    if field['type'] == 'enum': needed_components.add('SelectInput')
+                    if field['type'] in ['integer', 'decimal']: needed_components.add('NumberInput')
+                    if field['type'] == 'boolean': needed_components.add('BooleanInput')
+                    if field['type'] in ['date', 'datetime']: needed_components.add('DateInput')
+                 
+                 # Check child relationships for ReferenceInput
+                 if 'relationships' in child['concept']:
+                     for rel in child['concept']['relationships']:
+                         if rel['type'] == 'belongs-to':
+                             needed_components.add('ReferenceInput')
+                             needed_components.add('SelectInput')
+                             needed_components.add('ReferenceField') # if displayed in list
         
         # Add components based on field types
         for field in concept['fields']:
@@ -332,12 +471,13 @@ export const {resource_name}_show = (props) => (
         
         return ', '.join(sorted(needed_components))
     
-    def _generate_field_components(self, concept: Dict[str, Any]) -> Dict[str, str]:
+    def _generate_field_components(self, concept: Dict[str, Any], owned_children: List[Dict[str, Any]] = None) -> Dict[str, str]:
         """
         Generate field components for a concept based on field types.
         
         Args:
             concept: Concept definition
+            owned_children: List of owned child concepts (optional)
             
         Returns:
             Dictionary with field components for different views
@@ -347,8 +487,64 @@ export const {resource_name}_show = (props) => (
         create_fields = []
         edit_fields = []
         show_fields = []
+        child_tabs = []
         
-        # No need for special imports for relationship fields - we use standard react-admin components
+        # Generate child tabs if any
+        if owned_children:
+            for child_info in owned_children:
+                child_concept = child_info['concept']
+                fk_field_name = child_info['field_name']
+                child_name = child_concept['name']
+                child_plural = child_concept.get('pluralName', f"{child_name}s")
+                parent_name = concept['name']
+                
+                # Generate columns for the child list
+                # Use presentation fields + id
+                child_columns = []
+                child_columns.append(f'<TextField source="id" />')
+                
+                # Filter out the foreign key to parent (redundant in the list)
+                relevant_fields = [f for f in child_concept['fields'] if f['name'] != fk_field_name]
+                
+                # Use a subset of fields for the list (first 4-5)
+                count = 0
+                for field in relevant_fields:
+                    if count > 4: break
+                    fname = field['name']
+                    ftype = field['type']
+                    
+                    if ftype == 'string':
+                        child_columns.append(f'<TextField source="{fname}" />')
+                    elif ftype in ['integer', 'decimal']:
+                        child_columns.append(f'<NumberField source="{fname}" />')
+                    elif ftype == 'boolean':
+                        child_columns.append(f'<BooleanField source="{fname}" />')
+                    elif ftype in ['date', 'datetime']:
+                        child_columns.append(f'<DateField source="{fname}" />')
+                    elif ftype == 'enum':
+                        child_columns.append(f'<TextField source="{fname}" />')
+                    count += 1
+                
+                child_columns.append('<EditButton />')
+                child_columns_str = '\n        '.join(child_columns)
+                
+                # Name of the custom component we generated in _generate_resource_main_file
+                dialog_comp_name = f"Create{child_name.capitalize()}For{parent_name.capitalize()}"
+                
+                # Create the tab content
+                tab_content = f"""
+      <FormTab label="{child_plural}">
+        <ReferenceManyField reference="{child_name}" target="{fk_field_name}" label={{false}}>
+          <Box display="flex" justifyContent="flex-end" mb={{1}}>
+            <{dialog_comp_name} />
+          </Box>
+          <Datagrid>
+            {child_columns_str}
+          </Datagrid>
+        </ReferenceManyField>
+      </FormTab>"""
+                child_tabs.append(tab_content)
+
         
         for field in concept['fields']:
             field_name = field['name']
@@ -509,7 +705,8 @@ export const {resource_name}_show = (props) => (
             'list_fields': '\n'.join(list_fields),
             'create_fields': '\n'.join(create_fields),
             'edit_fields': '\n'.join(edit_fields),
-            'show_fields': '\n'.join(show_fields)
+            'show_fields': '\n'.join(show_fields),
+            'child_tabs': '\n'.join(child_tabs)
         }
     
     def _map_field_type_to_component(self, field_type: str) -> str:
