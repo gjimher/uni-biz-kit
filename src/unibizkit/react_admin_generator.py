@@ -104,7 +104,10 @@ class ReactAdminGenerator:
     "extends": [
       "react-app",
       "react-app/jest"
-    ]
+    ],
+    "rules": {
+      "no-unused-vars": "off"
+    }
   },
   "devDependencies": {
     "eslint": "^8.57.0",
