@@ -73,8 +73,7 @@
     {
       "name": "category",
       "pluralName": "categories",
-      "description": "Product categories for organizing the catalog",
-      "presentation_id_fields": ["name"],
+      "presentation_id_fields": ["parent.id_presentation", "name"],
       "fields": [
         {
           "name": "name",

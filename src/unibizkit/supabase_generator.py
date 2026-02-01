@@ -45,6 +45,10 @@ class SupabaseGenerator:
         # Generate foreign key constraints
         fk_constraints = self._generate_foreign_key_constraints()
         sql_parts.extend(fk_constraints)
+
+        # Generate presentation triggers
+        presentation_triggers = self._generate_presentation_triggers()
+        sql_parts.extend(presentation_triggers)
         
         return '\n\n'.join(sql_parts)
     
@@ -70,44 +74,57 @@ class SupabaseGenerator:
             sql_lines.append(f"  {field_sql},")
         
         # Add id_presentation column if presentation_id_fields are defined
+        trigger_sql = ""
         if 'presentation_id_fields' in concept:
             presentation_fields = concept['presentation_id_fields']
             if presentation_fields:
-                # Create concatenated field references
-                field_refs = []
+                # Check if complex (recursive/relationships)
+                is_complex = False
                 for field_name in presentation_fields:
-                    # Check if field exists in the concept
-                    field_exists = any(field['name'] == field_name for field in concept['fields'])
-                    if field_exists:
-                        # Find the field to get its type
-                        field = next(field for field in concept['fields'] if field['name'] == field_name)
-                        field_type = field['type']
-                        
-                        # Convert non-text fields to text
-                        if field_type in ['integer', 'decimal', 'boolean', 'date', 'datetime']:
-                            field_refs.append(f'COALESCE("{field_name}"::TEXT, \'\')')
-                        else:
-                            field_refs.append(f'COALESCE("{field_name}", \'\')')
-                    else:
-                        # Handle relationship fields (e.g., "product" in order_item)
-                        # For now, we'll skip them as they require joins
-                        pass
+                    if '.' in field_name:
+                        is_complex = True
+                        break
                 
-                if field_refs:
-                    # Create the concatenated expression
-                    concat_expr = ' || \' \' || '.join(field_refs)
-                    sql_lines.append(f'  "id_presentation" TEXT GENERATED ALWAYS AS ({concat_expr}) STORED,')
+                if not is_complex:
+                    # Simple case: use generated column
+                    field_refs = []
+                    for field_name in presentation_fields:
+                        # Check if field exists in the concept
+                        field_exists = any(field['name'] == field_name for field in concept['fields'])
+                        if field_exists:
+                            # Find the field to get its type
+                            field = next(field for field in concept['fields'] if field['name'] == field_name)
+                            field_type = field['type']
+                            
+                            # Convert non-text fields to text
+                            if field_type in ['integer', 'decimal', 'boolean', 'date', 'datetime']:
+                                field_refs.append(f'COALESCE("{field_name}"::TEXT, \'\')')
+                            else:
+                                field_refs.append(f'COALESCE("{field_name}", \'\')')
+                        else:
+                            # Handle relationship fields (e.g., "product" in order_item)
+                            # For now, we'll skip them as they require joins
+                            pass
+                
+                    if field_refs:
+                        # Create the concatenated expression
+                        concat_expr = ' || \' \' || '.join(field_refs)
+                        sql_lines.append(f'  "id_presentation" TEXT GENERATED ALWAYS AS ({concat_expr}) STORED,')
+                else:
+                    # Complex case: use trigger (generated later)
+                    sql_lines.append(f'  "id_presentation" TEXT,')
         
         # Add created_at and updated_at timestamps
         sql_lines.append('  "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,')
         sql_lines.append('  "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP')
         
         # Close table definition
-        sql_lines.append(");")
+        sql_lines.append(');')
         
         # Add trigger to update updated_at timestamp on row updates
         trigger_name = f"{table_name}_update_updated_at"
-        sql_lines.append(f"""CREATE OR REPLACE FUNCTION "update_{table_name}_updated_at"()
+        sql_lines.append(f"""
+CREATE OR REPLACE FUNCTION "update_{table_name}_updated_at"()
 RETURNS TRIGGER AS $$BEGIN
     NEW."updated_at" = CURRENT_TIMESTAMP;
     RETURN NEW;
@@ -225,14 +242,16 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
                     
                     # Only create the join table once
                     if join_table_name not in [jt.split('(')[0].strip() for jt in join_tables]:
-                        sql = f"""CREATE TABLE "{join_table_name}" (
+                        sql = f"""
+CREATE TABLE "{join_table_name}" (
   "{table1}_id" INTEGER NOT NULL,
   "{table2}_id" INTEGER NOT NULL,
   "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY ("{table1}_id", "{table2}_id"),
   FOREIGN KEY ("{table1}_id") REFERENCES "{table1}"("id") ON DELETE CASCADE,
   FOREIGN KEY ("{table2}_id") REFERENCES "{table2}"("id") ON DELETE CASCADE
-);"""
+);
+"""
                         join_tables.append(sql)
         
         return join_tables
@@ -270,7 +289,8 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
                     # For belongs-to relationships, add the foreign key to the current table
                     if relationship['type'] == 'belongs-to':
                         not_null_clause = " NOT NULL" if relationship.get('required', False) else ""
-                        fk_sql = f"""ALTER TABLE "{table_name}"
+                        fk_sql = f"""
+ALTER TABLE "{table_name}"
   ADD COLUMN IF NOT EXISTS "{field_name}" INTEGER{not_null_clause},
   ADD CONSTRAINT "{constraint_name}"
   FOREIGN KEY ("{field_name}") REFERENCES "{target_table}"("id");"""
@@ -404,3 +424,98 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
             return ""
         
         return f'INSERT INTO "{table_name}" ({fields_str}) VALUES\n' + ",\n".join(sample_records) + ";"
+
+    def _generate_presentation_triggers(self) -> List[str]:
+        """
+        Generate triggers for complex presentation_id_fields.
+        
+        Returns:
+            List of SQL statements for triggers
+        """
+        triggers = []
+        
+        for concept in self.concepts:
+            if 'presentation_id_fields' not in concept:
+                continue
+                
+            presentation_fields = concept['presentation_id_fields']
+            if not presentation_fields:
+                continue
+                
+            # Check if complex
+            is_complex = False
+            for field_name in presentation_fields:
+                if '.' in field_name:
+                    is_complex = True
+                    break
+            
+            if not is_complex:
+                continue
+                
+            # Generate Trigger
+            table_name = concept['name']
+            declarations = []
+            selects = []
+            parts = []
+            
+            for idx, field_name in enumerate(presentation_fields):
+                part_var = f"part_{idx}"
+                
+                if '.' in field_name:
+                    # Remote field: rel.field
+                    rel_name, target_field = field_name.split('.', 1)
+                    
+                    # Find relationship
+                    rel = None
+                    if 'relationships' in concept:
+                        for r in concept['relationships']:
+                            if r['type'] == 'belongs-to':
+                                fk_col = r.get('fieldName', f"{r['target']}_id")
+                                # Match by FK name or Target name
+                                if fk_col == rel_name or r['target'] == rel_name:
+                                    rel = r
+                                    break
+                    
+                    if rel:
+                        fk_col = rel.get('fieldName', f"{rel['target']}_id")
+                        target_table = rel['target']
+                        declarations.append(f"{part_var} TEXT;")
+                        
+                        selects.append(f"""
+    IF NEW."{fk_col}" IS NOT NULL THEN
+        SELECT "{target_field}"::TEXT INTO {part_var} FROM "{target_table}" WHERE "id" = NEW."{fk_col}";
+    END IF;""")
+                        parts.append(f"COALESCE({part_var}, '')")
+                    else:
+                        parts.append("''")
+                else:
+                    # Local field
+                    field_exists = any(f['name'] == field_name for f in concept['fields'])
+                    if field_exists:
+                        parts.append(f"COALESCE(NEW.\"{field_name}\"::TEXT, '')")
+                    else:
+                        parts.append("''")
+            
+            concat_expr = " || ' ' || ".join(parts)
+            
+            trigger_sql = f"""
+
+CREATE OR REPLACE FUNCTION "update_{table_name}_id_presentation"()
+RETURNS TRIGGER AS $$
+DECLARE
+    {chr(10).join(declarations)}
+BEGIN
+    {chr(10).join(selects)}
+    NEW."id_presentation" := {concat_expr};
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "{table_name}_update_id_presentation"
+BEFORE INSERT OR UPDATE ON "{table_name}"
+FOR EACH ROW
+EXECUTE FUNCTION "update_{table_name}_id_presentation"();
+"""
+            triggers.append(trigger_sql)
+            
+        return triggers
