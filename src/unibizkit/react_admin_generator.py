@@ -263,7 +263,7 @@ export const dataProvider = supabaseDataProvider({
                 child_edit_fields = child_fields_res['edit_fields']
                 
                 # Create Component Name
-                create_comp_name = f"Create{child_name.capitalize()}For{resource_name.capitalize()}"
+                create_comp_name = f"CREATE_{child_name.upper()}_FOR_{resource_name.upper()}"
                 
                 child_dialog_components += f"""
 const {create_comp_name} = () => {{
@@ -301,7 +301,7 @@ const {create_comp_name} = () => {{
 }};
 """
                 # Edit Component Name
-                edit_comp_name = f"Edit{child_name.capitalize()}For{resource_name.capitalize()}"
+                edit_comp_name = f"EDIT_{child_name.upper()}_FOR_{resource_name.upper()}"
                 
                 child_dialog_components += f"""
 const {edit_comp_name} = () => {{
@@ -590,8 +590,8 @@ export const {resource_name}_show = (props) => (
                     count += 1
                 
                 # Name of the custom component we generated in _generate_resource_main_file
-                dialog_comp_name = f"Create{child_name.capitalize()}For{parent_name.capitalize()}"
-                edit_dialog_comp_name = f"Edit{child_name.capitalize()}For{parent_name.capitalize()}"
+                dialog_comp_name = f"CREATE_{child_name.upper()}_FOR_{parent_name.upper()}"
+                edit_dialog_comp_name = f"EDIT_{child_name.upper()}_FOR_{parent_name.upper()}"
                 
                 child_columns.append(f"<{edit_dialog_comp_name} />")
                 child_columns_str = '\n        '.join(child_columns)

@@ -79,3 +79,8 @@ pytest
 **Commit Messages:**
 *   Write in English.
 *   Keep them concise and focused on the *why* and *what*.
+
+## Design Principles
+
+*   **Simplicity over Architecture:** We prefer simple, maintainable code over complex architectural patterns.
+*   **Naming Conventions:** React Admin components must follow `SCREAMING_SNAKE_CASE` conventions (e.g., `CREATE_ORDER_ITEM_FOR_ORDER`). This satisfies React and ESLint requirements for JSX components (which must be PascalCase or SCREAMING_SNAKE_CASE) while avoiding complex case conversion logic from the database's snake_case. When in doubt, we prioritize simplicity over aesthetic code style.
