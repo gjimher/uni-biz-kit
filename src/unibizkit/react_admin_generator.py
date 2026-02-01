@@ -234,6 +234,9 @@ export const dataProvider = supabaseDataProvider({
         """
         resource_name = concept['name']
         
+        # Check if ID should be shown
+        show_id = 'presentation_id_fields' not in concept
+        
         # Check for owned children (ownership: true in child's belongs-to relationship)
         owned_children = self._find_owned_children(resource_name)
         
@@ -256,6 +259,9 @@ export const dataProvider = supabaseDataProvider({
                 child_concept = child_info['concept']
                 child_name = child_concept['name']
                 fk_field_name = child_info['field_name']
+                
+                # Check if child ID should be shown
+                show_child_id = 'presentation_id_fields' not in child_concept
                 
                 # Generate create/edit fields for the child, excluding the foreign key to parent
                 child_fields_res = self._generate_field_components(child_concept, exclude_fields=[fk_field_name])
@@ -303,6 +309,13 @@ const {create_comp_name} = () => {{
                 # Edit Component Name
                 edit_comp_name = f"EDIT_{child_name.upper()}_FOR_{resource_name.upper()}"
                 
+                child_id_field = ""
+                if show_child_id:
+                    child_id_field = f"""
+                <Grid item xs={{12}} sm={{6}}>
+                  <TextInput source="id" disabled fullWidth />
+                </Grid>"""
+
                 child_dialog_components += f"""
 const {edit_comp_name} = () => {{
   const record = useRecordContext();
@@ -344,10 +357,7 @@ const {edit_comp_name} = () => {{
         <DialogTitle>Edit {child_name}</DialogTitle>
         <DialogContent>
           <SimpleForm record={{record}} onSubmit={{onSubmit}}>
-              <Grid container spacing={{2}}>
-                <Grid item xs={{12}} sm={{6}}>
-                  <TextInput source="id" disabled fullWidth />
-                </Grid>
+              <Grid container spacing={{2}}>{child_id_field}
 {child_edit_fields}
               </Grid>
             </SimpleForm>
@@ -358,16 +368,20 @@ const {edit_comp_name} = () => {{
 }};
 """
 
+        # Prepare ID fields for main resource
+        id_field_list = '<TextField source="id" />' if show_id else ''
+        id_field_show = '<TextField source="id" />' if show_id else ''
+        id_field_edit = """
+          <Grid item xs={12} sm={6}>
+            <TextInput source="id" disabled fullWidth />
+          </Grid>""" if show_id else ""
 
         # Determine if we use SimpleForm or TabbedForm for Edit
         if owned_children:
             edit_component = f"""<Edit {{...props}}>
     <TabbedForm>
       <FormTab label="Summary">
-        <Grid container spacing={{2}}>
-          <Grid item xs={{12}} sm={{6}}>
-            <TextInput source="id" disabled fullWidth />
-          </Grid>
+        <Grid container spacing={{2}}>{id_field_edit}
           {field_components['edit_fields']}
         </Grid>
       </FormTab>
@@ -377,10 +391,7 @@ const {edit_comp_name} = () => {{
         else:
             edit_component = f"""<Edit {{...props}}>
     <SimpleForm>
-      <Grid container spacing={{2}}>
-        <Grid item xs={{12}} sm={{6}}>
-          <TextInput source="id" disabled fullWidth />
-        </Grid>
+      <Grid container spacing={{2}}>{id_field_edit}
         {field_components['edit_fields']}
       </Grid>
     </SimpleForm>
@@ -395,7 +406,7 @@ import {{ {mui_imports_str} }} from '@mui/material';
 export const {resource_name}_list = (props) => (
   <List {{...props}}>
     <Datagrid rowClick="edit">
-      <TextField source="id" />
+      {id_field_list}
       {field_components['list_fields']}
     </Datagrid>
   </List>
@@ -418,7 +429,7 @@ export const {resource_name}_edit = (props) => (
 export const {resource_name}_show = (props) => (
   <Show {{...props}}>
     <SimpleShowLayout>
-      <TextField source="id" />
+      {id_field_show}
       {field_components['show_fields']}
     </SimpleShowLayout>
   </Show>
@@ -565,7 +576,8 @@ export const {resource_name}_show = (props) => (
                 # Generate columns for the child list
                 # Use presentation fields + id
                 child_columns = []
-                child_columns.append(f'<TextField source="id" />')
+                if 'presentation_id_fields' not in child_concept:
+                    child_columns.append(f'<TextField source="id" />')
                 
                 # Filter out the foreign key to parent (redundant in the list)
                 relevant_fields = [f for f in child_concept['fields'] if f['name'] != fk_field_name]

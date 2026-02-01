@@ -69,9 +69,9 @@ class SupabaseGenerator:
             field_sql = self._generate_field_sql(field)
             sql_lines.append(f"  {field_sql},")
         
-        # Add id_presentation column if presentation_fields are defined
-        if 'presentation_fields' in concept:
-            presentation_fields = concept['presentation_fields']
+        # Add id_presentation column if presentation_id_fields are defined
+        if 'presentation_id_fields' in concept:
+            presentation_fields = concept['presentation_id_fields']
             if presentation_fields:
                 # Create concatenated field references
                 field_refs = []
