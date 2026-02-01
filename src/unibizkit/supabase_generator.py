@@ -269,8 +269,9 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
                     
                     # For belongs-to relationships, add the foreign key to the current table
                     if relationship['type'] == 'belongs-to':
+                        not_null_clause = " NOT NULL" if relationship.get('required', False) else ""
                         fk_sql = f"""ALTER TABLE "{table_name}"
-  ADD COLUMN IF NOT EXISTS "{field_name}" INTEGER,
+  ADD COLUMN IF NOT EXISTS "{field_name}" INTEGER{not_null_clause},
   ADD CONSTRAINT "{constraint_name}"
   FOREIGN KEY ("{field_name}") REFERENCES "{target_table}"("id");"""
                         fk_constraints.append(fk_sql)
@@ -289,7 +290,32 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
         """
         sql_parts = []
         
+        # Topological sort of concepts to ensure foreign key dependencies are met
+        sorted_concepts = []
+        visited = set()
+        
+        def visit(concept_name):
+            if concept_name in visited:
+                return
+            
+            concept = self.concept_map.get(concept_name)
+            if not concept:
+                return
+                
+            # Visit dependencies first
+            if 'relationships' in concept:
+                for relationship in concept['relationships']:
+                    if relationship['type'] == 'belongs-to':
+                        target_concept = relationship['target']
+                        visit(target_concept)
+            
+            visited.add(concept_name)
+            sorted_concepts.append(concept)
+
         for concept in self.concepts:
+            visit(concept['name'])
+            
+        for concept in sorted_concepts:
             sample_data = self._generate_sample_data_for_concept(concept)
             if sample_data:
                 sql_parts.append(sample_data)
@@ -350,6 +376,18 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
             field_names.extend(['created_at', 'updated_at'])
             field_values.extend([f"'2023-01-{i:02d}T10:00:00Z'", f"'2023-01-{i:02d}T10:00:00Z'"])
             
+            # Add foreign keys for belongs-to relationships
+            if 'relationships' in concept:
+                for relationship in concept['relationships']:
+                    if relationship['type'] == 'belongs-to':
+                        field_name = relationship.get('fieldName', f"{relationship['target']}_id")
+                        field_names.append(field_name)
+                        # Assume referenced tables have IDs 1, 2, 3...
+                        # Use modulo to distribute relationships if needed, or just match i
+                        # To be safe, just point to ID 1 or i (assuming referenced data exists)
+                        # Since we generate 3 records for everything, i (1,2,3) should be safe.
+                        field_values.append(str(i))
+
             fields_str = ', '.join([f'"{field_name}"' for field_name in field_names])
             values_str = ', '.join(field_values)
             

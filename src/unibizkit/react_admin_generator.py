@@ -479,6 +479,10 @@ export const {resource_name}_show = (props) => (
                     # Relationships usually 's' or 'm'. Default to 's' (half width)
                     grid_props = "xs={12} sm={6}"
                     
+                    # Check if required
+                    is_required = relationship.get('required', False)
+                    validation = ' validate={[required()]}' if is_required else ''
+                    
                     # Always use id_presentation for display in relationship fields
                     list_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\">")
                     list_fields.append(f"        <TextField source=\"id_presentation\" />")
@@ -486,13 +490,13 @@ export const {resource_name}_show = (props) => (
                     
                     create_fields.append(f"        <Grid item {grid_props}>")
                     create_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
-                    create_fields.append(f"            <SelectInput optionText=\"id_presentation\" fullWidth />")
+                    create_fields.append(f"            <SelectInput optionText=\"id_presentation\" fullWidth{validation} />")
                     create_fields.append(f"          </ReferenceInput>")
                     create_fields.append(f"        </Grid>")
                     
                     edit_fields.append(f"        <Grid item {grid_props}>")
                     edit_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
-                    edit_fields.append(f"            <SelectInput optionText=\"id_presentation\" fullWidth />")
+                    edit_fields.append(f"            <SelectInput optionText=\"id_presentation\" fullWidth{validation} />")
                     edit_fields.append(f"          </ReferenceInput>")
                     edit_fields.append(f"        </Grid>")
                     
