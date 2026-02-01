@@ -307,7 +307,8 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
                 for relationship in concept['relationships']:
                     if relationship['type'] == 'belongs-to':
                         target_concept = relationship['target']
-                        visit(target_concept)
+                        if target_concept != concept_name:
+                            visit(target_concept)
             
             visited.add(concept_name)
             sorted_concepts.append(concept)
@@ -382,11 +383,17 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
                     if relationship['type'] == 'belongs-to':
                         field_name = relationship.get('fieldName', f"{relationship['target']}_id")
                         field_names.append(field_name)
-                        # Assume referenced tables have IDs 1, 2, 3...
-                        # Use modulo to distribute relationships if needed, or just match i
-                        # To be safe, just point to ID 1 or i (assuming referenced data exists)
-                        # Since we generate 3 records for everything, i (1,2,3) should be safe.
-                        field_values.append(str(i))
+                        
+                        if relationship['target'] == concept['name']:
+                             # For self-references, use NULL to avoid constraint violations during insert
+                             # (and to represent root nodes)
+                             field_values.append('NULL')
+                        else:
+                            # Assume referenced tables have IDs 1, 2, 3...
+                            # Use modulo to distribute relationships if needed, or just match i
+                            # To be safe, just point to ID 1 or i (assuming referenced data exists)
+                            # Since we generate 3 records for everything, i (1,2,3) should be safe.
+                            field_values.append(str(i))
 
             fields_str = ', '.join([f'"{field_name}"' for field_name in field_names])
             values_str = ', '.join(field_values)

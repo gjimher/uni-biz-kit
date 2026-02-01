@@ -100,15 +100,17 @@
           "minLength": 2,
           "maxLength": 50,
           "description": "URL-friendly slug for the category"
-        },
-        {
-          "name": "parent_id",
-          "type": "integer",
-          "required": false,
-          "description": "Parent category ID for hierarchical categories"
         }
       ],
       "relationships": [
+        {
+          "type": "belongs-to",
+          "target": "category",
+          "fieldName": "parent",
+          "targetFieldName": "children",
+          "ownership": true,
+          "required": false
+        },
         {
           "type": "many-to-many",
           "target": "product",
