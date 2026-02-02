@@ -193,9 +193,28 @@ export default App;"""
             f.write(app_js_content)
     
     def _generate_data_provider(self):
-        """Generate data provider configuration."""
-        data_provider_content = """import { supabaseDataProvider } from 'ra-supabase';
-import { createClient } from '@supabase/supabase-js';
+        """Generate data provider configuration with Many-to-Many support."""
+        
+        # Build Many-to-Many configuration map
+        m2m_config = {}
+        for concept in self.concepts:
+            resource_name = concept['name']
+            links = self._find_many_to_many_links(resource_name)
+            if links:
+                m2m_config[resource_name] = {}
+                for link in links:
+                    field_name = link.get('field_name')
+                    m2m_config[resource_name][field_name] = {
+                        'resource': link['join_table'],
+                        'linkField': link['my_fk'],
+                        'targetField': link['other_fk']
+                    }
+        
+        import json
+        m2m_config_json = json.dumps(m2m_config, indent=2)
+
+        data_provider_content = f"""import {{ supabaseDataProvider }} from 'ra-supabase';
+import {{ createClient }} from '@supabase/supabase-js';
 
 // Use the correct Supabase URL format and ensure the key is properly configured
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -203,12 +222,108 @@ const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
 
 const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
-// Create the data provider with the correct parameters
-export const dataProvider = supabaseDataProvider({
+const baseDataProvider = supabaseDataProvider({{
   instanceUrl: supabaseUrl,
   apiKey: supabaseKey,
   supabaseClient: supabaseClient
-});"""
+}});
+
+const m2mConfig = {m2m_config_json};
+
+export const dataProvider = {{
+  ...baseDataProvider,
+  
+  getOne: async (resource, params) => {{
+    const result = await baseDataProvider.getOne(resource, params);
+    const config = m2mConfig[resource];
+    
+    if (config) {{
+      await Promise.all(Object.keys(config).map(async (field) => {{
+         const {{ resource: joinResource, linkField, targetField }} = config[field];
+         const {{ data }} = await supabaseClient
+             .from(joinResource)
+             .select(targetField)
+             .eq(linkField, result.data.id);
+         
+         if (data) {{
+             result.data[field] = data.map(item => item[targetField]);
+         }}
+      }}));
+    }}
+    return result;
+  }},
+
+  create: async (resource, params) => {{
+     const config = m2mConfig[resource];
+     let m2mIds = {{}};
+     
+     if (config) {{
+        Object.keys(config).forEach(field => {{
+           if (params.data[field]) {{
+               m2mIds[field] = params.data[field];
+               delete params.data[field];
+           }}
+        }});
+     }}
+     
+     const result = await baseDataProvider.create(resource, params);
+     
+     if (config && Object.keys(m2mIds).length > 0) {{
+        const id = result.data.id;
+        await Promise.all(Object.keys(m2mIds).map(async (field) => {{
+            const {{ resource: joinResource, linkField, targetField }} = config[field];
+            const ids = m2mIds[field];
+            if (ids && ids.length > 0) {{
+                const rows = ids.map(targetId => ({{
+                    [linkField]: id,
+                    [targetField]: targetId
+                }}));
+                await supabaseClient.from(joinResource).insert(rows);
+            }}
+        }}));
+        Object.assign(result.data, m2mIds);
+     }}
+     return result;
+  }},
+
+  update: async (resource, params) => {{
+     const config = m2mConfig[resource];
+     let m2mIds = {{}};
+     
+     if (config) {{
+        Object.keys(config).forEach(field => {{
+           if (params.data[field] !== undefined) {{
+               m2mIds[field] = params.data[field];
+               delete params.data[field];
+           }}
+        }});
+     }}
+     
+     const result = await baseDataProvider.update(resource, params);
+     
+     if (config && Object.keys(m2mIds).length > 0) {{
+        const id = result.data.id;
+        await Promise.all(Object.keys(m2mIds).map(async (field) => {{
+            const {{ resource: joinResource, linkField, targetField }} = config[field];
+            const newIds = m2mIds[field];
+            
+            // Delete existing links
+            await supabaseClient.from(joinResource).delete().eq(linkField, id);
+            
+            // Insert new links
+            if (newIds && newIds.length > 0) {{
+                const rows = newIds.map(targetId => ({{
+                    [linkField]: id,
+                    [targetField]: targetId
+                }}));
+                await supabaseClient.from(joinResource).insert(rows);
+            }}
+        }}));
+        Object.assign(result.data, m2mIds);
+     }}
+     return result;
+  }}
+}};"""
         
         with open(self.output_dir / "src" / "dataProvider.js", 'w', encoding='utf-8') as f:
             f.write(data_provider_content)
@@ -244,15 +359,18 @@ export const dataProvider = supabaseDataProvider({
         # Check for owned children (ownership: true in child's belongs-to relationship)
         owned_children = self._find_owned_children(resource_name)
         
+        # Check for many-to-many relationships
+        many_to_many_links = self._find_many_to_many_links(resource_name)
+        
         # Generate field components based on field types
-        field_components = self._generate_field_components(concept, owned_children)
+        field_components = self._generate_field_components(concept, owned_children, many_to_many_links=many_to_many_links)
         
         # Get optimized imports based on actual field types used
-        react_admin_imports = self._get_optimized_react_admin_imports(concept, owned_children)
+        react_admin_imports = self._get_optimized_react_admin_imports(concept, owned_children, many_to_many_links)
         
         # Determine MUI imports
         mui_imports = ["Grid"]
-        if owned_children:
+        if owned_children or many_to_many_links:
             mui_imports.extend(["Box", "Button", "Dialog", "DialogTitle", "DialogContent", "DialogActions"])
         mui_imports_str = ", ".join(mui_imports)
         
@@ -382,7 +500,7 @@ const {edit_comp_name} = () => {{
           </Grid>""" if show_id else ""
 
         # Determine if we use SimpleForm or TabbedForm for Edit
-        if owned_children:
+        if owned_children or many_to_many_links:
             edit_component = f"""<Edit {{...props}}>
     <TabbedForm>
       <FormTab label="Summary">
@@ -468,13 +586,75 @@ export const {resource_name}_show = (props) => (
                              })
         return children
 
-    def _get_optimized_react_admin_imports(self, concept: Dict[str, Any], owned_children: List[Dict[str, Any]] = None) -> str:
+    def _find_many_to_many_links(self, concept_name: str) -> List[Dict[str, Any]]:
+        """
+        Find all many-to-many relationships for a concept (both directions).
+        
+        Args:
+            concept_name: Name of the concept
+            
+        Returns:
+            List of dicts containing link info
+        """
+        links = []
+        concept = self.concept_map.get(concept_name)
+        if not concept:
+            return links
+            
+        # 1. Links where concept is the source
+        if 'relationships' in concept:
+            for rel in concept['relationships']:
+                if rel['type'] == 'many-to-many':
+                    target_name = rel['target']
+                    target_concept = self.concept_map.get(target_name)
+                    if target_concept:
+                        # Join table name logic from supabase_generator: alphabetical order
+                        table1 = concept_name
+                        table2 = target_name
+                        join_table = f"{min(table1, table2)}_{max(table1, table2)}"
+                        
+                        links.append({
+                            'target_concept': target_concept,
+                            'join_table': join_table,
+                            'my_fk': f"{concept_name}_id",
+                            'other_fk': f"{target_name}_id",
+                            'field_name': rel.get('fieldName', f"{target_name}s"),
+                            'rel': rel
+                        })
+                        
+        # 2. Links where concept is the target
+        for other_concept in self.concepts:
+            other_name = other_concept['name']
+            if other_name == concept_name:
+                continue
+                
+            if 'relationships' in other_concept:
+                for rel in other_concept['relationships']:
+                    if rel['type'] == 'many-to-many' and rel['target'] == concept_name:
+                        # Join table name
+                        table1 = other_name
+                        table2 = concept_name
+                        join_table = f"{min(table1, table2)}_{max(table1, table2)}"
+                        
+                        links.append({
+                            'target_concept': other_concept,
+                            'join_table': join_table,
+                            'my_fk': f"{concept_name}_id",
+                            'other_fk': f"{other_name}_id",
+                            'field_name': rel.get('targetFieldName', f"{other_name}s"),
+                            'rel': rel
+                        })
+        
+        return links
+
+    def _get_optimized_react_admin_imports(self, concept: Dict[str, Any], owned_children: List[Dict[str, Any]] = None, many_to_many_links: List[Dict[str, Any]] = None) -> str:
         """
         Generate optimized React-Admin imports based on actual field types used.
         
         Args:
             concept: Concept definition
             owned_children: List of owned child concepts
+            many_to_many_links: List of m:n links
             
         Returns:
             String of optimized imports
@@ -487,7 +667,7 @@ export const {resource_name}_show = (props) => (
         }
         
         # Add TabbedForm components if needed
-        if owned_children:
+        if owned_children or many_to_many_links:
             needed_components.add('TabbedForm')
             needed_components.add('FormTab')
             needed_components.add('ReferenceManyField')
@@ -495,10 +675,9 @@ export const {resource_name}_show = (props) => (
             needed_components.add('useNotify')
             needed_components.add('useRefresh')
             needed_components.add('useUpdate')
-            # CreateButton might not be needed if we use our own button, 
-            # but we might use EditButton in the list
             needed_components.add('EditButton')
             
+        if owned_children:
             for child in owned_children:
                  # Add child field types
                  for field in child['concept']['fields']:
@@ -521,6 +700,20 @@ export const {resource_name}_show = (props) => (
                              needed_components.add('SelectInput')
                              needed_components.add('ReferenceField') # if displayed in list
         
+        if many_to_many_links:
+            needed_components.add('ReferenceInput')
+            needed_components.add('SelectInput')
+            needed_components.add('ReferenceField')
+            # For deleting links
+            needed_components.add('DeleteButton')
+            # For m:n input
+            needed_components.add('ReferenceArrayInput')
+            needed_components.add('SelectArrayInput')
+            # For m:n display
+            needed_components.add('ReferenceArrayField')
+            needed_components.add('SingleFieldList')
+            needed_components.add('ChipField')
+
         # Add components based on field types
         for field in concept['fields']:
             field_type = field['type']
@@ -553,7 +746,7 @@ export const {resource_name}_show = (props) => (
         
         return ', '.join(sorted(needed_components))
     
-    def _generate_field_components(self, concept: Dict[str, Any], owned_children: List[Dict[str, Any]] = None, exclude_fields: List[str] = None) -> Dict[str, str]:
+    def _generate_field_components(self, concept: Dict[str, Any], owned_children: List[Dict[str, Any]] = None, exclude_fields: List[str] = None, many_to_many_links: List[Dict[str, Any]] = None) -> Dict[str, str]:
         """
         Generate field components for a concept based on field types.
         
@@ -561,6 +754,7 @@ export const {resource_name}_show = (props) => (
             concept: Concept definition
             owned_children: List of owned child concepts (optional)
             exclude_fields: List of field names to exclude from inputs (optional)
+            many_to_many_links: List of M:N links (optional)
             
         Returns:
             Dictionary with field components for different views
@@ -644,7 +838,6 @@ export const {resource_name}_show = (props) => (
         </ReferenceManyField>
       </FormTab>"""
                 child_tabs.append(tab_content)
-
         
         for field in concept['fields']:
             field_name = field['name']
@@ -813,6 +1006,28 @@ export const {resource_name}_show = (props) => (
                     show_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\">")
                     show_fields.append(f"        <TextField source=\"id_presentation\" />")
                     show_fields.append(f"      </ReferenceField>")
+        
+        # Add Many-to-Many inputs to Create/Edit
+        if many_to_many_links:
+            for link_info in many_to_many_links:
+                target_name = link_info['target_concept']['name']
+                field_name = link_info.get('field_name', f"{target_name}s")
+                
+                input_block = f"""        <Grid item xs={{12}} sm={{12}}>
+          <ReferenceArrayInput source="{field_name}" reference="{target_name}">
+            <SelectArrayInput optionText="id_presentation" fullWidth />
+          </ReferenceArrayInput>
+        </Grid>"""
+                
+                create_fields.append(input_block)
+                edit_fields.append(input_block)
+                
+                show_block = f"""      <ReferenceArrayField source="{field_name}" reference="{target_name}">
+        <SingleFieldList>
+          <ChipField source="id_presentation" />
+        </SingleFieldList>
+      </ReferenceArrayField>"""
+                show_fields.append(show_block)
         
         return {
             'imports': '\n'.join(imports),
