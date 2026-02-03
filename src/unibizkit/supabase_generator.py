@@ -215,8 +215,8 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
                 field_parts.append(f"DEFAULT {str(default_value).upper()}")
         
         # Add enum constraints
-        if field_type == 'enum' and 'enumValues' in field:
-            allowed_values = ', '.join([f"'{value}'" for value in field['enumValues']])
+        if field_type == 'enum' and 'enum_values' in field:
+            allowed_values = ', '.join([f"'{value}'" for value in field['enum_values']])
             constraint_name = f"{field_name}_enum_check"
             field_parts.append(f"CONSTRAINT {constraint_name} CHECK ({field_name} IN ({allowed_values}))")
         
@@ -281,8 +281,8 @@ CREATE TABLE "{join_table_name}" (
                     target_table = target_concept
                     
                     # Determine field name
-                    if 'fieldName' in relationship:
-                        field_name = relationship['fieldName']
+                    if 'field_name' in relationship:
+                        field_name = relationship['field_name']
                     else:
                         # Default field name based on target concept
                         field_name = f"{target_table}_id"
@@ -385,7 +385,7 @@ ALTER TABLE "{table_name}"
                 elif field_type == 'boolean':
                     value = 'TRUE' if i % 2 == 0 else 'FALSE'
                 elif field_type == 'enum':
-                    enum_values = field.get('enumValues', ['value1', 'value2'])
+                    enum_values = field.get('enum_values', ['value1', 'value2'])
                     value = f"'{enum_values[0]}'"
                 elif field_type == 'date':
                     value = f"'2023-01-{i:02d}'"
@@ -405,7 +405,7 @@ ALTER TABLE "{table_name}"
             if 'relationships' in concept:
                 for relationship in concept['relationships']:
                     if relationship['type'] == 'belongs-to':
-                        field_name = relationship.get('fieldName', f"{relationship['target']}_id")
+                        field_name = relationship.get('field_name', f"{relationship['target']}_id")
                         field_names.append(field_name)
                         
                         if relationship['target'] == concept['name']:
@@ -475,14 +475,14 @@ ALTER TABLE "{table_name}"
                     if 'relationships' in concept:
                         for r in concept['relationships']:
                             if r['type'] == 'belongs-to':
-                                fk_col = r.get('fieldName', f"{r['target']}_id")
+                                fk_col = r.get('field_name', f"{r['target']}_id")
                                 # Match by FK name or Target name
                                 if fk_col == rel_name or r['target'] == rel_name:
                                     rel = r
                                     break
                     
                     if rel:
-                        fk_col = rel.get('fieldName', f"{rel['target']}_id")
+                        fk_col = rel.get('field_name', f"{rel['target']}_id")
                         target_table = rel['target']
                         declarations.append(f"{part_var} TEXT;")
                         

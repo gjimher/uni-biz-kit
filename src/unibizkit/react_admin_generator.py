@@ -578,7 +578,7 @@ export const {resource_name}_show = (props) => (
                     if rel['type'] == 'belongs-to' and rel.get('ownership') is True:
                          if rel['target'] == parent_concept_name:
                              # Found a child
-                             field_name = rel.get('fieldName', f"{parent_concept_name}_id")
+                             field_name = rel.get('field_name', f"{parent_concept_name}_id")
                              children.append({
                                  'concept': concept,
                                  'field_name': field_name,
@@ -618,7 +618,7 @@ export const {resource_name}_show = (props) => (
                             'join_table': join_table,
                             'my_fk': f"{concept_name}_id",
                             'other_fk': f"{target_name}_id",
-                            'field_name': rel.get('fieldName', f"{target_name}s"),
+                            'field_name': rel.get('field_name', f"{target_name}s"),
                             'rel': rel
                         })
                         
@@ -641,7 +641,7 @@ export const {resource_name}_show = (props) => (
                             'join_table': join_table,
                             'my_fk': f"{concept_name}_id",
                             'other_fk': f"{other_name}_id",
-                            'field_name': rel.get('targetFieldName', f"{other_name}s"),
+                            'field_name': rel.get('target_field_name', f"{other_name}s"),
                             'rel': rel
                         })
         
@@ -786,7 +786,7 @@ export const {resource_name}_show = (props) => (
                 child_concept = child_info['concept']
                 fk_field_name = child_info['field_name']
                 child_name = child_concept['name']
-                child_plural = child_concept.get('pluralName', f"{child_name}s")
+                child_plural = child_concept.get('plural_name', f"{child_name}s")
                 parent_name = concept['name']
                 
                 # Generate columns for the child list
@@ -950,7 +950,7 @@ export const {resource_name}_show = (props) => (
                 show_fields.append(f"      <DateField source=\"{field_name}\" showTime />")
             
             elif field_type == 'enum':
-                enum_values = field.get('enumValues', [])
+                enum_values = field.get('enum_values', [])
                 if enum_values:
                     choices_str = ', '.join([f"{{ id: '{val}', name: '{val}' }}" for val in enum_values])
                     list_fields.append(f"      <TextField source=\"{field_name}\" />")
@@ -973,7 +973,7 @@ export const {resource_name}_show = (props) => (
             for relationship in concept['relationships']:
                 if relationship['type'] == 'belongs-to':
                     target_concept = relationship['target']
-                    field_name = relationship.get('fieldName', f"{target_concept}_id")
+                    field_name = relationship.get('field_name', f"{target_concept}_id")
                     
                     # Skip if relationship field is in exclude_fields
                     is_excluded = field_name in exclude_fields

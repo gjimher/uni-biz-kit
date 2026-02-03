@@ -27,7 +27,7 @@
             "type": "string",
             "description": "Name of the concept (singular, snake_case recommended)"
           },
-          "pluralName": {
+          "plural_name": {
             "type": "string",
             "description": "Plural name of the concept (snake_case recommended)"
           },
@@ -88,12 +88,12 @@
                   "type": ["string", "number", "boolean", "null"],
                   "description": "Default value for the field"
                 },
-                "minLength": {
+                "min_length": {
                   "type": "integer",
                   "description": "Minimum length for string fields",
                   "minimum": 0
                 },
-                "maxLength": {
+                "max_length": {
                   "type": "integer",
                   "description": "Maximum length for string fields",
                   "minimum": 1
@@ -123,7 +123,7 @@
                   "minimum": 0,
                   "maximum": 10
                 },
-                "enumValues": {
+                "enum_values": {
                   "type": "array",
                   "description": "Allowed values for enum fields",
                   "minItems": 1,
@@ -154,11 +154,11 @@
                   "type": "string",
                   "description": "Target concept name"
                 },
-                "fieldName": {
+                "field_name": {
                   "type": "string",
                   "description": "Field name for the relationship (snake_case recommended)"
                 },
-                "targetFieldName": {
+                "target_field_name": {
                   "type": "string",
                   "description": "Field name on the target concept (snake_case recommended)"
                 },

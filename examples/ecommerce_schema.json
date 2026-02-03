@@ -5,7 +5,7 @@
   "concepts": [
     {
       "name": "product",
-      "pluralName": "products",
+      "plural_name": "products",
       "description": "A product available for sale in the e-commerce platform",
       "presentation_id": {
         "fields": ["name"]
@@ -16,8 +16,8 @@
           "type": "string",
           "required": true,
           "unique": false,
-          "minLength": 2,
-          "maxLength": 100,
+          "min_length": 2,
+          "max_length": 100,
           "size": "s",
           "description": "The name of the product"
         },
@@ -25,7 +25,7 @@
           "name": "description",
           "type": "string",
           "required": false,
-          "maxLength": 1000,
+          "max_length": 1000,
           "size": "l",
           "description": "Detailed description of the product"
         },
@@ -51,15 +51,15 @@
           "type": "string",
           "required": true,
           "unique": true,
-          "minLength": 3,
-          "maxLength": 50,
+          "min_length": 3,
+          "max_length": 50,
           "description": "Stock Keeping Unit - unique identifier"
         },
         {
           "name": "status",
           "type": "enum",
           "required": true,
-          "enumValues": ["draft", "published", "archived"],
+          "enum_values": ["draft", "published", "archived"],
           "default": "draft",
           "description": "Current status of the product"
         },
@@ -74,7 +74,7 @@
     },
     {
       "name": "category",
-      "pluralName": "categories",
+      "plural_name": "categories",
       "presentation_id": {
         "fields": ["parent.id_presentation", "name"],
         "separator": "/",
@@ -86,15 +86,15 @@
           "type": "string",
           "required": true,
           "unique": true,
-          "minLength": 2,
-          "maxLength": 50,
+          "min_length": 2,
+          "max_length": 50,
           "description": "Name of the category"
         },
         {
           "name": "description",
           "type": "string",
           "required": false,
-          "maxLength": 500,
+          "max_length": 500,
           "description": "Description of the category"
         },
         {
@@ -102,8 +102,8 @@
           "type": "string",
           "required": true,
           "unique": true,
-          "minLength": 2,
-          "maxLength": 50,
+          "min_length": 2,
+          "max_length": 50,
           "description": "URL-friendly slug for the category"
         }
       ],
@@ -111,16 +111,16 @@
         {
           "type": "belongs-to",
           "target": "category",
-          "fieldName": "parent",
-          "targetFieldName": "children",
+          "field_name": "parent",
+          "target_field_name": "children",
           "ownership": true,
           "required": false
         },
         {
           "type": "many-to-many",
           "target": "product",
-          "fieldName": "products",
-          "targetFieldName": "categories",
+          "field_name": "products",
+          "target_field_name": "categories",
           "ownership": false,
           "required": false
         }
@@ -128,7 +128,7 @@
     },
     {
       "name": "customer",
-      "pluralName": "customers",
+      "plural_name": "customers",
       "description": "Customers who purchase products",
       "presentation_id": {
         "fields": ["first_name", "last_name"],
@@ -139,16 +139,16 @@
           "name": "first_name",
           "type": "string",
           "required": true,
-          "minLength": 1,
-          "maxLength": 50,
+          "min_length": 1,
+          "max_length": 50,
           "description": "Customer's first name"
         },
         {
           "name": "last_name",
           "type": "string",
           "required": true,
-          "minLength": 1,
-          "maxLength": 50,
+          "min_length": 1,
+          "max_length": 50,
           "description": "Customer's last name"
         },
         {
@@ -156,23 +156,23 @@
           "type": "string",
           "required": true,
           "unique": true,
-          "minLength": 5,
-          "maxLength": 100,
+          "min_length": 5,
+          "max_length": 100,
           "description": "Customer's email address"
         },
         {
           "name": "phone",
           "type": "string",
           "required": false,
-          "minLength": 10,
-          "maxLength": 20,
+          "min_length": 10,
+          "max_length": 20,
           "description": "Customer's phone number"
         },
         {
           "name": "address",
           "type": "string",
           "required": false,
-          "maxLength": 200,
+          "max_length": 200,
           "size": "m",
           "description": "Customer's shipping address"
         }
@@ -180,7 +180,7 @@
     },
     {
       "name": "order",
-      "pluralName": "orders",
+      "plural_name": "orders",
       "description": "Customer orders containing products",
       "fields": [
         {
@@ -202,7 +202,7 @@
           "name": "status",
           "type": "enum",
           "required": true,
-          "enumValues": ["pending", "processing", "shipped", "delivered", "cancelled"],
+          "enum_values": ["pending", "processing", "shipped", "delivered", "cancelled"],
           "default": "pending",
           "description": "Current order status"
         },
@@ -210,7 +210,7 @@
           "name": "shipping_address",
           "type": "string",
           "required": true,
-          "maxLength": 200,
+          "max_length": 200,
           "size": "m",
           "description": "Shipping address for the order"
         },
@@ -218,7 +218,7 @@
           "name": "billing_address",
           "type": "string",
           "required": false,
-          "maxLength": 200,
+          "max_length": 200,
           "size": "m",
           "description": "Billing address for the order"
         }
@@ -227,8 +227,8 @@
         {
           "type": "belongs-to",
           "target": "customer",
-          "fieldName": "customer",
-          "targetFieldName": "orders",
+          "field_name": "customer",
+          "target_field_name": "orders",
           "ownership": false,
           "required": true
         }
@@ -236,7 +236,7 @@
     },
     {
       "name": "order_item",
-      "pluralName": "order_items",
+      "plural_name": "order_items",
       "description": "Individual items within an order",
       "presentation_id": {
         "fields": ["quantity", "product"]
@@ -272,16 +272,16 @@
         {
           "type": "belongs-to",
           "target": "order",
-          "fieldName": "order",
-          "targetFieldName": "items",
+          "field_name": "order",
+          "target_field_name": "items",
           "ownership": true,
           "required": true
         },
         {
           "type": "belongs-to",
           "target": "product",
-          "fieldName": "product",
-          "targetFieldName": "order_items",
+          "field_name": "product",
+          "target_field_name": "order_items",
           "ownership": false,
           "required": true
         }
