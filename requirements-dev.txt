@@ -12,3 +12,5 @@ isort>=5.0.0
 pytest-mock>=3.0.0
 dotenv
 psycopg2-binary
+pytest-playwright
+pytest-xprocess
