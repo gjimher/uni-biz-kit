@@ -35,6 +35,12 @@
             "type": "string",
             "description": "Description of the concept"
           },
+          "data_size": {
+            "type": "string",
+            "description": "Estimated volume of data for this concept (s: small, m: medium, l: large)",
+            "enum": ["s", "m", "l"],
+            "default": "s"
+          },
     "presentation_id": {
       "type": "object",
       "properties": {

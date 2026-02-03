@@ -358,11 +358,14 @@ ALTER TABLE "{table_name}"
             SQL INSERT statements
         """
         table_name = concept['name']
+        data_size = concept.get('data_size', 's')
+        num_records_by_data_size = lambda ds: 100 if ds == 'm' else 3
+        num_records = num_records_by_data_size(data_size)
         
-        # Generate 3 sample records
+        # Generate sample records
         sample_records = []
         
-        for i in range(1, 4):
+        for i in range(1, num_records + 1):
             field_values = []
             field_names = []
             
@@ -386,11 +389,16 @@ ALTER TABLE "{table_name}"
                     value = 'TRUE' if i % 2 == 0 else 'FALSE'
                 elif field_type == 'enum':
                     enum_values = field.get('enum_values', ['value1', 'value2'])
-                    value = f"'{enum_values[0]}'"
+                    # Cycle through enum values
+                    val_idx = (i - 1) % len(enum_values)
+                    value = f"'{enum_values[val_idx]}'"
                 elif field_type == 'date':
-                    value = f"'2023-01-{i:02d}'"
+                    # Cycle through days 1-28
+                    day = ((i - 1) % 28) + 1
+                    value = f"'2023-01-{day:02d}'"
                 elif field_type == 'datetime':
-                    value = f"'2023-01-{i:02d}T10:00:00Z'"
+                    day = ((i - 1) % 28) + 1
+                    value = f"'2023-01-{day:02d}T10:00:00Z'"
                 else:
                     value = f"'{field_name}_value_{i}'"
                 
@@ -399,7 +407,7 @@ ALTER TABLE "{table_name}"
             
             # Add timestamps
             field_names.extend(['created_at', 'updated_at'])
-            field_values.extend([f"'2023-01-{i:02d}T10:00:00Z'", f"'2023-01-{i:02d}T10:00:00Z'"])
+            field_values.extend([f"'2023-01-01T10:00:00Z'", f"'2023-01-01T10:00:00Z'"])
             
             # Add foreign keys for belongs-to relationships
             if 'relationships' in concept:
@@ -408,16 +416,21 @@ ALTER TABLE "{table_name}"
                         field_name = relationship.get('field_name', f"{relationship['target']}_id")
                         field_names.append(field_name)
                         
-                        if relationship['target'] == concept['name']:
-                             # For self-references, use NULL to avoid constraint violations during insert
-                             # (and to represent root nodes)
+                        target_concept_name = relationship['target']
+                        
+                        if target_concept_name == concept['name']:
+                             # For self-references, use NULL for now (simple hierarchy)
                              field_values.append('NULL')
                         else:
-                            # Assume referenced tables have IDs 1, 2, 3...
-                            # Use modulo to distribute relationships if needed, or just match i
-                            # To be safe, just point to ID 1 or i (assuming referenced data exists)
-                            # Since we generate 3 records for everything, i (1,2,3) should be safe.
-                            field_values.append(str(i))
+                            # Check target concept data size to determine modulus
+                            target_concept = self.concept_map.get(target_concept_name)
+                            target_size = target_concept.get('data_size', 's')
+                            target_count = num_records_by_data_size(target_size)
+                            
+                            # Distribute FKs across available target IDs (1 to target_count)
+                            # (i-1) % target_count yields 0..target_count-1. Add 1 to get 1..target_count.
+                            target_id = ((i - 1) % target_count) + 1
+                            field_values.append(str(target_id))
 
             fields_str = ', '.join([f'"{field_name}"' for field_name in field_names])
             values_str = ', '.join(field_values)

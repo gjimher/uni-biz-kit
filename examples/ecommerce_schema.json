@@ -130,9 +130,10 @@
       "name": "customer",
       "plural_name": "customers",
       "description": "Customers who purchase products",
+      "data_size": "m",
       "presentation_id": {
         "fields": ["first_name", "last_name"],
-        "separator": ","
+        "separator": ", "
       },
       "fields": [
         {

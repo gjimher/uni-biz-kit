@@ -526,8 +526,13 @@ import {{ {mui_imports_str} }} from '@mui/material';
 {field_components['imports']}
 
 {child_dialog_components}
+
+const {resource_name}_filters = [
+{field_components['filter_fields']}
+];
+
 export const {resource_name}_list = (props) => (
-  <List {{...props}}>
+  <List {{...props}} filters={{{resource_name}_filters}}>
     <Datagrid rowClick="edit">
       {id_field_list}
       {field_components['list_fields']}
@@ -741,8 +746,16 @@ export const {resource_name}_show = (props) => (
                 if relationship['type'] == 'belongs-to':
                     needed_components.add('ReferenceField')
                     needed_components.add('ReferenceInput')
-                    needed_components.add('SelectInput')
-                    break  # Only need to add once
+                    
+                    # Check target concept data size
+                    target_concept_name = relationship['target']
+                    target_concept = self.concept_map.get(target_concept_name)
+                    target_data_size = target_concept.get('data_size', 's') if target_concept else 's'
+                    
+                    if target_data_size != 's':
+                        needed_components.add('AutocompleteInput')
+                    else:
+                        needed_components.add('SelectInput')
         
         return ', '.join(sorted(needed_components))
     
@@ -765,9 +778,16 @@ export const {resource_name}_show = (props) => (
         edit_fields = []
         show_fields = []
         child_tabs = []
+        filter_fields = []
         
         # Ensure exclude_fields is a list
         exclude_fields = exclude_fields or []
+        
+        # Add a "global" search if data_size is not 's'
+        data_size = concept.get('data_size', 's')
+        if data_size != 's':
+            # Use id_presentation for "alwaysOn" search as it identifies the record
+            filter_fields.append(f'  <TextInput label="Search" source="id_presentation@ilike" alwaysOn />')
         
         # Add id_presentation if configured
         presentation_config = concept.get('presentation_id')
@@ -966,14 +986,17 @@ export const {resource_name}_show = (props) => (
                         edit_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " />")
                         edit_fields.append(f"        </Grid>")
                     
+                    if data_size != 's':
+                        filter_fields.append(f"  <SelectInput source=\"{field_name}\" choices={{{choices_array}}} />")
+                    
                     show_fields.append(f"      <TextField source=\"{field_name}\" />")
         
         # Add relationship fields
         if 'relationships' in concept:
             for relationship in concept['relationships']:
                 if relationship['type'] == 'belongs-to':
-                    target_concept = relationship['target']
-                    field_name = relationship.get('field_name', f"{target_concept}_id")
+                    target_concept_name = relationship['target']
+                    field_name = relationship.get('field_name', f"{target_concept_name}_id")
                     
                     # Skip if relationship field is in exclude_fields
                     is_excluded = field_name in exclude_fields
@@ -985,25 +1008,41 @@ export const {resource_name}_show = (props) => (
                     is_required = relationship.get('required', False)
                     validation = ' validate={[required()]}' if is_required else ''
                     
+                    # Determine input type based on target concept data size
+                    target_concept = self.concept_map.get(target_concept_name)
+                    target_data_size = target_concept.get('data_size', 's') if target_concept else 's'
+                    
+                    if target_data_size != 's':
+                        # Use AutocompleteInput for larger datasets
+                        input_component = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}} fullWidth{validation} />'
+                        filter_component = f'<ReferenceInput source="{field_name}" reference="{target_concept_name}"><AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}} /></ReferenceInput>'
+                    else:
+                        # Use SelectInput for small datasets
+                        input_component = f'<SelectInput optionText="id_presentation" fullWidth{validation} />'
+                        filter_component = f'<ReferenceInput source="{field_name}" reference="{target_concept_name}"><SelectInput optionText="id_presentation" /></ReferenceInput>'
+
                     # Always use id_presentation for display in relationship fields
-                    list_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\">")
+                    list_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept_name}\">")
                     list_fields.append(f"        <TextField source=\"id_presentation\" />")
                     list_fields.append(f"      </ReferenceField>")
                     
                     if not is_excluded:
                         create_fields.append(f"        <Grid item {grid_props}>")
-                        create_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
-                        create_fields.append(f"            <SelectInput optionText=\"id_presentation\" fullWidth{validation} />")
+                        create_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept_name}\">")
+                        create_fields.append(f"            {input_component}")
                         create_fields.append(f"          </ReferenceInput>")
                         create_fields.append(f"        </Grid>")
                         
                         edit_fields.append(f"        <Grid item {grid_props}>")
-                        edit_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept}\">")
-                        edit_fields.append(f"            <SelectInput optionText=\"id_presentation\" fullWidth{validation} />")
+                        edit_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept_name}\">")
+                        edit_fields.append(f"            {input_component}")
                         edit_fields.append(f"          </ReferenceInput>")
                         edit_fields.append(f"        </Grid>")
+
+                    if data_size != 's':
+                        filter_fields.append(f"  {filter_component}")
                     
-                    show_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept}\">")
+                    show_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept_name}\">")
                     show_fields.append(f"        <TextField source=\"id_presentation\" />")
                     show_fields.append(f"      </ReferenceField>")
         
@@ -1035,7 +1074,8 @@ export const {resource_name}_show = (props) => (
             'create_fields': '\n'.join(create_fields),
             'edit_fields': '\n'.join(edit_fields),
             'show_fields': '\n'.join(show_fields),
-            'child_tabs': '\n'.join(child_tabs)
+            'child_tabs': '\n'.join(child_tabs),
+            'filter_fields': '\n'.join(filter_fields)
         }
     
     def _map_field_type_to_component(self, field_type: str) -> str:
