@@ -58,17 +58,20 @@ class ReactAdminGenerator:
         # Create main directories
         self.output_dir.mkdir(exist_ok=True)
         
-        # Remove and create src directory structure
+        # Clean src directory but preserve folders
         src_dir = self.output_dir / "src"
         if src_dir.exists():
-          shutil.rmtree(src_dir)
-        src_dir.mkdir()
+            for root, dirs, files in os.walk(src_dir):
+                for file in files:
+                    (Path(root) / file).unlink()
+        else:
+            src_dir.mkdir()
         
-        # Create subdirectories
-        (src_dir / "resources").mkdir()
-        (src_dir / "components").mkdir()
-        (src_dir / "utils").mkdir()
-        (src_dir / "layout").mkdir()
+        # Create subdirectories (ensure they exist)
+        (src_dir / "resources").mkdir(exist_ok=True)
+        (src_dir / "components").mkdir(exist_ok=True)
+        (src_dir / "utils").mkdir(exist_ok=True)
+        (src_dir / "layout").mkdir(exist_ok=True)
         
         # Create public directory
         (self.output_dir / "public").mkdir(exist_ok=True)
@@ -418,7 +421,7 @@ const {create_comp_name} = () => {{
         <DialogContent>
           <Create resource="{child_name}" redirect={{false}} mutationOptions={{{{ onSuccess }}}} title=" ">
             <SimpleForm defaultValues={{{{ {fk_field_name}: id }}}}>
-              <Grid container spacing={{2}}>
+              <Grid container rowSpacing={{0}} columnSpacing={{2}}>
 {child_create_fields}
               </Grid>
             </SimpleForm>
@@ -436,7 +439,7 @@ const {create_comp_name} = () => {{
                 if show_child_id:
                     child_id_field = f"""
                 <Grid item xs={{12}} sm={{6}}>
-                  <TextInput source="id" disabled fullWidth />
+                  <TextInput source="id" disabled fullWidth size="small" margin="none" />
                 </Grid>"""
 
                 child_dialog_components += f"""
@@ -480,7 +483,7 @@ const {edit_comp_name} = () => {{
         <DialogTitle>Edit {child_name}</DialogTitle>
         <DialogContent>
           <SimpleForm record={{record}} onSubmit={{onSubmit}}>
-              <Grid container spacing={{2}}>{child_id_field}
+              <Grid container rowSpacing={{0}} columnSpacing={{2}}>{child_id_field}
 {child_edit_fields}
               </Grid>
             </SimpleForm>
@@ -496,7 +499,7 @@ const {edit_comp_name} = () => {{
         id_field_show = '<TextField source="id" />' if show_id else ''
         id_field_edit = """
           <Grid item xs={12} sm={6}>
-            <TextInput source="id" disabled fullWidth />
+            <TextInput source="id" disabled fullWidth size="small" margin="none" />
           </Grid>""" if show_id else ""
 
         # Determine if we use SimpleForm or TabbedForm for Edit
@@ -504,7 +507,7 @@ const {edit_comp_name} = () => {{
             edit_component = f"""<Edit {{...props}}>
     <TabbedForm>
       <FormTab label="Summary">
-        <Grid container spacing={{2}}>{id_field_edit}
+        <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
           {field_components['edit_fields']}
         </Grid>
       </FormTab>
@@ -514,7 +517,7 @@ const {edit_comp_name} = () => {{
         else:
             edit_component = f"""<Edit {{...props}}>
     <SimpleForm>
-      <Grid container spacing={{2}}>{id_field_edit}
+      <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
         {field_components['edit_fields']}
       </Grid>
     </SimpleForm>
@@ -543,7 +546,7 @@ export const {resource_name}_list = (props) => (
 export const {resource_name}_create = (props) => (
   <Create {{...props}}>
     <SimpleForm>
-      <Grid container spacing={{2}}>
+      <Grid container rowSpacing={{0}} columnSpacing={{2}}>
         {field_components['create_fields']}
       </Grid>
     </SimpleForm>
@@ -881,7 +884,7 @@ export const {resource_name}_show = (props) => (
                 
                 # Setup input component props
                 is_multiline = ' multiline' if field_size == 'l' else ''
-                input_props = f"{is_multiline} fullWidth{validation}"
+                input_props = f"{is_multiline} fullWidth{validation} margin=\"none\" size=\"small\""
                 
                 if not is_excluded:
                     create_fields.append(f"        <Grid item {grid_props}>")
@@ -900,11 +903,11 @@ export const {resource_name}_show = (props) => (
                 
                 if not is_excluded:
                     create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
+                    create_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
                     create_fields.append(f"        </Grid>")
                     
                     edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
+                    edit_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
                     edit_fields.append(f"        </Grid>")
                 
                 show_fields.append(f"      <NumberField source=\"{field_name}\" />")
@@ -915,11 +918,11 @@ export const {resource_name}_show = (props) => (
                 
                 if not is_excluded:
                     create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
+                    create_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
                     create_fields.append(f"        </Grid>")
                     
                     edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} />")
+                    edit_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
                     edit_fields.append(f"        </Grid>")
                 
                 show_fields.append(f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />")
@@ -930,11 +933,11 @@ export const {resource_name}_show = (props) => (
                 
                 if not is_excluded:
                     create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(f"          <BooleanInput source=\"{field_name}\"{validation} />")
+                    create_fields.append(f"          <BooleanInput source=\"{field_name}\"{validation} margin=\"none\" size=\"small\" />")
                     create_fields.append(f"        </Grid>")
                     
                     edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append(f"          <BooleanInput source=\"{field_name}\"{validation} />")
+                    edit_fields.append(f"          <BooleanInput source=\"{field_name}\"{validation} margin=\"none\" size=\"small\" />")
                     edit_fields.append(f"        </Grid>")
                 
                 show_fields.append(f"      <BooleanField source=\"{field_name}\" />")
@@ -945,11 +948,11 @@ export const {resource_name}_show = (props) => (
                 
                 if not is_excluded:
                     create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
+                    create_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
                     create_fields.append(f"        </Grid>")
                     
                     edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
+                    edit_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
                     edit_fields.append(f"        </Grid>")
                 
                 show_fields.append(f"      <DateField source=\"{field_name}\" />")
@@ -960,11 +963,11 @@ export const {resource_name}_show = (props) => (
                 
                 if not is_excluded:
                     create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
+                    create_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
                     create_fields.append(f"        </Grid>")
                     
                     edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} />")
+                    edit_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
                     edit_fields.append(f"        </Grid>")
                 
                 show_fields.append(f"      <DateField source=\"{field_name}\" showTime />")
@@ -979,11 +982,11 @@ export const {resource_name}_show = (props) => (
                     
                     if not is_excluded:
                         create_fields.append(f"        <Grid item {grid_props}>")
-                        create_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " />")
+                        create_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " margin=\"none\" size=\"small\" />")
                         create_fields.append(f"        </Grid>")
                         
                         edit_fields.append(f"        <Grid item {grid_props}>")
-                        edit_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " />")
+                        edit_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " margin=\"none\" size=\"small\" />")
                         edit_fields.append(f"        </Grid>")
                     
                     if data_size != 's':
@@ -1014,11 +1017,11 @@ export const {resource_name}_show = (props) => (
                     
                     if target_data_size != 's':
                         # Use AutocompleteInput for larger datasets
-                        input_component = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}} fullWidth{validation} />'
+                        input_component = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}} fullWidth{validation} margin="none" size="small" />'
                         filter_component = f'<ReferenceInput source="{field_name}" reference="{target_concept_name}"><AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}} /></ReferenceInput>'
                     else:
                         # Use SelectInput for small datasets
-                        input_component = f'<SelectInput optionText="id_presentation" fullWidth{validation} />'
+                        input_component = f'<SelectInput optionText="id_presentation" fullWidth{validation} margin="none" size="small" />'
                         filter_component = f'<ReferenceInput source="{field_name}" reference="{target_concept_name}"><SelectInput optionText="id_presentation" /></ReferenceInput>'
 
                     # Always use id_presentation for display in relationship fields
@@ -1054,7 +1057,7 @@ export const {resource_name}_show = (props) => (
                 
                 input_block = f"""        <Grid item xs={{12}} sm={{12}}>
           <ReferenceArrayInput source="{field_name}" reference="{target_name}">
-            <SelectArrayInput optionText="id_presentation" fullWidth />
+            <SelectArrayInput optionText="id_presentation" fullWidth margin="none" size="small" />
           </ReferenceArrayInput>
         </Grid>"""
                 

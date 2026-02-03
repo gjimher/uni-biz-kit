@@ -1,8 +1,8 @@
 # Generated examples
-*-app/
+/*-app/
 
 # Test ecommerce app (preserved between test runs)
-test-ecommerce-app/
+/test-ecommerce-app
 
 # Python
 __pycache__/
