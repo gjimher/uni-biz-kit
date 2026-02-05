@@ -118,31 +118,31 @@ Supported field types:
 ### Validate a Schema
 
 ```bash
-unibizkit validate path/to/schema.json
+uni-biz-kit --task validate path/to/model_dir
 ```
 
 ### Generate a Complete Application
 
 ```bash
-unibizkit generate path/to/schema.json
+uni-biz-kit path/to/model_dir
 ```
 
 ### Generate with Custom Output Directory
 
 ```bash
-unibizkit generate path/to/schema.json --output-dir my-app
+uni-biz-kit path/to/model_dir --output-dir my-app
 ```
 
 ### Skip Frontend Generation
 
 ```bash
-unibizkit generate path/to/schema.json --skip-frontend
+uni-biz-kit path/to/model_dir --skip-frontend
 ```
 
 ### Skip Backend Generation
 
 ```bash
-unibizkit generate path/to/schema.json --skip-backend
+uni-biz-kit path/to/model_dir --skip-backend
 ```
 
 ## Examples
@@ -204,9 +204,10 @@ Here's a simple CRM example:
 When you run the generate command, UniBizKit creates:
 
 ```
-generated-app/
-├── supabase_schema.sql          # PostgreSQL database schema
-├── supabase_sample_data.sql    # Sample data for testing
+my-app/
+├── backend/
+│   ├── supabase_schema.sql          # PostgreSQL database schema
+│   └── supabase_sample_data.sql    # Sample data for testing
 └── frontend/                   # React-Admin frontend application
     ├── package.json
     ├── public/
@@ -215,8 +216,8 @@ generated-app/
     │   ├── dataProvider.js
     │   ├── index.js
     │   ├── resources/           # One directory per concept
-    │   │   └── Product/
-    │   │       └── Product.js
+    │   │   └── product/
+    │   │       └── product.js
     │   ├── components/
     │   ├── utils/
     │   └── layout/
@@ -276,7 +277,7 @@ npx -y supabase --version # example output: 2.70.5
 ### Generate the e-commerce application
 
 ```bash
-unibizkit generate examples/ecommerce_schema.json --output-dir ecommerce-app
+uni-biz-kit models/test-ecommerce-app --output-dir ecommerce-app
 ```
 
 ### configure supabase instance

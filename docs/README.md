@@ -13,7 +13,7 @@
 pip install -e .
 
 # Generate a complete e-commerce application
-unibizkit generate examples/ecommerce_schema.json --output-dir my-ecommerce-app
+uni-biz-kit models/test-ecommerce-app --output-dir my-ecommerce-app
 
 # Start the React-Admin frontend
 cd my-ecommerce-app/frontend
@@ -64,7 +64,7 @@ The repository includes a complete e-commerce example (`examples/ecommerce_schem
 
 ```bash
 # Generate the e-commerce application
-unibizkit generate examples/ecommerce_schema.json --output-dir ecommerce-app
+uni-biz-kit models/test-ecommerce-app --output-dir ecommerce-app
 
 # Explore the generated files
 ls -la ecommerce-app/

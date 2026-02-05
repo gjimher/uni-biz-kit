@@ -21,19 +21,10 @@ class TestCLI:
         """Test that CLI help is displayed correctly."""
         cli = CLI()
         
-        with patch('sys.argv', ['unibizkit', '--help']):
+        with patch('sys.argv', ['uni-biz-kit', '--help']):
             with pytest.raises(SystemExit) as exit_info:
                 cli.run()
             assert exit_info.value.code == 0
-    
-    def test_cli_no_command(self):
-        """Test that CLI exits with error when no command is provided."""
-        cli = CLI()
-        
-        with patch('sys.argv', ['unibizkit']):
-            with pytest.raises(SystemExit) as exit_info:
-                cli.run()
-            assert exit_info.value.code == 1
     
     def test_cli_validate_command_valid_schema(self):
         """Test validate command with valid schema."""
@@ -57,17 +48,15 @@ class TestCLI:
             ]
         }
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump(valid_schema, f)
-            temp_path = f.name
-        
-        try:
-            with patch('sys.argv', ['unibizkit', 'validate', temp_path]):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            with open(temp_path / "concepts.json", 'w') as f:
+                json.dump(valid_schema, f)
+            
+            with patch('sys.argv', ['uni-biz-kit', str(temp_path), '--task', 'validate']):
                 # Should not raise an exception
                 cli.run()
-        finally:
-            os.unlink(temp_path)
-    
+
     def test_cli_validate_command_invalid_schema(self):
         """Test validate command with invalid schema."""
         cli = CLI()
@@ -78,29 +67,27 @@ class TestCLI:
             "concepts": []
         }
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump(invalid_schema, f)
-            temp_path = f.name
-        
-        try:
-            with patch('sys.argv', ['unibizkit', 'validate', temp_path]):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            with open(temp_path / "concepts.json", 'w') as f:
+                json.dump(invalid_schema, f)
+            
+            with patch('sys.argv', ['uni-biz-kit', str(temp_path), '--task', 'validate']):
                 with pytest.raises(SystemExit) as exit_info:
                     cli.run()
                 assert exit_info.value.code == 1
-        finally:
-            os.unlink(temp_path)
-    
+
     def test_cli_validate_command_nonexistent_file(self):
-        """Test validate command with non-existent file."""
+        """Test validate command with non-existent directory."""
         cli = CLI()
         
-        with patch('sys.argv', ['unibizkit', 'validate', 'nonexistent.json']):
+        with patch('sys.argv', ['uni-biz-kit', 'nonexistent_dir', '--task', 'validate']):
             with pytest.raises(SystemExit) as exit_info:
                 cli.run()
             assert exit_info.value.code == 1
     
     def test_cli_generate_command_valid_schema(self):
-        """Test generate command with valid schema."""
+        """Test generate command with valid schema (default task)."""
         output_dir = Path('generated-app')
         shutil.rmtree(output_dir, ignore_errors=True)
         cli = CLI()
@@ -123,29 +110,30 @@ class TestCLI:
             ]
         }
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump(valid_schema, f)
-            temp_path = f.name
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            with open(temp_path / "concepts.json", 'w') as f:
+                json.dump(valid_schema, f)
         
-        try:
-            with patch('sys.argv', ['unibizkit', 'generate', temp_path]):
-                # Should not raise an exception
-                cli.run()
+            try:
+                # Default task is generate
+                with patch('sys.argv', ['uni-biz-kit', str(temp_path), '--output-dir', 'generated-app']):
+                    # Should not raise an exception
+                    cli.run()
+                    
+                # Check that output directory was created
+                assert output_dir.exists()
                 
-            # Check that output directory was created
-            assert output_dir.exists()
-            
-            # Check that SQL files were generated
-            assert (output_dir / 'backend' / 'supabase_schema.sql').exists()
-            assert (output_dir / 'backend' / 'supabase_sample_data.sql').exists()
-            
-            # Check that frontend was generated
-            assert (output_dir / 'frontend').exists()
-            
-            # Clean up
-            shutil.rmtree(output_dir)
-        finally:
-            os.unlink(temp_path)
+                # Check that SQL files were generated
+                assert (output_dir / 'backend' / 'supabase_schema.sql').exists()
+                assert (output_dir / 'backend' / 'supabase_sample_data.sql').exists()
+                
+                # Check that frontend was generated
+                assert (output_dir / 'frontend').exists()
+                
+            finally:
+                if output_dir.exists():
+                    shutil.rmtree(output_dir)
     
     def test_cli_generate_command_skip_options(self):
         """Test generate command with skip options."""
@@ -171,34 +159,34 @@ class TestCLI:
             ]
         }
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump(valid_schema, f)
-            temp_path = f.name
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            with open(temp_path / "concepts.json", 'w') as f:
+                json.dump(valid_schema, f)
         
-        try:
-            # Test skip frontend
-            with patch('sys.argv', ['unibizkit', 'generate', temp_path, '--skip-frontend']):
-                cli.run()
+            try:
+                # Test skip frontend
+                with patch('sys.argv', ['uni-biz-kit', str(temp_path), '--skip-frontend', '--output-dir', 'generated-app']):
+                    cli.run()
+                    
+                assert output_dir.exists()
+                assert (output_dir / 'backend' / 'supabase_schema.sql').exists()
+                assert not (output_dir / 'frontend').exists()
                 
-            assert output_dir.exists()
-            assert (output_dir / 'backend' / 'supabase_schema.sql').exists()
-            assert not (output_dir / 'frontend').exists()
-            
-            # Clean up
-            shutil.rmtree(output_dir)
-            
-            # Test skip backend
-            with patch('sys.argv', ['unibizkit', 'generate', temp_path, '--skip-backend']):
-                cli.run()
+                # Clean up
+                shutil.rmtree(output_dir)
                 
-            assert output_dir.exists()
-            assert not (output_dir / 'supabase_schema.sql').exists()
-            assert (output_dir / 'frontend').exists()
+                # Test skip backend
+                with patch('sys.argv', ['uni-biz-kit', str(temp_path), '--skip-backend', '--output-dir', 'generated-app']):
+                    cli.run()
+                    
+                assert output_dir.exists()
+                assert not (output_dir / 'backend' / 'supabase_schema.sql').exists()
+                assert (output_dir / 'frontend').exists()
 
-            # Clean up
-            shutil.rmtree(output_dir)                        
-        finally:
-            os.unlink(temp_path)
+            finally:
+                if output_dir.exists():
+                    shutil.rmtree(output_dir)
             
     
     def test_cli_generate_command_custom_output_dir(self):
@@ -223,24 +211,24 @@ class TestCLI:
             ]
         }
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump(valid_schema, f)
-            temp_path = f.name
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            with open(temp_path / "concepts.json", 'w') as f:
+                json.dump(valid_schema, f)
         
-        try:
             custom_dir = 'my-custom-app'
-            with patch('sys.argv', ['unibizkit', 'generate', temp_path, '--output-dir', custom_dir]):
-                cli.run()
+            try:
+                with patch('sys.argv', ['uni-biz-kit', str(temp_path), '--output-dir', custom_dir]):
+                    cli.run()
+                    
+                output_dir = Path(custom_dir)
+                assert output_dir.exists()
+                assert (output_dir / 'backend' / 'supabase_schema.sql').exists()
+                assert (output_dir / 'frontend').exists()
                 
-            output_dir = Path(custom_dir)
-            assert output_dir.exists()
-            assert (output_dir / 'backend' / 'supabase_schema.sql').exists()
-            assert (output_dir / 'frontend').exists()
-            
-            # Clean up
-            shutil.rmtree(output_dir)
-        finally:
-            os.unlink(temp_path)
+            finally:
+                if Path(custom_dir).exists():
+                    shutil.rmtree(custom_dir)
     
     def test_cli_generate_command_invalid_schema(self):
         """Test generate command with invalid schema."""
@@ -252,23 +240,21 @@ class TestCLI:
             "concepts": []
         }
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump(invalid_schema, f)
-            temp_path = f.name
-        
-        try:
-            with patch('sys.argv', ['unibizkit', 'generate', temp_path]):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            with open(temp_path / "concepts.json", 'w') as f:
+                json.dump(invalid_schema, f)
+            
+            with patch('sys.argv', ['uni-biz-kit', str(temp_path)]):
                 with pytest.raises(SystemExit) as exit_info:
                     cli.run()
                 assert exit_info.value.code == 1
-        finally:
-            os.unlink(temp_path)
     
     def test_cli_generate_command_nonexistent_file(self):
-        """Test generate command with non-existent file."""
+        """Test generate command with non-existent directory."""
         cli = CLI()
         
-        with patch('sys.argv', ['unibizkit', 'generate', 'nonexistent.json']):
+        with patch('sys.argv', ['uni-biz-kit', 'nonexistent_dir']):
             with pytest.raises(SystemExit) as exit_info:
                 cli.run()
             assert exit_info.value.code == 1

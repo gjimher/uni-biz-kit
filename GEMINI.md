@@ -4,7 +4,7 @@
 
 ## Project Architecture
 
-1.  **Input Model:** A JSON file defining business concepts, fields, and relationships (validated against `schemas/business_schema.json`).
+1.  **Input Model:** A JSON file defining business concepts, fields, and relationships (validated against `schemas/concepts_schema.json`).
 2.  **Core Logic (`src/unibizkit/`):**
     *   `cli.py`: Entry point handling arguments and commands.
     *   `schema_loader.py`: Validates and loads the input JSON schema.
@@ -15,8 +15,9 @@
 ## Project Structure
 
 *   `src/unibizkit/`: Main package source code.
-*   `schemas/`: Contains the meta-schema (`business_schema.json`) defining the contract for input models.
-*   `examples/`: Sample business definitions (e.g., `ecommerce_schema.json`).
+*   `schemas/`: Contains the meta-schema (`concepts_schema.json`) defining the contract for input models.
+*   `models/`: Business definitions used for testing and examples (e.g., `test-ecommerce-app/`).
+*   `docs/`: Project documentation (`Development.md`, `USAGE.md`).
 *   `tests/`: Integration and unit tests.
 *   `test-ecommerce-app/`: Dedicated output directory for integration tests. **Do not delete this folder**, as it may contain cached dependencies (like `node_modules`).
 *   `ecommerce-app/`: A reference implementation ("golden master") used for comparison and guiding generator improvements.
@@ -33,16 +34,16 @@ pip install -e .
 
 ## CLI Usage
 
-The primary entry point is `unibizkit`.
+The primary entry point is `uni-biz-kit`.
 
 **Validate a Schema:**
 ```bash
-unibizkit validate examples/ecommerce_schema.json
+uni-biz-kit --task validate models/test-ecommerce-app
 ```
 
 **Generate an Application:**
 ```bash
-unibizkit generate examples/ecommerce_schema.json --output-dir my-output-dir
+uni-biz-kit models/test-ecommerce-app --output-dir my-output-dir
 ```
 
 ## Testing & Verification

@@ -36,12 +36,12 @@ class TestEcommerceBackend:
         """
         cli = CLI()
         
-        # Use the ecommerce schema from examples
-        schema_path = Path('examples/ecommerce_schema.json')
+        # Use the ecommerce schema from models
+        schema_path = Path('models/test-ecommerce-app/concepts.json')
         output_dir = Path('test-ecommerce-app')
         
-        print("Executing unibizkit: generating a complete ecommerce application from schema")
-        with patch('sys.argv', ['unibizkit', 'generate', str(schema_path), '--output-dir', str(output_dir)]):
+        print("Executing uni-biz-kit: generating a complete ecommerce application from schema")
+        with patch('sys.argv', ['uni-biz-kit', 'models/test-ecommerce-app', '--output-dir', str(output_dir)]):
             # Should not raise an exception
             cli.run()
         

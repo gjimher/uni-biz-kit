@@ -32,7 +32,7 @@ class SchemaLoader:
     def _load_validation_schema(self) -> Dict[str, Any]:
         """Load the validation schema from the schemas directory."""
         try:
-            schema_file = Path(__file__).parent.parent.parent / "schemas" / "business_schema.json"
+            schema_file = Path(__file__).parent.parent.parent / "schemas" / "concepts_schema.json"
             with open(schema_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:

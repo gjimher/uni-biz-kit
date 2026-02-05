@@ -7,6 +7,7 @@ Provides the main CLI entry point for UniBizKit.
 import argparse
 import logging
 import sys
+import os
 from pathlib import Path
 from .schema_loader import SchemaLoader, SchemaValidationError
 from .supabase_generator import SupabaseGenerator
@@ -31,43 +32,40 @@ class CLI:
             formatter_class=argparse.RawDescriptionHelpFormatter,
             epilog="""
 Examples:
-  unibizkit generate path/to/schema.json
-  unibizkit generate path/to/schema.json --output-dir my-app
+  uni-biz-kit models/my-app
+  uni-biz-kit --task validate models/my-app
             """
         )
         
-        subparsers = parser.add_subparsers(dest='command', help='Available commands')
-        
-        # Generate command
-        generate_parser = subparsers.add_parser('generate', help='Generate a complete business application')
-        generate_parser.add_argument(
-            'schema_path',
+        parser.add_argument(
+            'input_path',
             type=str,
-            help='Path to the business schema JSON file'
+            nargs='?',
+            help='Path to the model directory (containing concepts.json). Defaults to the single folder in models/ if not provided.'
         )
-        generate_parser.add_argument(
+
+        parser.add_argument(
+            '--task',
+            type=str,
+            default='generate',
+            choices=['generate', 'validate'],
+            help='Task to perform (default: generate)'
+        )
+
+        parser.add_argument(
             '--output-dir',
             type=str,
-            default='generated-app',
-            help='Output directory for generated files (default: generated-app)'
+            help='Output directory for generated files (default: current directory + input directory name)'
         )
-        generate_parser.add_argument(
+        parser.add_argument(
             '--skip-frontend',
             action='store_true',
             help='Skip React-Admin frontend generation'
         )
-        generate_parser.add_argument(
+        parser.add_argument(
             '--skip-backend',
             action='store_true',
             help='Skip Supabase backend generation'
-        )
-        
-        # Validate command
-        validate_parser = subparsers.add_parser('validate', help='Validate a business schema')
-        validate_parser.add_argument(
-            'schema_path',
-            type=str,
-            help='Path to the business schema JSON file'
         )
         
         return parser
@@ -76,30 +74,69 @@ Examples:
         """Run the CLI."""
         args = self.parser.parse_args()
         
-        if not args.command:
-            self.parser.print_help()
-            sys.exit(1)
-        
         try:
-            if args.command == 'generate':
+            if args.task == 'generate':
                 self._handle_generate_command(args)
-            elif args.command == 'validate':
+            elif args.task == 'validate':
                 self._handle_validate_command(args)
             else:
-                logger.error(f"Unknown command: {args.command}")
+                logger.error(f"Unknown task: {args.task}")
                 sys.exit(1)
         except Exception as e:
             logger.error(f"Error: {e}")
             sys.exit(1)
     
+    def _resolve_paths(self, input_path_arg: str, output_dir_arg: str = None):
+        """
+        Resolve input and output paths based on arguments and defaults.
+        
+        Returns:
+            Tuple of (schema_file_path, output_dir_path)
+        """
+        # Determine Input Directory
+        if input_path_arg:
+            input_dir = Path(input_path_arg)
+        else:
+            # Try to auto-discover in 'models/'
+            models_dir = Path('models')
+            if not models_dir.exists():
+                 raise FileNotFoundError(f"No input path provided and 'models' directory not found.")
+            
+            subdirs = [d for d in models_dir.iterdir() if d.is_dir()]
+            if len(subdirs) == 1:
+                input_dir = subdirs[0]
+                logger.info(f"Auto-detected model directory: {input_dir}")
+            else:
+                raise ValueError(
+                    f"Ambiguous input. 'models/' contains {len(subdirs)} directories. "
+                    "Please specify the input directory explicitly."
+                )
+
+        if not input_dir.exists():
+             raise FileNotFoundError(f"Input directory not found: {input_dir}")
+
+        # Determine Schema File Path
+        schema_path = input_dir / "concepts.json"
+        
+        # Determine Output Directory
+        if output_dir_arg:
+            output_dir = Path(output_dir_arg)
+        else:
+            # Default to current working directory + input directory name
+            output_dir = Path.cwd() / input_dir.name
+            
+        return schema_path, output_dir
+
     def _handle_generate_command(self, args):
         """Handle the generate command."""
-        logger.info(f"Generating application from schema: {args.schema_path}")
         
-        # Validate schema path
-        schema_path = Path(args.schema_path)
+        schema_path, output_dir = self._resolve_paths(args.input_path, args.output_dir)
+        
+        logger.info(f"Generating application from schema: {schema_path}")
+        
+        # Validate schema path existence
         if not schema_path.exists():
-            raise FileNotFoundError(f"Schema file not found: {args.schema_path}")
+            raise FileNotFoundError(f"Schema file not found: {schema_path}")
         
         # Load and validate schema
         schema_loader = SchemaLoader(str(schema_path))
@@ -108,7 +145,6 @@ Examples:
         logger.info(f"Schema validated successfully: {business_schema['name']}")
         
         # Create output directory
-        output_dir = Path(args.output_dir)
         output_dir.mkdir(exist_ok=True)
         
         # Generate Supabase schema
@@ -145,12 +181,15 @@ Examples:
     
     def _handle_validate_command(self, args):
         """Handle the validate command."""
-        logger.info(f"Validating schema: {args.schema_path}")
         
-        # Validate schema path
-        schema_path = Path(args.schema_path)
+        # For validate, we don't strictly need output_dir, so we ignore the second return value
+        # But we reuse the logic to find the schema file
+        schema_path, _ = self._resolve_paths(args.input_path)
+        
+        logger.info(f"Validating schema: {schema_path}")
+        
         if not schema_path.exists():
-            raise FileNotFoundError(f"Schema file not found: {args.schema_path}")
+            raise FileNotFoundError(f"Schema file not found: {schema_path}")
         
         # Load and validate schema
         schema_loader = SchemaLoader(str(schema_path))

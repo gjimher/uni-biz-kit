@@ -18,7 +18,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "unibizkit=unibizkit.main:main",
+            "uni-biz-kit=unibizkit.main:main",
         ],
     },
     classifiers=[
