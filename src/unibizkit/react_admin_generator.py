@@ -498,7 +498,7 @@ const {edit_comp_name} = () => {{
         id_field_list = '<TextField source="id" />' if show_id else ''
         id_field_show = '<TextField source="id" />' if show_id else ''
         id_field_edit = """
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12} sm={3}>
             <TextInput source="id" disabled fullWidth size="small" margin="none" />
           </Grid>""" if show_id else ""
 
@@ -786,6 +786,40 @@ export const {resource_name}_show = (props) => (
         # Ensure exclude_fields is a list
         exclude_fields = exclude_fields or []
         
+        # Grid State Tracking
+        # 12-column grid. Positions: 0, 3, 6, 9.
+        create_grid_pos = 0
+        
+        # Determine initial edit_grid_pos based on ID visibility
+        # Logic must match _generate_resource_main_file
+        presentation_config = concept.get('presentation_id')
+        show_id = not presentation_config or 'fields' not in presentation_config
+        
+        # If ID is shown, it takes sm=3, so we start at 3. Otherwise 0.
+        edit_grid_pos = 3 if show_id else 0
+        
+        def update_grid(current_pos, width, fields_list):
+            """
+            Updates grid position and adds spacer if needed.
+            Returns new position.
+            """
+            # Logic: If field is width 6 ('m') and we are at pos 3 (Col 2), 
+            # we must skip to 6 (Col 3).
+            if width == 6:
+                if current_pos % 12 == 3:
+                    # Insert spacer
+                    fields_list.append('        <Grid item xs={12} sm={3} />')
+                    current_pos += 3
+            
+            # Wrap logic is handled by MUI, but we track the 'virtual' cursor
+            # If current_pos + width > 12, it wraps to next line
+            if (current_pos % 12) + width > 12:
+                # Effectively starts at 0 on next line
+                current_pos = 0
+                
+            current_pos += width
+            return current_pos
+
         # Add a "global" search if data_size is not 's'
         data_size = concept.get('data_size', 's')
         if data_size != 's':
@@ -793,14 +827,15 @@ export const {resource_name}_show = (props) => (
             filter_fields.append(f'  <TextInput label="Search" source="id_presentation@ilike" alwaysOn />')
         
         # Add id_presentation if configured
-        presentation_config = concept.get('presentation_id')
         if presentation_config and presentation_config.get('show', False):
             list_fields.append('      <TextField source="id_presentation" label="Presentation" />')
             show_fields.append('      <TextField source="id_presentation" label="Presentation" />')
             
             # Add to edit fields (read-only), but not create fields (it's generated)
-            edit_fields.append('        <Grid item xs={12} sm={12}>')
-            edit_fields.append('          <TextInput source="id_presentation" disabled fullWidth label="Presentation" />')
+            width_units = 3
+            edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
+            edit_fields.append(f'        <Grid item xs={{12}} sm={{{width_units}}}>')
+            edit_fields.append('          <TextInput source="id_presentation" disabled fullWidth label="Presentation" margin="none" size="small" />')
             edit_fields.append('        </Grid>')
         
         # Generate child tabs if any
@@ -871,129 +906,86 @@ export const {resource_name}_show = (props) => (
             # Skip if field is in exclude_fields
             is_excluded = field_name in exclude_fields
             
-            # Determine grid props
+            # Determine width units
+            # s = 3, m = 6, l = 6
+            width_units = 3
             if field_size in ['m', 'l']:
-                grid_props = "xs={12} sm={12}"
-            else:
-                grid_props = "xs={12} sm={6}"
+                width_units = 6
+            
+            grid_props = f"xs={{12}} sm={{{width_units}}}"
             
             # Generate appropriate field component based on type
+            input_html = ""
+            list_html = ""
+            show_html = ""
+            
             if field_type == 'string':
-                list_fields.append(f"      <TextField source=\"{field_name}\" />")
+                list_html = f"      <TextField source=\"{field_name}\" />"
                 validation = ' validate={[required()]}' if is_required else ''
-                
-                # Setup input component props
-                is_multiline = ' multiline' if field_size == 'l' else ''
+                is_multiline = ' multiline rows={4}' if field_size == 'l' else ''
                 input_props = f"{is_multiline} fullWidth{validation} margin=\"none\" size=\"small\""
-                
-                if not is_excluded:
-                    create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(f"          <TextInput source=\"{field_name}\"{input_props} />")
-                    create_fields.append(f"        </Grid>")
-                    
-                    edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append(f"          <TextInput source=\"{field_name}\"{input_props} />")
-                    edit_fields.append(f"        </Grid>")
-                
-                show_fields.append(f"      <TextField source=\"{field_name}\" />")
+                input_html = f"          <TextInput source=\"{field_name}\"{input_props} />"
+                show_html = f"      <TextField source=\"{field_name}\" />"
             
             elif field_type == 'integer':
-                list_fields.append(f"      <NumberField source=\"{field_name}\" />")
+                list_html = f"      <NumberField source=\"{field_name}\" />"
                 validation = ' validate={[required()]}' if is_required else ''
-                
-                if not is_excluded:
-                    create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
-                    create_fields.append(f"        </Grid>")
-                    
-                    edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
-                    edit_fields.append(f"        </Grid>")
-                
-                show_fields.append(f"      <NumberField source=\"{field_name}\" />")
+                input_html = f"          <NumberInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />"
+                show_html = f"      <NumberField source=\"{field_name}\" />"
             
             elif field_type == 'decimal':
-                list_fields.append(f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />")
+                list_html = f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />"
                 validation = ' validate={[required()]}' if is_required else ''
-                
-                if not is_excluded:
-                    create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
-                    create_fields.append(f"        </Grid>")
-                    
-                    edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append(f"          <NumberInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
-                    edit_fields.append(f"        </Grid>")
-                
-                show_fields.append(f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />")
+                input_html = f"          <NumberInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />"
+                show_html = f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />"
             
             elif field_type == 'boolean':
-                list_fields.append(f"      <BooleanField source=\"{field_name}\" />")
+                list_html = f"      <BooleanField source=\"{field_name}\" />"
                 validation = ' validate={[required()]}' if is_required else ''
-                
-                if not is_excluded:
-                    create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(f"          <BooleanInput source=\"{field_name}\"{validation} margin=\"none\" size=\"small\" />")
-                    create_fields.append(f"        </Grid>")
-                    
-                    edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append(f"          <BooleanInput source=\"{field_name}\"{validation} margin=\"none\" size=\"small\" />")
-                    edit_fields.append(f"        </Grid>")
-                
-                show_fields.append(f"      <BooleanField source=\"{field_name}\" />")
+                input_html = f"          <BooleanInput source=\"{field_name}\"{validation} margin=\"none\" size=\"small\" />"
+                show_html = f"      <BooleanField source=\"{field_name}\" />"
             
             elif field_type == 'date':
-                list_fields.append(f"      <DateField source=\"{field_name}\" />")
+                list_html = f"      <DateField source=\"{field_name}\" />"
                 validation = ' validate={[required()]}' if is_required else ''
-                
-                if not is_excluded:
-                    create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
-                    create_fields.append(f"        </Grid>")
-                    
-                    edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
-                    edit_fields.append(f"        </Grid>")
-                
-                show_fields.append(f"      <DateField source=\"{field_name}\" />")
+                input_html = f"          <DateInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />"
+                show_html = f"      <DateField source=\"{field_name}\" />"
             
             elif field_type == 'datetime':
-                list_fields.append(f"      <DateField source=\"{field_name}\" showTime />")
+                list_html = f"      <DateField source=\"{field_name}\" showTime />"
                 validation = ' validate={[required()]}' if is_required else ''
-                
-                if not is_excluded:
-                    create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
-                    create_fields.append(f"        </Grid>")
-                    
-                    edit_fields.append(f"        <Grid item {grid_props}>")
-                    edit_fields.append(f"          <DateInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />")
-                    edit_fields.append(f"        </Grid>")
-                
-                show_fields.append(f"      <DateField source=\"{field_name}\" showTime />")
+                input_html = f"          <DateInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />"
+                show_html = f"      <DateField source=\"{field_name}\" showTime />"
             
             elif field_type == 'enum':
                 enum_values = field.get('enum_values', [])
                 if enum_values:
                     choices_str = ', '.join([f"{{ id: '{val}', name: '{val}' }}" for val in enum_values])
-                    list_fields.append(f"      <TextField source=\"{field_name}\" />")
+                    list_html = f"      <TextField source=\"{field_name}\" />"
                     validation = ' validate={[required()]}' if is_required else ''
                     choices_array = f"[{choices_str}]"
-                    
-                    if not is_excluded:
-                        create_fields.append(f"        <Grid item {grid_props}>")
-                        create_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " margin=\"none\" size=\"small\" />")
-                        create_fields.append(f"        </Grid>")
-                        
-                        edit_fields.append(f"        <Grid item {grid_props}>")
-                        edit_fields.append("          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " margin=\"none\" size=\"small\" />")
-                        edit_fields.append(f"        </Grid>")
-                    
+                    input_html = "          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " margin=\"none\" size=\"small\" />"
                     if data_size != 's':
                         filter_fields.append(f"  <SelectInput source=\"{field_name}\" choices={{{choices_array}}} />")
-                    
-                    show_fields.append(f"      <TextField source=\"{field_name}\" />")
-        
+                    show_html = f"      <TextField source=\"{field_name}\" />"
+
+            # Append to lists
+            if list_html: list_fields.append(list_html)
+            if show_html: show_fields.append(show_html)
+            
+            if input_html and not is_excluded:
+                # Add to Create
+                create_grid_pos = update_grid(create_grid_pos, width_units, create_fields)
+                create_fields.append(f"        <Grid item {grid_props}>")
+                create_fields.append(input_html)
+                create_fields.append(f"        </Grid>")
+                
+                # Add to Edit
+                edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
+                edit_fields.append(f"        <Grid item {grid_props}>")
+                edit_fields.append(input_html)
+                edit_fields.append(f"        </Grid>")
+
         # Add relationship fields
         if 'relationships' in concept:
             for relationship in concept['relationships']:
@@ -1004,7 +996,7 @@ export const {resource_name}_show = (props) => (
                     # Skip if relationship field is in exclude_fields
                     is_excluded = field_name in exclude_fields
                     
-                    # Relationships usually 's' or 'm'. Default to 's' (half width)
+                    # Relationships usually 'm' (2 columns) for better visibility
                     grid_props = "xs={12} sm={6}"
                     
                     # Check if required
@@ -1030,12 +1022,16 @@ export const {resource_name}_show = (props) => (
                     list_fields.append(f"      </ReferenceField>")
                     
                     if not is_excluded:
+                        # Add to Create
+                        create_grid_pos = update_grid(create_grid_pos, width_units, create_fields)
                         create_fields.append(f"        <Grid item {grid_props}>")
                         create_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept_name}\">")
                         create_fields.append(f"            {input_component}")
                         create_fields.append(f"          </ReferenceInput>")
                         create_fields.append(f"        </Grid>")
                         
+                        # Add to Edit
+                        edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
                         edit_fields.append(f"        <Grid item {grid_props}>")
                         edit_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept_name}\">")
                         edit_fields.append(f"            {input_component}")
@@ -1054,6 +1050,13 @@ export const {resource_name}_show = (props) => (
             for link_info in many_to_many_links:
                 target_name = link_info['target_concept']['name']
                 field_name = link_info.get('field_name', f"{target_name}s")
+                
+                # M:N is width 12
+                width_units = 12
+                # Note: No need to call update_grid for spacers with width 12, 
+                # but we should update the pos counter to keep it correct for any subsequent fields (if we added any)
+                create_grid_pos = update_grid(create_grid_pos, width_units, create_fields)
+                edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
                 
                 input_block = f"""        <Grid item xs={{12}} sm={{12}}>
           <ReferenceArrayInput source="{field_name}" reference="{target_name}">
