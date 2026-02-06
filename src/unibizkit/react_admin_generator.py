@@ -47,12 +47,32 @@ class ReactAdminGenerator:
         # Generate data provider
         self._generate_data_provider()
         
+        # Generate custom components
+        self._generate_custom_components()
+        
         # Generate resources for each concept
         for concept in self.concepts:
             self._generate_resource_files(concept)
         
         logger.info("React-Admin frontend generation completed")
     
+    def _generate_custom_components(self):
+        """Generate custom reusable components."""
+        title_js_content = """import * as React from 'react';
+import { useRecordContext } from 'react-admin';
+
+export const Title = ({ name }) => {
+    const record = useRecordContext();
+    return (
+        <span>
+            {name} {record ? `${record.id_presentation}` : ''}
+        </span>
+    );
+};
+"""
+        with open(self.output_dir / "src" / "components" / "title.js", 'w', encoding='utf-8') as f:
+            f.write(title_js_content)
+
     def _create_directory_structure(self):
         """Create the directory structure for the React-Admin app."""
         # Create main directories
@@ -494,7 +514,7 @@ const {edit_comp_name} = () => {{
 
         # Determine if we use SimpleForm or TabbedForm for Edit
         if owned_children or many_to_many_links:
-            edit_component = f"""<Edit {{...props}}>
+            edit_component = f"""<Edit title={{<Title name="{resource_name}" />}} {{...props}}>
     <TabbedForm>
       <FormTab label="Summary">
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
@@ -505,7 +525,7 @@ const {edit_comp_name} = () => {{
     </TabbedForm>
   </Edit>"""
         else:
-            edit_component = f"""<Edit {{...props}}>
+            edit_component = f"""<Edit title={{<Title name="{resource_name}" />}} {{...props}}>
     <SimpleForm>
       <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
         {field_components['edit_fields']}
@@ -516,6 +536,7 @@ const {edit_comp_name} = () => {{
         resource_content = f"""import * as React from 'react';
 import {{ {react_admin_imports} }} from 'react-admin';
 import {{ {mui_imports_str} }} from '@mui/material';
+import {{ Title }} from '../../components/title';
 {field_components['imports']}
 
 {child_dialog_components}
@@ -548,7 +569,7 @@ export const {resource_name}_edit = (props) => (
 );
 
 export const {resource_name}_show = (props) => (
-  <Show {{...props}}>
+  <Show title={{<Title name="{resource_name}" />}} {{...props}}>
     <SimpleShowLayout>
       {id_field_show}
       {field_components['show_fields']}
@@ -725,7 +746,7 @@ export const {resource_name}_show = (props) => (
         needed_components = {
             'List', 'Create', 'Edit', 'Show',
             'SimpleShowLayout', 'SimpleForm', 'Datagrid',
-            'TextField', 'TextInput', 'required'
+            'TextField', 'TextInput', 'required', 'useRecordContext'
         }
         
         # Add TabbedForm components if needed
