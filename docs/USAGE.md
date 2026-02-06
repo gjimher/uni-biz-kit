@@ -149,7 +149,7 @@ uni-biz-kit path/to/model_dir --skip-backend
 
 ### ECommerce Schema
 
-The repository includes a complete e-commerce example in `examples/ecommerce_schema.json` that demonstrates:
+The repository includes a complete e-commerce example in `models/test-ecommerce-app` that demonstrates:
 
 - Products with various field types
 - Categories with hierarchical relationships

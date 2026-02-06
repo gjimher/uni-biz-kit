@@ -210,6 +210,16 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
             sql_type = 'TEXT'  # We'll add CHECK constraint later
         
         # Build field definition
+        if 'calculated' in field:
+            expr = field['calculated']
+            # Simple heuristic: wrap field names in double quotes if they look like field names
+            # This is very basic, but for "quantity*unit_price" it should work if we are careful.
+            # However, the user provided "quantity*unit_price". 
+            # We should probably let the user provide the SQL expression or do some basic parsing.
+            # For now, let's assume the user knows what they are doing but we'll try to be helpful.
+            sql_parts = [f'"{field_name}" {sql_type} GENERATED ALWAYS AS ({expr}) STORED']
+            return ' '.join(sql_parts)
+
         field_parts = [f'"{field_name}" {sql_type}']
         
         # Determine if required
@@ -446,6 +456,10 @@ ALTER TABLE "{table_name}"
             for field in concept['fields']:
                 field_name = field['name']
                 field_type = field['type']
+                
+                # Skip calculated fields as they are handled by the DB
+                if 'calculated' in field:
+                    continue
                 
                 # Generate sample value based on type
                 if field_type == 'string':

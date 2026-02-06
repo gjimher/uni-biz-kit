@@ -113,13 +113,6 @@
           "target": "category",
 
           "description": "Parent category"
-        },
-        {
-          "name": "products",
-          "type": "relation_to_many",
-          "target": "product",
-
-          "description": "Products in these categories"
         }
       ]
     },
@@ -182,6 +175,15 @@
       "description": "Customer orders containing products",
       "fields": [
         {
+          "name": "customer",
+          "type": "relation_to_one",
+          "subtype": "related_to",
+          "target": "customer",
+
+          "required": true,
+          "description": "Customer who placed the order"
+        },
+        {
           "name": "order_date",
           "type": "datetime",
           "required": true,
@@ -219,15 +221,6 @@
           "max_length": 200,
           "size": "m",
           "description": "Billing address for the order"
-        },
-        {
-          "name": "customer",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "customer",
-
-          "required": true,
-          "description": "Customer who placed the order"
         }
       ]
     },
@@ -239,6 +232,15 @@
         "fields": ["quantity", "product"]
       },
       "fields": [
+        {
+          "name": "product",
+          "type": "relation_to_one",
+          "subtype": "related_to",
+          "target": "product",
+
+          "required": false,
+          "description": "Product ordered"
+        },
         {
           "name": "quantity",
           "type": "integer",
@@ -262,6 +264,7 @@
           "precision": 10,
           "scale": 2,
           "min": 0,
+          "calculated": "quantity*unit_price",
           "description": "Total price for this order item"
         },
         {
@@ -270,15 +273,6 @@
           "subtype": "part_of",
           "target": "order"
 
-        },
-        {
-          "name": "product",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "product",
-
-          "required": false,
-          "description": "Product ordered"
         }
       ]
     }

@@ -1178,16 +1178,24 @@ export const {resource_name}_show = (props) => (
             if show_html: show_fields.append(show_html)
             
             if input_html and not is_excluded:
-                # Add to Create
-                create_grid_pos = update_grid(create_grid_pos, width_units, create_fields)
-                create_fields.append(f"        <Grid item {grid_props}>")
-                create_fields.append(input_html)
-                create_fields.append(f"        </Grid>")
+                is_calculated = 'calculated' in field
+                
+                # Add to Create (only if not calculated)
+                if not is_calculated:
+                    create_grid_pos = update_grid(create_grid_pos, width_units, create_fields)
+                    create_fields.append(f"        <Grid item {grid_props}>")
+                    create_fields.append(input_html)
+                    create_fields.append(f"        </Grid>")
                 
                 # Add to Edit
                 edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
                 edit_fields.append(f"        <Grid item {grid_props}>")
-                edit_fields.append(input_html)
+                if is_calculated:
+                    # Make read-only for Edit
+                    input_html_disabled = input_html.replace('source=', 'disabled source=')
+                    edit_fields.append(input_html_disabled)
+                else:
+                    edit_fields.append(input_html)
                 edit_fields.append(f"        </Grid>")
 
         # Add relationship fields
