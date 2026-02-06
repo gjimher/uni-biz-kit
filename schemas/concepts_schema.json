@@ -78,11 +78,20 @@
                 "type": {
                   "type": "string",
                   "description": "Field type",
-                  "enum": ["string", "integer", "decimal", "enum", "boolean", "date", "datetime"]
+                  "enum": ["string", "integer", "decimal", "enum", "boolean", "date", "datetime", "relation_to_one", "relation_to_many"]
+                },
+                "subtype": {
+                  "type": "string",
+                  "description": "Subtype for relation_to_one fields",
+                  "enum": ["part_of", "related_to"]
+                },
+                "target": {
+                  "type": "string",
+                  "description": "Target concept name for relations"
                 },
                 "required": {
                   "type": "boolean",
-                  "description": "Whether the field is required",
+                  "description": "Whether the field is required. Defaults to false, except for relation_to_one with subtype 'part_of' where it defaults to true.",
                   "default": false
                 },
                 "unique": {

@@ -105,24 +105,21 @@
           "min_length": 2,
           "max_length": 50,
           "description": "URL-friendly slug for the category"
-        }
-      ],
-      "relationships": [
-        {
-          "type": "belongs-to",
-          "target": "category",
-          "field_name": "parent",
-          "target_field_name": "children",
-          "ownership": true,
-          "required": false
         },
         {
-          "type": "many-to-many",
+          "name": "parent",
+          "type": "relation_to_one",
+          "subtype": "part_of",
+          "target": "category",
+
+          "description": "Parent category"
+        },
+        {
+          "name": "products",
+          "type": "relation_to_many",
           "target": "product",
-          "field_name": "products",
-          "target_field_name": "categories",
-          "ownership": false,
-          "required": false
+
+          "description": "Products in these categories"
         }
       ]
     },
@@ -222,16 +219,15 @@
           "max_length": 200,
           "size": "m",
           "description": "Billing address for the order"
-        }
-      ],
-      "relationships": [
+        },
         {
-          "type": "belongs-to",
+          "name": "customer",
+          "type": "relation_to_one",
+          "subtype": "related_to",
           "target": "customer",
-          "field_name": "customer",
-          "target_field_name": "orders",
-          "ownership": false,
-          "required": true
+
+          "required": true,
+          "description": "Customer who placed the order"
         }
       ]
     },
@@ -267,24 +263,22 @@
           "scale": 2,
           "min": 0,
           "description": "Total price for this order item"
-        }
-      ],
-      "relationships": [
-        {
-          "type": "belongs-to",
-          "target": "order",
-          "field_name": "order",
-          "target_field_name": "items",
-          "ownership": true,
-          "required": true
         },
         {
-          "type": "belongs-to",
+          "name": "order",
+          "type": "relation_to_one",
+          "subtype": "part_of",
+          "target": "order"
+
+        },
+        {
+          "name": "product",
+          "type": "relation_to_one",
+          "subtype": "related_to",
           "target": "product",
-          "field_name": "product",
-          "target_field_name": "order_items",
-          "ownership": false,
-          "required": true
+
+          "required": false,
+          "description": "Product ordered"
         }
       ]
     }

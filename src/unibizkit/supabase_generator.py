@@ -70,8 +70,9 @@ class SupabaseGenerator:
         
         # Add fields
         for field in concept['fields']:
-            field_sql = self._generate_field_sql(field)
-            sql_lines.append(f"  {field_sql},")
+            field_sql = self._generate_field_sql(field, concept)
+            if field_sql:
+                sql_lines.append(f"  {field_sql},")
         
         # Add id_presentation column if presentation_id is defined
         trigger_sql = ""
@@ -100,11 +101,16 @@ class SupabaseGenerator:
                             # Convert non-text fields to text
                             if field_type in ['integer', 'decimal', 'boolean', 'date', 'datetime']:
                                 field_refs.append(f'COALESCE("{field_name}"::TEXT, \'\')')
+                            elif field_type == 'relation_to_one':
+                                # Use the ID
+                                field_refs.append(f'COALESCE("{field_name}"::TEXT, \'\')')
+                            elif field_type == 'relation_to_many':
+                                # Skip
+                                pass
                             else:
                                 field_refs.append(f'COALESCE("{field_name}", \'\')')
                         else:
-                            # Handle relationship fields (e.g., "product" in order_item)
-                            # For now, we'll skip them as they require joins
+                            # Handle relationship fields
                             pass
                 
                     if field_refs:
@@ -150,18 +156,22 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
         
         return '\n'.join(sql_lines)
     
-    def _generate_field_sql(self, field: Dict[str, Any]) -> str:
+    def _generate_field_sql(self, field: Dict[str, Any], concept: Dict[str, Any]) -> str:
         """
         Generate SQL for a single field.
         
         Args:
             field: Field definition
+            concept: Concept definition (context)
             
         Returns:
-            SQL field definition
+            SQL field definition or empty string if field should be skipped
         """
         field_name = field['name']
         field_type = field['type']
+        
+        if field_type == 'relation_to_many':
+            return ""
         
         # Map field types to PostgreSQL types
         type_mapping = {
@@ -171,7 +181,8 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
             'boolean': 'BOOLEAN',
             'date': 'DATE',
             'datetime': 'TIMESTAMP WITH TIME ZONE',
-            'enum': 'TEXT'
+            'enum': 'TEXT',
+            'relation_to_one': 'INTEGER'
         }
         
         base_type = type_mapping.get(field_type, 'TEXT')
@@ -201,8 +212,22 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
         # Build field definition
         field_parts = [f'"{field_name}" {sql_type}']
         
+        # Determine if required
+        is_required = field.get('required')
+        if is_required is None:
+            # Apply defaults
+            if field_type == 'relation_to_one' and field.get('subtype') == 'part_of':
+                # If self-referencing (recursive), default to False (root must be null)
+                # Otherwise, strict ownership implies True
+                if field.get('target') == concept['name']:
+                    is_required = False
+                else:
+                    is_required = True
+            else:
+                is_required = False
+        
         # Add constraints
-        if field.get('required', False):
+        if is_required:
             field_parts.append("NOT NULL")
         
         if 'default' in field:
@@ -232,21 +257,31 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
         join_tables = []
         
         for concept in self.concepts:
-            if 'relationships' not in concept:
-                continue
-            
-            for relationship in concept['relationships']:
-                if relationship['type'] == 'many-to-many':
-                    target_concept = relationship['target']
+            # Handle new field-based relationships
+            for field in concept['fields']:
+                if field['type'] == 'relation_to_many':
+                    target_concept_name = field['target']
+                    target_concept = self.concept_map.get(target_concept_name)
                     
-                    # Create join table name (alphabetical order to avoid duplicates)
-                    table1 = concept['name']
-                    table2 = target_concept
-                    join_table_name = f"{min(table1, table2)}_{max(table1, table2)}"
+                    if not target_concept:
+                        continue
+                        
+                    # Check if target has a relation_to_one pointing back (which would make this 1:N)
+                    is_one_to_many = False
+                    for target_field in target_concept['fields']:
+                        if target_field['type'] == 'relation_to_one' and target_field['target'] == concept['name']:
+                             is_one_to_many = True
+                             break
                     
-                    # Only create the join table once
-                    if join_table_name not in [jt.split('(')[0].strip() for jt in join_tables]:
-                        sql = f"""
+                    if not is_one_to_many:
+                        # It's Many-to-Many
+                        table1 = concept['name']
+                        table2 = target_concept_name
+                        join_table_name = f"{min(table1, table2)}_{max(table1, table2)}"
+                        
+                        # Only create the join table once
+                        if join_table_name not in [jt.split('(')[0].strip() for jt in join_tables]:
+                            sql = f"""
 CREATE TABLE "{join_table_name}" (
   "{table1}_id" INTEGER NOT NULL,
   "{table2}_id" INTEGER NOT NULL,
@@ -256,7 +291,32 @@ CREATE TABLE "{join_table_name}" (
   FOREIGN KEY ("{table2}_id") REFERENCES "{table2}"("id") ON DELETE CASCADE
 );
 """
-                        join_tables.append(sql)
+                            join_tables.append(sql)
+
+            # Handle legacy relationships block (if any)
+            if 'relationships' in concept:
+                for relationship in concept['relationships']:
+                    if relationship['type'] == 'many-to-many':
+                        target_concept = relationship['target']
+                        
+                        # Create join table name (alphabetical order to avoid duplicates)
+                        table1 = concept['name']
+                        table2 = target_concept
+                        join_table_name = f"{min(table1, table2)}_{max(table1, table2)}"
+                        
+                        # Only create the join table once
+                        if join_table_name not in [jt.split('(')[0].strip() for jt in join_tables]:
+                            sql = f"""
+CREATE TABLE "{join_table_name}" (
+  "{table1}_id" INTEGER NOT NULL,
+  "{table2}_id" INTEGER NOT NULL,
+  "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY ("{table1}_id", "{table2}_id"),
+  FOREIGN KEY ("{table1}_id") REFERENCES "{table1}"("id") ON DELETE CASCADE,
+  FOREIGN KEY ("{table2}_id") REFERENCES "{table2}"("id") ON DELETE CASCADE
+);
+"""
+                            join_tables.append(sql)
         
         return join_tables
     
@@ -270,38 +330,52 @@ CREATE TABLE "{join_table_name}" (
         fk_constraints = []
         
         for concept in self.concepts:
-            if 'relationships' not in concept:
-                continue
-            
             table_name = concept['name']
             
-            for relationship in concept['relationships']:
-                if relationship['type'] in ['belongs-to', 'one-to-many']:
-                    target_concept = relationship['target']
-                    target_table = target_concept
+            # Handle new field-based relationships
+            for field in concept['fields']:
+                if field['type'] == 'relation_to_one':
+                    target_table = field['target']
+                    field_name = field['name'] # The column name is the field name
                     
-                    # Determine field name
-                    if 'field_name' in relationship:
-                        field_name = relationship['field_name']
-                    else:
-                        # Default field name based on target concept
-                        field_name = f"{target_table}_id"
-                    
-                    # Create foreign key constraint
                     constraint_name = f"fk_{table_name}_{field_name}"
                     
-                    # For belongs-to relationships, add the foreign key to the current table
-                    if relationship['type'] == 'belongs-to':
-                        not_null_clause = " NOT NULL" if relationship.get('required', False) else ""
-                        fk_sql = f"""
+                    # Add constraint only (column already created in table definition)
+                    fk_sql = f"""
+ALTER TABLE "{table_name}"
+  ADD CONSTRAINT "{constraint_name}"
+  FOREIGN KEY ("{field_name}") REFERENCES "{target_table}"("id");"""
+                    fk_constraints.append(fk_sql)
+
+            # Handle legacy relationships block
+            if 'relationships' in concept:
+                for relationship in concept['relationships']:
+                    if relationship['type'] in ['belongs-to', 'one-to-many']:
+                        target_concept = relationship['target']
+                        target_table = target_concept
+                        
+                        # Determine field name
+                        if 'field_name' in relationship:
+                            field_name = relationship['field_name']
+                        else:
+                            # Default field name based on target concept
+                            field_name = f"{target_table}_id"
+                        
+                        # Create foreign key constraint
+                        constraint_name = f"fk_{table_name}_{field_name}"
+                        
+                        # For belongs-to relationships, add the foreign key to the current table
+                        if relationship['type'] == 'belongs-to':
+                            not_null_clause = " NOT NULL" if relationship.get('required', False) else ""
+                            fk_sql = f"""
 ALTER TABLE "{table_name}"
   ADD COLUMN IF NOT EXISTS "{field_name}" INTEGER{not_null_clause},
   ADD CONSTRAINT "{constraint_name}"
   FOREIGN KEY ("{field_name}") REFERENCES "{target_table}"("id");"""
-                        fk_constraints.append(fk_sql)
-                    
-                    # For one-to-many relationships, we might need to add the foreign key to the target table
-                    # This is more complex and would require analyzing the inverse relationship
+                            fk_constraints.append(fk_sql)
+                        
+                        # For one-to-many relationships, we might need to add the foreign key to the target table
+                        # This is more complex and would require analyzing the inverse relationship
         
         return fk_constraints
     
@@ -399,6 +473,24 @@ ALTER TABLE "{table_name}"
                 elif field_type == 'datetime':
                     day = ((i - 1) % 28) + 1
                     value = f"'2023-01-{day:02d}T10:00:00Z'"
+                elif field_type == 'relation_to_one':
+                    target_concept_name = field['target']
+                    if target_concept_name == concept['name']:
+                         # For self-references, use NULL for now (simple hierarchy)
+                         value = 'NULL'
+                    else:
+                        # Check target concept data size to determine modulus
+                        target_concept = self.concept_map.get(target_concept_name)
+                        if target_concept:
+                            target_size = target_concept.get('data_size', 's')
+                            target_count = num_records_by_data_size(target_size)
+                            # Distribute FKs across available target IDs (1 to target_count)
+                            target_id = ((i - 1) % target_count) + 1
+                            value = str(target_id)
+                        else:
+                             value = 'NULL'
+                elif field_type == 'relation_to_many':
+                    continue
                 else:
                     value = f"'{field_name}_value_{i}'"
                 
@@ -485,7 +577,18 @@ ALTER TABLE "{table_name}"
                     
                     # Find relationship
                     rel = None
-                    if 'relationships' in concept:
+                    
+                    # Check fields for relation_to_one
+                    for f in concept['fields']:
+                        if f['type'] == 'relation_to_one' and f['name'] == rel_name:
+                            rel = {
+                                'type': 'belongs-to', 
+                                'field_name': f['name'],
+                                'target': f['target']
+                            }
+                            break
+                    
+                    if not rel and 'relationships' in concept:
                         for r in concept['relationships']:
                             if r['type'] == 'belongs-to':
                                 fk_col = r.get('field_name', f"{r['target']}_id")
