@@ -243,7 +243,7 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
         if field_type == 'enum' and 'enum_values' in field:
             allowed_values = ', '.join([f"'{value}'" for value in field['enum_values']])
             constraint_name = f"{field_name}_enum_check"
-            field_parts.append(f"CONSTRAINT {constraint_name} CHECK ({field_name} IN ({allowed_values}))")
+            field_parts.append(f"CONSTRAINT \"{constraint_name}\" CHECK (\"{field_name}\" IN ({allowed_values}))")
         
         return ' '.join(field_parts)
     

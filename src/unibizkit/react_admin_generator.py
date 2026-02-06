@@ -245,8 +245,8 @@ export const dataProvider = {{
          const {{ resource: joinResource, linkField, targetField }} = config[field];
          const {{ data }} = await supabaseClient
              .from(joinResource)
-             .select(targetField)
-             .eq(linkField, result.data.id);
+             .select(`"${{targetField}}"`)
+             .eq(`"${{linkField}}"`, result.data.id);
          
          if (data) {{
              result.data[field] = data.map(item => item[targetField]);
@@ -311,7 +311,7 @@ export const dataProvider = {{
             const newIds = m2mIds[field];
             
             // Delete existing links
-            await supabaseClient.from(joinResource).delete().eq(linkField, id);
+            await supabaseClient.from(joinResource).delete().eq(`"${{linkField}}"`, id);
             
             // Insert new links
             if (newIds && newIds.length > 0) {{
@@ -982,7 +982,7 @@ export const {resource_name}_show = (props) => (
                 # Create the tab content
                 tab_content = f"""
       <FormTab label="{child_plural}">
-        <ReferenceManyField reference="{child_name}" target="{fk_field_name}" label={{false}}>
+        <ReferenceManyField reference="{child_name}" target="&quot;{fk_field_name}&quot;" label={{false}}>
           <Box display="flex" justifyContent="flex-end" mb={{1}}>
             <{dialog_comp_name} />
           </Box>
@@ -1152,7 +1152,7 @@ export const {resource_name}_show = (props) => (
                      # Append to edit_fields manually.
                      
                      ref_many = f"""        <Grid item xs={{12}}>
-          <ReferenceManyField reference="{target_name}" target="{target_fk}" label="{field['name']}">
+          <ReferenceManyField reference="{target_name}" target="&quot;{target_fk}&quot;" label="{field['name']}">
             <Datagrid>
               <TextField source="id_presentation" />
               <EditButton />
@@ -1162,7 +1162,7 @@ export const {resource_name}_show = (props) => (
                      edit_grid_pos = update_grid(edit_grid_pos, 12, edit_fields)
                      edit_fields.append(ref_many)
                      
-                     show_html = f"""      <ReferenceManyField reference="{target_name}" target="{target_fk}" label="{field['name']}">
+                     show_html = f"""      <ReferenceManyField reference="{target_name}" target="&quot;{target_fk}&quot;" label="{field['name']}">
         <Datagrid>
           <TextField source="id_presentation" />
         </Datagrid>
