@@ -7,7 +7,7 @@
       "name": "product",
       "plural_name": "products",
       "description": "A product available for sale in the e-commerce platform",
-      "presentation_id": {
+      "id_presentation": {
         "fields": ["name"]
       },
       "fields": [
@@ -75,7 +75,7 @@
     {
       "name": "category",
       "plural_name": "categories",
-      "presentation_id": {
+      "id_presentation": {
         "fields": ["parent.id_presentation", "name"],
         "separator": "/",
         "show": true
@@ -121,7 +121,7 @@
       "plural_name": "customers",
       "description": "Customers who purchase products",
       "data_size": "m",
-      "presentation_id": {
+      "id_presentation": {
         "fields": ["first_name", "last_name"],
         "separator": ", "
       },
@@ -173,6 +173,9 @@
       "name": "order",
       "plural_name": "orders",
       "description": "Customer orders containing products",
+      "id_presentation": {
+        "fields": ["id"]
+      },
       "fields": [
         {
           "name": "customer",
@@ -228,8 +231,8 @@
       "name": "order_item",
       "plural_name": "order_items",
       "description": "Individual items within an order",
-      "presentation_id": {
-        "fields": ["quantity", "product"]
+      "id_presentation": {
+        "fields": ["id"]
       },
       "fields": [
         {

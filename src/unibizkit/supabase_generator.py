@@ -74,9 +74,9 @@ class SupabaseGenerator:
             if field_sql:
                 sql_lines.append(f"  {field_sql},")
         
-        # Add id_presentation column if presentation_id is defined
+        # Add id_presentation column if id_presentation is defined
         trigger_sql = ""
-        presentation_config = concept.get('presentation_id')
+        presentation_config = concept.get('id_presentation')
         if presentation_config and 'fields' in presentation_config:
             presentation_fields = presentation_config['fields']
             if presentation_fields:
@@ -91,6 +91,11 @@ class SupabaseGenerator:
                     # Simple case: use generated column
                     field_refs = []
                     for field_name in presentation_fields:
+                        # Handle ID field explicitly
+                        if field_name == 'id':
+                            field_refs.append(f'COALESCE("id"::TEXT, \'\')')
+                            continue
+
                         # Check if field exists in the concept
                         field_exists = any(field['name'] == field_name for field in concept['fields'])
                         if field_exists:
@@ -550,7 +555,7 @@ ALTER TABLE "{table_name}"
 
     def _generate_presentation_triggers(self) -> List[str]:
         """
-        Generate triggers for complex presentation_id_fields.
+        Generate triggers for complex id_presentation fields.
         
         Returns:
             List of SQL statements for triggers
@@ -558,7 +563,7 @@ ALTER TABLE "{table_name}"
         triggers = []
         
         for concept in self.concepts:
-            presentation_config = concept.get('presentation_id')
+            presentation_config = concept.get('id_presentation')
             if not presentation_config or 'fields' not in presentation_config:
                 continue
                 
@@ -625,11 +630,14 @@ ALTER TABLE "{table_name}"
                         parts.append("''")
                 else:
                     # Local field
-                    field_exists = any(f['name'] == field_name for f in concept['fields'])
-                    if field_exists:
-                        parts.append(f"COALESCE(NEW.\"{field_name}\"::TEXT, '')")
+                    if field_name == 'id':
+                        parts.append(f"COALESCE(NEW.\"id\"::TEXT, '')")
                     else:
-                        parts.append("''")
+                        field_exists = any(f['name'] == field_name for f in concept['fields'])
+                        if field_exists:
+                            parts.append(f"COALESCE(NEW.\"{field_name}\"::TEXT, '')")
+                        else:
+                            parts.append("''")
             
             separator = presentation_config.get('separator', ' ')
             # Escape single quotes in separator

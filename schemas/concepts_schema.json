@@ -41,7 +41,7 @@
             "enum": ["s", "m", "l"],
             "default": "s"
           },
-          "presentation_id": {
+          "id_presentation": {
             "type": "object",
             "properties": {
               "fields": {
@@ -163,7 +163,7 @@
             }
           }
         },
-        "required": ["name", "fields"],
+        "required": ["name", "fields", "id_presentation"],
         "additionalProperties": false
       }
     }

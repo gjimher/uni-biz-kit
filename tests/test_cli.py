@@ -37,6 +37,7 @@ class TestCLI:
             "concepts": [
                 {
                     "name": "test_concept",
+                    "id_presentation": {"fields": ["test_field"]},
                     "fields": [
                         {
                             "name": "test_field",
@@ -99,6 +100,7 @@ class TestCLI:
             "concepts": [
                 {
                     "name": "test_concept",
+                    "id_presentation": {"fields": ["test_field"]},
                     "fields": [
                         {
                             "name": "test_field",
@@ -148,6 +150,7 @@ class TestCLI:
             "concepts": [
                 {
                     "name": "test_concept",
+                    "id_presentation": {"fields": ["test_field"]},
                     "fields": [
                         {
                             "name": "test_field",
@@ -200,6 +203,7 @@ class TestCLI:
             "concepts": [
                 {
                     "name": "test_concept",
+                    "id_presentation": {"fields": ["test_field"]},
                     "fields": [
                         {
                             "name": "test_field",
