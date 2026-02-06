@@ -53,7 +53,7 @@ npm start
 
 ## 📁 Example: ECommerce Platform
 
-The repository includes a complete e-commerce example (`examples/ecommerce_schema.json`) that demonstrates:
+The repository includes a complete e-commerce example (`models/test-ecommerce-app`) that demonstrates:
 
 - **Products** with various field types (string, decimal, enum, boolean)
 - **Categories** with hierarchical relationships

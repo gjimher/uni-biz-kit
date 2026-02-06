@@ -996,12 +996,13 @@ export const {resource_name}_show = (props) => (
         for field in concept['fields']:
             field_name = field['name']
             field_type = field['type']
+            is_part_of = field_type == 'relation_to_one' and field.get('subtype') == 'part_of'
             
             # Determine if required
             is_required = field.get('required')
             if is_required is None:
                 # Apply defaults
-                if field_type == 'relation_to_one' and field.get('subtype') == 'part_of':
+                if is_part_of:
                     # If self-referencing (recursive), default to False
                     if field.get('target') == concept['name']:
                         is_required = False
@@ -1185,15 +1186,16 @@ export const {resource_name}_show = (props) => (
                     create_fields.append(f"        </Grid>")
                 
                 # Add to Edit
-                edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
-                edit_fields.append(f"        <Grid item {grid_props}>")
-                if is_calculated:
-                    # Make read-only for Edit
-                    input_html_disabled = input_html.replace('source=', 'disabled source=')
-                    edit_fields.append(input_html_disabled)
-                else:
-                    edit_fields.append(input_html)
-                edit_fields.append(f"        </Grid>")
+                if not is_part_of:
+                    edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
+                    edit_fields.append(f"        <Grid item {grid_props}>")
+                    if is_calculated:
+                        # Make read-only for Edit
+                        input_html_disabled = input_html.replace('source=', 'disabled source=')
+                        edit_fields.append(input_html_disabled)
+                    else:
+                        edit_fields.append(input_html)
+                    edit_fields.append(f"        </Grid>")
 
         # Add relationship fields
         if 'relationships' in concept:
