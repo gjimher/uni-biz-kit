@@ -447,10 +447,7 @@ const {create_comp_name} = () => {{
                 # Edit Component Name
                 edit_comp_name = f"EDIT_{child_name.upper()}_FOR_{resource_name.upper()}"
                 
-                child_id_field = f"""
-                <Grid item xs={{12}} sm={{3}}>
-                  <TextInput source="id_presentation" disabled fullWidth label="Id" size="small" margin="none" />
-                </Grid>"""
+                child_id_field = ""
 
                 child_dialog_components += f"""
 const {edit_comp_name} = () => {{
@@ -506,11 +503,8 @@ const {edit_comp_name} = () => {{
 
         # Prepare ID fields for main resource
         id_field_list = '<TextField source="id_presentation" label="Id" />'
-        id_field_show = '<TextField source="id" />'
-        id_field_edit = """
-          <Grid item xs={12} sm={3}>
-            <TextInput source="id_presentation" disabled fullWidth label="Id" size="small" margin="none" />
-          </Grid>"""
+        id_field_show = ""
+        id_field_edit = ""
 
         # Determine if we use SimpleForm or TabbedForm for Edit
         if owned_children or many_to_many_links:
@@ -897,10 +891,10 @@ export const {resource_name}_show = (props) => (
         # 12-column grid. Positions: 0, 3, 6, 9.
         create_grid_pos = 0
         
-        # Determine initial edit_grid_pos based on ID visibility
-        # ID is always shown, so it takes sm=3, we start at 3.
+        # Determine initial edit_grid_pos
+        # ID is no longer shown in edit forms, so we start at 0.
         presentation_config = concept.get('id_presentation')
-        edit_grid_pos = 3
+        edit_grid_pos = 0
         
         def update_grid(current_pos, width, fields_list):
             """
@@ -930,14 +924,14 @@ export const {resource_name}_show = (props) => (
             # Use id_presentation for "alwaysOn" search as it identifies the record
             filter_fields.append(f'  <TextInput label="Search" source="id_presentation@ilike" alwaysOn />')
         
-        # Add id_presentation if configured
+        # Add id_presentation if configured (only for List)
         if presentation_config and presentation_config.get('show', False):
             # list_fields: already added as first element in main file
-            show_fields.append('      <TextField source="id_presentation" label="Id" />')
+            pass
             
-        # Note: edit_fields for id_presentation is already handled in _generate_resource_main_file
-        # so we don't need to add it here, but we must ensure edit_grid_pos starts at 3.
-        edit_grid_pos = 3
+        # Note: id_presentation is no longer shown in edit forms, 
+        # so we ensure edit_grid_pos starts at 0.
+        edit_grid_pos = 0
         
         # Generate child tabs if any
         if owned_children:
