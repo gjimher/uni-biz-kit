@@ -970,6 +970,9 @@ export const {resource_name}_show = (props) => (
                         child_columns.append(f'<DateField source="{fname}" />')
                     elif ftype == 'enum':
                         child_columns.append(f'<TextField source="{fname}" />')
+                    elif ftype == 'relation_to_one':
+                        target_concept_name = field['target']
+                        child_columns.append(f'<ReferenceField source="{fname}" reference="{target_concept_name}"><TextField source="id_presentation" /></ReferenceField>')
                     count += 1
                 
                 # Name of the custom component we generated in _generate_resource_main_file
