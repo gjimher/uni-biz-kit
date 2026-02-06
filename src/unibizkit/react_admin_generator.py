@@ -355,9 +355,6 @@ export const dataProvider = {{
         """
         resource_name = concept['name']
         
-        # ID is always shown
-        show_id = True
-        
         # Check for owned children (ownership: true in child's belongs-to relationship)
         owned_children = self._find_owned_children(resource_name)
         
@@ -383,10 +380,7 @@ export const dataProvider = {{
                 child_concept = child_info['concept']
                 child_name = child_concept['name']
                 fk_field_name = child_info['field_name']
-                
-                # Child ID is always shown
-                show_child_id = True
-                
+                                
                 # Generate create/edit fields for the child, excluding the foreign key to parent
                 child_fields_res = self._generate_field_components(child_concept, exclude_fields=[fk_field_name])
                 child_create_fields = child_fields_res['create_fields']
@@ -433,11 +427,9 @@ const {create_comp_name} = () => {{
                 # Edit Component Name
                 edit_comp_name = f"EDIT_{child_name.upper()}_FOR_{resource_name.upper()}"
                 
-                child_id_field = ""
-                if show_child_id:
-                    child_id_field = f"""
-                <Grid item xs={{12}} sm={{6}}>
-                  <TextInput source="id" disabled fullWidth size="small" margin="none" />
+                child_id_field = f"""
+                <Grid item xs={{12}} sm={{3}}>
+                  <TextInput source="id_presentation" disabled fullWidth label="Id" size="small" margin="none" />
                 </Grid>"""
 
                 child_dialog_components += f"""
@@ -494,11 +486,11 @@ const {edit_comp_name} = () => {{
 
         # Prepare ID fields for main resource
         id_field_list = '<TextField source="id_presentation" label="Id" />'
-        id_field_show = '<TextField source="id" />' if show_id else ''
+        id_field_show = '<TextField source="id" />'
         id_field_edit = """
           <Grid item xs={12} sm={3}>
-            <TextInput source="id" disabled fullWidth size="small" margin="none" />
-          </Grid>""" if show_id else ""
+            <TextInput source="id_presentation" disabled fullWidth label="Id" size="small" margin="none" />
+          </Grid>"""
 
         # Determine if we use SimpleForm or TabbedForm for Edit
         if owned_children or many_to_many_links:
@@ -887,7 +879,6 @@ export const {resource_name}_show = (props) => (
         # Determine initial edit_grid_pos based on ID visibility
         # ID is always shown, so it takes sm=3, we start at 3.
         presentation_config = concept.get('id_presentation')
-        show_id = True
         edit_grid_pos = 3
         
         def update_grid(current_pos, width, fields_list):
@@ -923,12 +914,9 @@ export const {resource_name}_show = (props) => (
             # list_fields: already added as first element in main file
             show_fields.append('      <TextField source="id_presentation" label="Id" />')
             
-            # Add to edit fields (read-only), but not create fields (it's generated)
-            width_units = 3
-            edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
-            edit_fields.append(f'        <Grid item xs={{12}} sm={{{width_units}}}>')
-            edit_fields.append('          <TextInput source="id_presentation" disabled fullWidth label="Id" margin="none" size="small" />')
-            edit_fields.append('        </Grid>')
+        # Note: edit_fields for id_presentation is already handled in _generate_resource_main_file
+        # so we don't need to add it here, but we must ensure edit_grid_pos starts at 3.
+        edit_grid_pos = 3
         
         # Generate child tabs if any
         if owned_children:
