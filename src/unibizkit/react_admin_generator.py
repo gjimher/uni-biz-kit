@@ -1080,10 +1080,6 @@ export const {resource_name}_show = (props) => (
 
             elif field_type == 'relation_to_one':
                 target_concept_name = field['target']
-                # Relationships usually 'm' (2 columns) for better visibility
-                # Override width calculation
-                width_units = 6
-                grid_props = "xs={12} sm={6}"
                 
                 validation = ' validate={[required()]}' if is_required else ''
                 
@@ -1137,7 +1133,9 @@ export const {resource_name}_show = (props) => (
                      # We reuse the logic from _generate_resource_main_file child tabs if possible, 
                      # but here we just drop a simple ReferenceManyField
                      
-                     width_units = 12
+                     width_units = 3
+                     if field_size in ['m', 'l']:
+                         width_units = 6
                      # Manually add to edit_fields (bypassing the standard input_html adder which uses update_grid)
                      # But we must respect the grid flow.
                      
@@ -1151,7 +1149,7 @@ export const {resource_name}_show = (props) => (
                      # Let's use a trick: set input_html to empty.
                      # Append to edit_fields manually.
                      
-                     ref_many = f"""        <Grid item xs={{12}}>
+                     ref_many = f"""        <Grid item xs={{12}} sm={{{width_units}}}>
           <ReferenceManyField reference="{target_name}" target="&quot;{target_fk}&quot;" label="{field['name']}">
             <Datagrid>
               <TextField source="id_presentation" />
@@ -1159,7 +1157,7 @@ export const {resource_name}_show = (props) => (
             </Datagrid>
           </ReferenceManyField>
         </Grid>"""
-                     edit_grid_pos = update_grid(edit_grid_pos, 12, edit_fields)
+                     edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
                      edit_fields.append(ref_many)
                      
                      show_html = f"""      <ReferenceManyField reference="{target_name}" target="&quot;{target_fk}&quot;" label="{field['name']}">
@@ -1199,8 +1197,12 @@ export const {resource_name}_show = (props) => (
                     # Skip if relationship field is in exclude_fields
                     is_excluded = field_name in exclude_fields
                     
-                    # Relationships usually 'm' (2 columns) for better visibility
-                    grid_props = "xs={12} sm={6}"
+                    rel_size = relationship.get('size', 's')
+                    width_units = 3
+                    if rel_size in ['m', 'l']:
+                        width_units = 6
+                    
+                    grid_props = f"xs={{12}} sm={{{width_units}}}"
                     
                     # Check if required
                     is_required = relationship.get('required', False)
@@ -1253,15 +1255,18 @@ export const {resource_name}_show = (props) => (
             for link_info in many_to_many_links:
                 target_name = link_info['target_concept']['name']
                 field_name = link_info.get('field_name', f"{target_name}s")
+                rel = link_info.get('rel', {})
                 
-                # M:N is width 12
-                width_units = 12
-                # Note: No need to call update_grid for spacers with width 12, 
-                # but we should update the pos counter to keep it correct for any subsequent fields (if we added any)
+                rel_size = rel.get('size', 's')
+                width_units = 3
+                if rel_size in ['m', 'l']:
+                    width_units = 6
+                
+                # Update grid positions
                 create_grid_pos = update_grid(create_grid_pos, width_units, create_fields)
                 edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
                 
-                input_block = f"""        <Grid item xs={{12}} sm={{12}}>
+                input_block = f"""        <Grid item xs={{12}} sm={{{width_units}}}>
           <ReferenceArrayInput source="{field_name}" reference="{target_name}">
             <SelectArrayInput optionText="id_presentation" fullWidth margin="none" size="small" />
           </ReferenceArrayInput>
