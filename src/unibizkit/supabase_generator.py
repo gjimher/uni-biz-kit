@@ -469,11 +469,9 @@ ALTER TABLE "{table_name}"
                 # Generate sample value based on type
                 if field_type == 'string':
                     if field_name == 'email':
-                        value = f"'{field_name}{i}@example.com'"
-                    elif field_name == 'sku':
-                        value = f"'SKU-{i:03d}'"
+                        value = f"'{table_name}_{field_name}_{i}@example.com'"
                     else:
-                        value = f"'{field_name}_sample_{i}'"
+                        value = f"'{table_name}_{field_name}_{i}'"
                 elif field_type == 'integer':
                     value = str(i * 10)
                 elif field_type == 'decimal':
@@ -511,7 +509,7 @@ ALTER TABLE "{table_name}"
                 elif field_type == 'relation_to_many':
                     continue
                 else:
-                    value = f"'{field_name}_value_{i}'"
+                    value = f"'{table_name}_{field_name}_{i}'"
                 
                 field_names.append(field_name)
                 field_values.append(value)

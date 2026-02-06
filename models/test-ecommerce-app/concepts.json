@@ -69,6 +69,12 @@
           "required": false,
           "default": false,
           "description": "Whether the product is featured"
+        },
+        {
+          "name": "categories",
+          "type": "relation_to_many",
+          "target": "category",
+          "description": "Categories this product belongs to"
         }
       ]
     },

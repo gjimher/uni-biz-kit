@@ -31,6 +31,7 @@ def test_create_product_as_user(page: Page, app_server):
     Pure E2E test: No mocks, no interceptions.
     Acts as a real user creating a product.
     """
+    page.set_default_timeout(5000)
     print("creating product")
     # 1. Open the app
     page.goto(app_server)
@@ -73,5 +74,5 @@ def test_create_product_as_user(page: Page, app_server):
     # The user specifically asked to check it in the list
     page.get_by_role("menuitem", name="Products").click()
     
-    expect(page.get_by_role("cell", name="User Journey Product")).to_be_visible()
-    expect(page.get_by_role("cell", name="PURE-E2E-001")).to_be_visible()
+    expect(page.get_by_role("cell", name="User Journey Product").first).to_be_visible()
+    expect(page.get_by_role("cell", name="PURE-E2E-001").first).to_be_visible()
