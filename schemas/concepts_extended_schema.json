@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Extended Business Application Schema",
+  "description": "Internal schema with enriched metadata for generation (_prefixed fields), extending the base concepts schema.",
+  "allOf": [
+    { "$ref": "concepts_schema.json" }
+  ],
+  "properties": {
+    "concepts": {
+      "type": "array",
+      "items": {
+        "properties": {
+          "_type": {
+            "type": "string",
+            "description": "Calculated archetype of the concept",
+            "enum": ["root", "part_of", "recursive_part_of"]
+          },
+          "_be_presentation_mode": {
+            "type": "string",
+            "enum": ["generated_column", "trigger", "none"]
+          },
+          "_be_presentation_expr": { "type": "string" },
+          
+          "fields": {
+            "type": "array",
+            "items": {
+              "properties": {
+                "_be_sql_type": { "type": "string" },
+                "_be_not_null": { "type": "boolean" },
+                
+                "_fe_component": { "type": "string" },
+                "_fe_list_component": { "type": "string" },
+                "_fe_grid_width": { "type": "integer" },
+                "_fe_visibility": { 
+                    "type": "string",
+                    "enum": ["editable", "read_only", "hidden"]
+                }
+              },
+              "required": ["_be_sql_type", "_fe_component"]
+            }
+          }
+        },
+        "required": ["_type"]
+      }
+    }
+  }
+}

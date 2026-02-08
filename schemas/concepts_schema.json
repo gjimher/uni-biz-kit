@@ -61,6 +61,9 @@
               }
             }
           },
+          "patternProperties": {
+            "^_": {}
+          },
           "fields": {
             "type": "array",
             "items": {
@@ -158,12 +161,18 @@
                   "description": "Description of the field"
                 }
               },
+              "patternProperties": {
+                "^_": {}
+              },
               "required": ["name", "type"],
               "additionalProperties": false
             }
           }
         },
         "required": ["name", "fields", "id_presentation"],
+        "patternProperties": {
+            "^_": {}
+        },
         "additionalProperties": false
       }
     }

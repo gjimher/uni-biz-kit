@@ -4,6 +4,8 @@
 # Test ecommerce app (preserved between test runs)
 /test-ecommerce-app
 
+/tmp*/
+
 # Python
 __pycache__/
 *.py[cod]

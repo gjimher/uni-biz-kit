@@ -197,7 +197,7 @@ root.render(
         for concept in self.concepts:
             resource_name = concept['name']
             import_statements.append(f"import {{ {resource_name}_list, {resource_name}_create, {resource_name}_edit, {resource_name}_show }} from './resources/{resource_name}/{resource_name}.js';")
-            resource_components.append(f"    <Resource name=\"{resource_name}\" list={{ {resource_name}_list }} create={{ {resource_name}_create }} edit={{ {resource_name}_edit }} show={{ {resource_name}_show }} />")
+            resource_components.append(f"""    <Resource name="{resource_name}" list={{ {resource_name}_list }} create={{ {resource_name}_create }} edit={{ {resource_name}_edit }} show={{ {resource_name}_show }} />""")
         
         app_js_content = f"""import * as React from 'react';
 import {{ Admin, Resource }} from 'react-admin';
@@ -265,8 +265,7 @@ export const dataProvider = {{
          const {{ resource: joinResource, linkField, targetField }} = config[field];
          const {{ data }} = await supabaseClient
              .from(joinResource)
-             .select(`"${{targetField}}"`)
-             .eq(`"${{linkField}}"`, result.data.id);
+                              .select(`"${{targetField}}"`)             .eq(`"${{linkField}}"`, result.data.id);
          
          if (data) {{
              result.data[field] = data.map(item => item[targetField]);
@@ -330,12 +329,10 @@ export const dataProvider = {{
             const {{ resource: joinResource, linkField, targetField }} = config[field];
             const newIds = m2mIds[field];
             
-            // Delete existing links
-            await supabaseClient.from(joinResource).delete().eq(`"${{linkField}}"`, id);
-            
-            // Insert new links
-            if (newIds && newIds.length > 0) {{
-                const rows = newIds.map(targetId => ({{
+                            // Delete existing links
+                            await supabaseClient.from(joinResource).delete().eq(`"${{linkField}}"`, id);            
+                            // Insert new links
+                            if (newIds && newIds.length > 0) {{                const rows = newIds.map(targetId => ({{
                     [linkField]: id,
                     [targetField]: targetId
                 }}));
@@ -346,7 +343,8 @@ export const dataProvider = {{
      }}
      return result;
   }}
-}};"""
+}};
+"""
         
         with open(self.output_dir / "src" / "dataProvider.js", 'w', encoding='utf-8') as f:
             f.write(data_provider_content)
@@ -569,7 +567,8 @@ export const {resource_name}_show = (props) => (
       {field_components['show_fields']}
     </SimpleShowLayout>
   </Show>
-);"""
+);
+"""
         
         with open(resource_dir / f"{resource_name}.js", 'w', encoding='utf-8') as f:
             f.write(resource_content)
@@ -596,18 +595,7 @@ export const {resource_name}_show = (props) => (
                              'rel': field
                          })
 
-            # Check legacy relationships
-            if 'relationships' in concept:
-                for rel in concept['relationships']:
-                    if rel['type'] == 'belongs-to' and rel.get('ownership') is True:
-                         if rel['target'] == parent_concept_name:
-                             # Found a child
-                             field_name = rel.get('field_name', f"{parent_concept_name}_id")
-                             children.append({
-                                 'concept': concept,
-                                 'field_name': field_name,
-                                 'rel': rel
-                             })
+
         return children
 
     def _find_many_to_many_links(self, concept_name: str) -> List[Dict[str, Any]]:
@@ -654,25 +642,7 @@ export const {resource_name}_show = (props) => (
                             'rel': field
                         })
 
-        if 'relationships' in concept:
-            for rel in concept['relationships']:
-                if rel['type'] == 'many-to-many':
-                    target_name = rel['target']
-                    target_concept = self.concept_map.get(target_name)
-                    if target_concept:
-                        # Join table name logic from supabase_generator: alphabetical order
-                        table1 = concept_name
-                        table2 = target_name
-                        join_table = f"{min(table1, table2)}_{max(table1, table2)}"
-                        
-                        links.append({
-                            'target_concept': target_concept,
-                            'join_table': join_table,
-                            'my_fk': f"{concept_name}_id",
-                            'other_fk': f"{target_name}_id",
-                            'field_name': rel.get('field_name', f"{target_name}s"),
-                            'rel': rel
-                        })
+
                         
         # 2. Links where concept is the target
         for other_concept in self.concepts:
@@ -705,45 +675,22 @@ export const {resource_name}_show = (props) => (
                             'rel': field
                         })
                 
-            if 'relationships' in other_concept:
-                for rel in other_concept['relationships']:
-                    if rel['type'] == 'many-to-many' and rel['target'] == concept_name:
-                        # Join table name
-                        table1 = other_name
-                        table2 = concept_name
-                        join_table = f"{min(table1, table2)}_{max(table1, table2)}"
-                        
-                        links.append({
-                            'target_concept': other_concept,
-                            'join_table': join_table,
-                            'my_fk': f"{concept_name}_id",
-                            'other_fk': f"{other_name}_id",
-                            'field_name': other_concept.get('plural_name', f"{other_name}s"),
-                            'rel': rel
-                        })
+
         
         return links
 
     def _get_optimized_react_admin_imports(self, concept: Dict[str, Any], owned_children: List[Dict[str, Any]] = None, many_to_many_links: List[Dict[str, Any]] = None) -> str:
         """
         Generate optimized React-Admin imports based on actual field types used.
-        
-        Args:
-            concept: Concept definition
-            owned_children: List of owned child concepts
-            many_to_many_links: List of m:n links
-            
-        Returns:
-            String of optimized imports
         """
-        # Base components always needed
+        # Base components
         needed_components = {
             'List', 'Create', 'Edit', 'Show',
             'SimpleShowLayout', 'SimpleForm', 'Datagrid',
             'TextField', 'TextInput', 'required', 'useRecordContext'
         }
         
-        # Add TabbedForm components if needed
+        # Add components for children tabs
         if owned_children or many_to_many_links:
             needed_components.add('TabbedForm')
             needed_components.add('FormTab')
@@ -758,123 +705,56 @@ export const {resource_name}_show = (props) => (
             for child in owned_children:
                  # Add child field types
                  for field in child['concept']['fields']:
-                    ctype = self._map_field_type_to_component(field['type'])
-                    if 'Number' in ctype: needed_components.add('NumberField')
-                    if 'Date' in ctype: needed_components.add('DateField')
-                    if 'Boolean' in ctype: needed_components.add('BooleanField')
-                    
-                    # Add imports needed for child form fields (like SelectInput for enums)
-                    if field['type'] == 'enum': needed_components.add('SelectInput')
-                    if field['type'] in ['integer', 'decimal']: needed_components.add('NumberInput')
-                    if field['type'] == 'boolean': needed_components.add('BooleanInput')
-                    if field['type'] in ['date', 'datetime']: needed_components.add('DateInput')
+                    # Use enriched component type
+                    comp = field.get('_fe_component', 'TextInput')
+                    list_comp = field.get('_fe_list_component', 'TextField')
+                    needed_components.add(comp)
+                    needed_components.add(list_comp)
                  
-                 # Check child relationships for ReferenceInput
-                 if 'relationships' in child['concept']:
-                     for rel in child['concept']['relationships']:
-                         if rel['type'] == 'belongs-to':
-                             needed_components.add('ReferenceInput')
-                             needed_components.add('SelectInput')
-                             needed_components.add('ReferenceField') # if displayed in list
-        
+
+
         if many_to_many_links:
             needed_components.add('ReferenceInput')
             needed_components.add('SelectInput')
             needed_components.add('ReferenceField')
-            # For deleting links
             needed_components.add('DeleteButton')
-            # For m:n input
             needed_components.add('ReferenceArrayInput')
             needed_components.add('SelectArrayInput')
-            # For m:n display
             needed_components.add('ReferenceArrayField')
             needed_components.add('SingleFieldList')
             needed_components.add('ChipField')
 
         # Add components based on field types
         for field in concept['fields']:
-            field_type = field['type']
-            if field_type == 'date' or field_type == 'datetime':
-                needed_components.add('DateField')
-                needed_components.add('DateInput')
-            elif field_type == 'boolean':
-                needed_components.add('BooleanField')
-                needed_components.add('BooleanInput')
-            elif field_type == 'integer' or field_type == 'decimal':
-                needed_components.add('NumberField')
-                needed_components.add('NumberInput')
-            elif field_type == 'enum':
-                needed_components.add('SelectInput')
-            elif field_type == 'relation_to_one':
-                needed_components.add('ReferenceField')
+            needed_components.add(field.get('_fe_component', 'TextInput'))
+            needed_components.add(field.get('_fe_list_component', 'TextField'))
+            
+            # Special imports for references
+            if field['type'] == 'relation_to_one':
+                # Autocomplete vs Select was decided in enriched schema
                 needed_components.add('ReferenceInput')
-                
-                # Check target concept data size
-                target_concept_name = field['target']
-                target_concept = self.concept_map.get(target_concept_name)
-                target_data_size = target_concept.get('data_size', 's') if target_concept else 's'
-                
-                if target_data_size != 's':
-                    needed_components.add('AutocompleteInput')
-                else:
-                    needed_components.add('SelectInput')
-            elif field_type == 'relation_to_many':
+                needed_components.add('ReferenceField')
+                needed_components.add('SelectInput') # Fallback/always useful?
+                if field.get('_fe_component') == 'AutocompleteInput':
+                     needed_components.add('AutocompleteInput')
+            
+            elif field['type'] == 'relation_to_many':
                 # Check if it's M:N or 1:N
-                target_name = field['target']
-                target_concept = self.concept_map.get(target_name)
-                is_one_to_many = False
-                if target_concept:
-                    for target_field in target_concept['fields']:
-                        if target_field['type'] == 'relation_to_one' and target_field['target'] == concept['name']:
-                             is_one_to_many = True
-                             break
-                
-                if is_one_to_many:
-                     needed_components.add('ReferenceManyField')
-                     needed_components.add('Datagrid')
-                     needed_components.add('TextField') # generic
-                     needed_components.add('EditButton')
-                else:
-                     # M:N is handled by many_to_many_links logic, which adds imports below
-                     pass
+                # ... Simplified: if it's 1:N inverse, we need:
+                # needed_components.add('ReferenceManyField') # Already added by default mapping
+                needed_components.add('EditButton')
         
-        # Add id_presentation components if needed
+        # Add id_presentation components
         presentation_config = concept.get('id_presentation')
         if presentation_config and presentation_config.get('show', False):
             needed_components.add('TextField')
             needed_components.add('TextInput')
         
-        # Add relationship components if needed
-        if 'relationships' in concept:
-            for relationship in concept['relationships']:
-                if relationship['type'] == 'belongs-to':
-                    needed_components.add('ReferenceField')
-                    needed_components.add('ReferenceInput')
-                    
-                    # Check target concept data size
-                    target_concept_name = relationship['target']
-                    target_concept = self.concept_map.get(target_concept_name)
-                    target_data_size = target_concept.get('data_size', 's') if target_concept else 's'
-                    
-                    if target_data_size != 's':
-                        needed_components.add('AutocompleteInput')
-                    else:
-                        needed_components.add('SelectInput')
-        
         return ', '.join(sorted(needed_components))
     
     def _generate_field_components(self, concept: Dict[str, Any], owned_children: List[Dict[str, Any]] = None, exclude_fields: List[str] = None, many_to_many_links: List[Dict[str, Any]] = None) -> Dict[str, str]:
         """
-        Generate field components for a concept based on field types.
-        
-        Args:
-            concept: Concept definition
-            owned_children: List of owned child concepts (optional)
-            exclude_fields: List of field names to exclude from inputs (optional)
-            many_to_many_links: List of M:N links (optional)
-            
-        Returns:
-            Dictionary with field components for different views
+        Generate field components for a concept using enriched metadata.
         """
         imports = []
         list_fields = []
@@ -884,56 +764,27 @@ export const {resource_name}_show = (props) => (
         child_tabs = []
         filter_fields = []
         
-        # Ensure exclude_fields is a list
         exclude_fields = exclude_fields or []
         
         # Grid State Tracking
-        # 12-column grid. Positions: 0, 3, 6, 9.
         create_grid_pos = 0
-        
-        # Determine initial edit_grid_pos
-        # ID is no longer shown in edit forms, so we start at 0.
-        presentation_config = concept.get('id_presentation')
         edit_grid_pos = 0
         
         def update_grid(current_pos, width, fields_list):
-            """
-            Updates grid position and adds spacer if needed.
-            Returns new position.
-            """
-            # Logic: If field is width 6 ('m') and we are at pos 3 (Col 2), 
-            # we must skip to 6 (Col 3).
             if width == 6:
                 if current_pos % 12 == 3:
-                    # Insert spacer
                     fields_list.append('        <Grid item xs={12} sm={3} />')
                     current_pos += 3
-            
-            # Wrap logic is handled by MUI, but we track the 'virtual' cursor
-            # If current_pos + width > 12, it wraps to next line
             if (current_pos % 12) + width > 12:
-                # Effectively starts at 0 on next line
                 current_pos = 0
-                
             current_pos += width
             return current_pos
 
-        # Add a "global" search if data_size is not 's'
-        data_size = concept.get('data_size', 's')
-        if data_size != 's':
-            # Use id_presentation for "alwaysOn" search as it identifies the record
+        # Add global search if data_size != 's'
+        if concept.get('data_size', 's') != 's':
             filter_fields.append(f'  <TextInput label="Search" source="id_presentation@ilike" alwaysOn />')
         
-        # Add id_presentation if configured (only for List)
-        if presentation_config and presentation_config.get('show', False):
-            # list_fields: already added as first element in main file
-            pass
-            
-        # Note: id_presentation is no longer shown in edit forms, 
-        # so we ensure edit_grid_pos starts at 0.
-        edit_grid_pos = 0
-        
-        # Generate child tabs if any
+        # Generate child tabs
         if owned_children:
             for child_info in owned_children:
                 child_concept = child_info['concept']
@@ -942,44 +793,30 @@ export const {resource_name}_show = (props) => (
                 child_plural = child_concept.get('plural_name', f"{child_name}s")
                 parent_name = concept['name']
                 
-                # Generate columns for the child list
-                # Use presentation fields + id
                 child_columns = []
                 child_columns.append(f'<TextField source="id_presentation" label="Id" />')
                 
-                # Filter out the foreign key to parent (redundant in the list)
                 relevant_fields = [f for f in child_concept['fields'] if f['name'] != fk_field_name]
-                
-                # Use a subset of fields for the list (first 4-5)
                 count = 0
                 for field in relevant_fields:
                     if count > 4: break
                     fname = field['name']
-                    ftype = field['type']
+                    # Use enriched list component
+                    comp = field.get('_fe_list_component', 'TextField')
                     
-                    if ftype == 'string':
-                        child_columns.append(f'<TextField source="{fname}" />')
-                    elif ftype in ['integer', 'decimal']:
-                        child_columns.append(f'<NumberField source="{fname}" />')
-                    elif ftype == 'boolean':
-                        child_columns.append(f'<BooleanField source="{fname}" />')
-                    elif ftype in ['date', 'datetime']:
-                        child_columns.append(f'<DateField source="{fname}" />')
-                    elif ftype == 'enum':
-                        child_columns.append(f'<TextField source="{fname}" />')
-                    elif ftype == 'relation_to_one':
-                        target_concept_name = field['target']
-                        child_columns.append(f'<ReferenceField source="{fname}" reference="{target_concept_name}"><TextField source="id_presentation" /></ReferenceField>')
+                    if field['type'] == 'relation_to_one':
+                        target = field['target']
+                        child_columns.append(f'<ReferenceField source="{fname}" reference="{target}"><TextField source="id_presentation" /></ReferenceField>')
+                    else:
+                         child_columns.append(f'<{comp} source="{fname}" />')
                     count += 1
                 
-                # Name of the custom component we generated in _generate_resource_main_file
                 dialog_comp_name = f"CREATE_{child_name.upper()}_FOR_{parent_name.upper()}"
                 edit_dialog_comp_name = f"EDIT_{child_name.upper()}_FOR_{parent_name.upper()}"
                 
                 child_columns.append(f"<{edit_dialog_comp_name} />")
                 child_columns_str = '\n        '.join(child_columns)
                 
-                # Create the tab content
                 tab_content = f"""
       <FormTab label="{child_plural}">
         <ReferenceManyField reference="{child_name}" target="&quot;{fk_field_name}&quot;" label={{false}}>
@@ -993,121 +830,55 @@ export const {resource_name}_show = (props) => (
       </FormTab>"""
                 child_tabs.append(tab_content)
         
+        # Process Fields
         for field in concept['fields']:
             field_name = field['name']
-            field_type = field['type']
-            is_part_of = field_type == 'relation_to_one' and field.get('subtype') == 'part_of'
             
-            # Determine if required
-            is_required = field.get('required')
-            if is_required is None:
-                # Apply defaults
-                if is_part_of:
-                    # If self-referencing (recursive), default to False
-                    if field.get('target') == concept['name']:
-                        is_required = False
-                    else:
-                        is_required = True
-                else:
-                    is_required = False
+            # Enriched Metadata
+            comp_type = field.get('_fe_component', 'TextInput')
+            list_comp = field.get('_fe_list_component', 'TextField')
+            width_units = field.get('_fe_grid_width', 3)
+            visibility = field.get('_fe_visibility', 'editable')
+            is_required = field.get('_be_not_null', False)
+            
+            # Skip if excluded
+            if field_name in exclude_fields:
+                continue
 
-            field_size = field.get('size', 's')
-            
-            # Skip if field is in exclude_fields
-            is_excluded = field_name in exclude_fields
-            
-            # Determine width units
-            # s = 3, m = 6, l = 6
-            width_units = 3
-            if field_size in ['m', 'l']:
-                width_units = 6
-            
             grid_props = f"xs={{12}} sm={{{width_units}}}"
             
-            # Generate appropriate field component based on type
+            # Common props
+            validation = ' validate={[required()]}' if is_required else ''
+            full_width = ' fullWidth'
+            margin = ' margin="none" size="small"'
+            
+            # Construct Input Component (Create/Edit)
             input_html = ""
-            list_html = ""
-            show_html = ""
             
-            if field_type == 'string':
-                list_html = f"      <TextField source=\"{field_name}\" />"
-                validation = ' validate={[required()]}' if is_required else ''
-                is_multiline = ' multiline rows={4}' if field_size == 'l' else ''
-                input_props = f"{is_multiline} fullWidth{validation} margin=\"none\" size=\"small\""
-                input_html = f"          <TextInput source=\"{field_name}\"{input_props} />"
-                show_html = f"      <TextField source=\"{field_name}\" />"
-            
-            elif field_type == 'integer':
-                list_html = f"      <NumberField source=\"{field_name}\" />"
-                validation = ' validate={[required()]}' if is_required else ''
-                input_html = f"          <NumberInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />"
-                show_html = f"      <NumberField source=\"{field_name}\" />"
-            
-            elif field_type == 'decimal':
-                list_html = f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />"
-                validation = ' validate={[required()]}' if is_required else ''
-                input_html = f"          <NumberInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />"
-                show_html = f"      <NumberField source=\"{field_name}\" options={{{{ style: 'currency', currency: 'USD' }}}} />"
-            
-            elif field_type == 'boolean':
-                list_html = f"      <BooleanField source=\"{field_name}\" />"
-                validation = ' validate={[required()]}' if is_required else ''
-                input_html = f"          <BooleanInput source=\"{field_name}\"{validation} margin=\"none\" size=\"small\" />"
-                show_html = f"      <BooleanField source=\"{field_name}\" />"
-            
-            elif field_type == 'date':
-                list_html = f"      <DateField source=\"{field_name}\" />"
-                validation = ' validate={[required()]}' if is_required else ''
-                input_html = f"          <DateInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />"
-                show_html = f"      <DateField source=\"{field_name}\" />"
-            
-            elif field_type == 'datetime':
-                list_html = f"      <DateField source=\"{field_name}\" showTime />"
-                validation = ' validate={[required()]}' if is_required else ''
-                input_html = f"          <DateInput source=\"{field_name}\" fullWidth{validation} margin=\"none\" size=\"small\" />"
-                show_html = f"      <DateField source=\"{field_name}\" showTime />"
-            
-            elif field_type == 'enum':
-                enum_values = field.get('enum_values', [])
-                if enum_values:
-                    choices_str = ', '.join([f"{{ id: '{val}', name: '{val}' }}" for val in enum_values])
-                    list_html = f"      <TextField source=\"{field_name}\" />"
-                    validation = ' validate={[required()]}' if is_required else ''
-                    choices_array = f"[{choices_str}]"
-                    input_html = "          <SelectInput source=\"" + field_name + "\" choices={" + choices_array + "}" + " fullWidth" + validation + " margin=\"none\" size=\"small\" />"
-                    if data_size != 's':
-                        filter_fields.append(f"  <SelectInput source=\"{field_name}\" choices={{{choices_array}}} />")
-                    show_html = f"      <TextField source=\"{field_name}\" />"
-
-            elif field_type == 'relation_to_one':
-                target_concept_name = field['target']
+            # Relation handling
+            if field['type'] == 'relation_to_one':
+                target = field['target']
+                # Determine input based on data_size (handled by schema processor now!)
+                # processor set _fe_component correctly (e.g. AutocompleteInput)
+                # But we need to wrap it in ReferenceInput
                 
-                validation = ' validate={[required()]}' if is_required else ''
-                
-                # Determine input type based on target concept data size
-                target_concept = self.concept_map.get(target_concept_name)
-                target_data_size = target_concept.get('data_size', 's') if target_concept else 's'
-                
-                if target_data_size != 's':
-                    # Use AutocompleteInput for larger datasets
-                    input_component = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}} fullWidth{validation} margin="none" size="small" />'
-                    filter_component = f'<ReferenceInput source="{field_name}" reference="{target_concept_name}"><AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}} /></ReferenceInput>'
+                # Check specific input type from schema
+                input_inner = ""
+                if comp_type == 'AutocompleteInput':
+                     input_inner = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}}{full_width}{validation}{margin} />'
                 else:
-                    # Use SelectInput for small datasets
-                    input_component = f'<SelectInput optionText="id_presentation" fullWidth{validation} margin="none" size="small" />'
-                    filter_component = f'<ReferenceInput source="{field_name}" reference="{target_concept_name}"><SelectInput optionText="id_presentation" /></ReferenceInput>'
+                     input_inner = f'<SelectInput optionText="id_presentation"{full_width}{validation}{margin} />'
+                
+                input_html = f'          <ReferenceInput source="{field_name}" reference="{target}">{input_inner}</ReferenceInput>'
+                
+                # Filter field
+                if concept.get('data_size', 's') != 's':
+                     filter_inner = input_inner.replace(f'{{validation}}{{margin}}', '')
+                     filter_fields.append(f'  <ReferenceInput source="{field_name}" reference="{target}">{filter_inner}</ReferenceInput>')
 
-                # Always use id_presentation for display in relationship fields
-                list_html = f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept_name}\"><TextField source=\"id_presentation\" /></ReferenceField>"
-                
-                input_html = f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept_name}\">{input_component}</ReferenceInput>"
-                
-                if data_size != 's':
-                    filter_fields.append(f"  {filter_component}")
-                
-                show_html = f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept_name}\"><TextField source=\"id_presentation\" /></ReferenceField>"
-
-            elif field_type == 'relation_to_many':
+            elif field['type'] == 'relation_to_many':
+                # Similar logic as before for 1:N inverse vs M:N
+                # ... (Logic for 1:N Inverse ReferenceManyField) ...
                 target_name = field['target']
                 target_concept = self.concept_map.get(target_name)
                 is_one_to_many = False
@@ -1116,40 +887,84 @@ export const {resource_name}_show = (props) => (
                         if target_field['type'] == 'relation_to_one' and target_field['target'] == concept['name']:
                              is_one_to_many = True
                              break
-                
                 if is_one_to_many:
-                     # 1:N Inverse
-                     # Skip create/list for now (too complex for generic list)
-                     
-                     # Add to Edit/Show
-                     # We need the target field name (foreign key) on the OTHER side
-                     target_fk = f"{concept['name']}_id" # Default
-                     # Find exact FK name
-                     for target_field in target_concept['fields']:
+                     # 1:N Inverse - Add to Edit only?
+                     # We handle it by appending to edit_fields manually below
+                     pass
+                else:
+                    continue # M:N handled later
+
+            elif field['type'] == 'enum':
+                enum_values = field.get('enum_values', [])
+                choices_str = ', '.join([f"{{ id: '{val}', name: '{val}' }}" for val in enum_values])
+                choices_array = f"[{choices_str}]"
+                input_html = f'          <SelectInput source="{field_name}" choices={{{choices_array}}}{full_width}{validation}{margin} />'
+                if concept.get('data_size', 's') != 's':
+                    filter_fields.append(f'  <SelectInput source="{field_name}" choices={{{choices_array}}} />')
+
+            else:
+                # Standard types
+                extra_props = ""
+                if field.get('size') == 'l':
+                    extra_props = " multiline rows={4}"
+                if field['type'] == 'decimal':
+                     # formatting?
+                     pass
+                
+                input_html = f'          <{comp_type} source="{field_name}"{extra_props}{full_width}{validation}{margin} />'
+
+            # Construct List Component
+            list_html = ""
+            if field['type'] == 'relation_to_one':
+                target = field['target']
+                list_html = f'      <ReferenceField source="{field_name}" reference="{target}"><TextField source="id_presentation" /></ReferenceField>'
+            elif field['type'] == 'relation_to_many':
+                pass # Not in list
+            elif field['type'] == 'decimal':
+                 list_html = f"""      <NumberField source="{field_name}" options={{{{ style: 'currency', currency: 'USD' }}}} />"""
+            else:
+                list_html = f'      <{list_comp} source="{field_name}" />'
+
+            # Append to lists
+            if list_html: list_fields.append(list_html)
+            # Show uses same as list mostly
+            if list_html: show_fields.append(list_html)
+
+            # Add to Create/Edit
+            # Check visibility
+            if visibility != 'hidden':
+                if input_html:
+                    # CREATE
+                    if visibility == 'editable': # Read-only excluded from Create? Or shown disabled?
+                        # Usually calculated/read-only not shown in create
+                        create_grid_pos = update_grid(create_grid_pos, width_units, create_fields)
+                        create_fields.append(f"        <Grid item {grid_props}>")
+                        create_fields.append(input_html)
+                        create_fields.append(f"        </Grid>")
+                    
+                    # EDIT
+                    edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
+                    edit_fields.append(f"        <Grid item {grid_props}>")
+                    if visibility == 'read_only':
+                        input_html_disabled = input_html.replace('source=', 'disabled source=')
+                        edit_fields.append(input_html_disabled)
+                    else:
+                        edit_fields.append(input_html)
+                    edit_fields.append(f"        </Grid>")
+
+            # Handle 1:N Inverse explicitly if needed
+            if field['type'] == 'relation_to_many':
+                # ... same logic as before to append ReferenceManyField to Edit ...
+                target_name = field['target']
+                target_concept = self.concept_map.get(target_name)
+                is_one_to_many = False
+                if target_concept:
+                    for target_field in target_concept['fields']:
                         if target_field['type'] == 'relation_to_one' and target_field['target'] == concept['name']:
+                             is_one_to_many = True
                              target_fk = target_field['name']
                              break
-                     
-                     # Create a simple datagrid with id and presentation
-                     # We reuse the logic from _generate_resource_main_file child tabs if possible, 
-                     # but here we just drop a simple ReferenceManyField
-                     
-                     width_units = 3
-                     if field_size in ['m', 'l']:
-                         width_units = 6
-                     # Manually add to edit_fields (bypassing the standard input_html adder which uses update_grid)
-                     # But we must respect the grid flow.
-                     
-                     # Actually, to keep it simple, we treat it as a "large" input that takes full width
-                     # But input_html is for Create too. ReferenceManyField fails in Create.
-                     
-                     # We'll set input_html to empty, and manually append to edit_fields/show_fields?
-                     # The loop structure appends input_html to BOTH Create and Edit.
-                     # We want Edit ONLY.
-                     
-                     # Let's use a trick: set input_html to empty.
-                     # Append to edit_fields manually.
-                     
+                if is_one_to_many:
                      ref_many = f"""        <Grid item xs={{12}} sm={{{width_units}}}>
           <ReferenceManyField reference="{target_name}" target="&quot;{target_fk}&quot;" label="{field['name']}">
             <Datagrid>
@@ -1160,105 +975,8 @@ export const {resource_name}_show = (props) => (
         </Grid>"""
                      edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
                      edit_fields.append(ref_many)
-                     
-                     show_html = f"""      <ReferenceManyField reference="{target_name}" target="&quot;{target_fk}&quot;" label="{field['name']}">
-        <Datagrid>
-          <TextField source="id_presentation" />
-        </Datagrid>
-      </ReferenceManyField>"""
-                     
-                else:
-                     # M:N - Skip, handled by appended block
-                     continue
 
-            # Append to lists
-            if list_html: list_fields.append(list_html)
-            if show_html: show_fields.append(show_html)
-            
-            if input_html and not is_excluded:
-                is_calculated = 'calculated' in field
-                
-                # Add to Create (only if not calculated)
-                if not is_calculated:
-                    create_grid_pos = update_grid(create_grid_pos, width_units, create_fields)
-                    create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(input_html)
-                    create_fields.append(f"        </Grid>")
-                
-                # Add to Edit
-                if not is_part_of:
-                    edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
-                    edit_fields.append(f"        <Grid item {grid_props}>")
-                    if is_calculated:
-                        # Make read-only for Edit
-                        input_html_disabled = input_html.replace('source=', 'disabled source=')
-                        edit_fields.append(input_html_disabled)
-                    else:
-                        edit_fields.append(input_html)
-                    edit_fields.append(f"        </Grid>")
 
-        # Add relationship fields
-        if 'relationships' in concept:
-            for relationship in concept['relationships']:
-                if relationship['type'] == 'belongs-to':
-                    target_concept_name = relationship['target']
-                    field_name = relationship.get('field_name', f"{target_concept_name}_id")
-                    
-                    # Skip if relationship field is in exclude_fields
-                    is_excluded = field_name in exclude_fields
-                    
-                    rel_size = relationship.get('size', 's')
-                    width_units = 3
-                    if rel_size in ['m', 'l']:
-                        width_units = 6
-                    
-                    grid_props = f"xs={{12}} sm={{{width_units}}}"
-                    
-                    # Check if required
-                    is_required = relationship.get('required', False)
-                    validation = ' validate={[required()]}' if is_required else ''
-                    
-                    # Determine input type based on target concept data size
-                    target_concept = self.concept_map.get(target_concept_name)
-                    target_data_size = target_concept.get('data_size', 's') if target_concept else 's'
-                    
-                    if target_data_size != 's':
-                        # Use AutocompleteInput for larger datasets
-                        input_component = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}} fullWidth{validation} margin="none" size="small" />'
-                        filter_component = f'<ReferenceInput source="{field_name}" reference="{target_concept_name}"><AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}} /></ReferenceInput>'
-                    else:
-                        # Use SelectInput for small datasets
-                        input_component = f'<SelectInput optionText="id_presentation" fullWidth{validation} margin="none" size="small" />'
-                        filter_component = f'<ReferenceInput source="{field_name}" reference="{target_concept_name}"><SelectInput optionText="id_presentation" /></ReferenceInput>'
-
-                    # Always use id_presentation for display in relationship fields
-                    list_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept_name}\">")
-                    list_fields.append(f"        <TextField source=\"id_presentation\" />")
-                    list_fields.append(f"      </ReferenceField>")
-                    
-                    if not is_excluded:
-                        # Add to Create
-                        create_grid_pos = update_grid(create_grid_pos, width_units, create_fields)
-                        create_fields.append(f"        <Grid item {grid_props}>")
-                        create_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept_name}\">")
-                        create_fields.append(f"            {input_component}")
-                        create_fields.append(f"          </ReferenceInput>")
-                        create_fields.append(f"        </Grid>")
-                        
-                        # Add to Edit
-                        edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
-                        edit_fields.append(f"        <Grid item {grid_props}>")
-                        edit_fields.append(f"          <ReferenceInput source=\"{field_name}\" reference=\"{target_concept_name}\">")
-                        edit_fields.append(f"            {input_component}")
-                        edit_fields.append(f"          </ReferenceInput>")
-                        edit_fields.append(f"        </Grid>")
-
-                    if data_size != 's':
-                        filter_fields.append(f"  {filter_component}")
-                    
-                    show_fields.append(f"      <ReferenceField source=\"{field_name}\" reference=\"{target_concept_name}\">")
-                    show_fields.append(f"        <TextField source=\"id_presentation\" />")
-                    show_fields.append(f"      </ReferenceField>")
         
         # Add Many-to-Many inputs to Create/Edit
         if many_to_many_links:
@@ -1303,15 +1021,7 @@ export const {resource_name}_show = (props) => (
         }
     
     def _map_field_type_to_component(self, field_type: str) -> str:
-        """
-        Map field types to appropriate React-Admin components.
-        
-        Args:
-            field_type: Field type
-            
-        Returns:
-            React-Admin component name
-        """
+        # Kept for child component generation legacy fallback
         type_mapping = {
             'string': 'TextInput',
             'integer': 'NumberInput',
@@ -1321,5 +1031,4 @@ export const {resource_name}_show = (props) => (
             'datetime': 'DateInput',
             'enum': 'SelectInput'
         }
-        
         return type_mapping.get(field_type, 'TextInput')

@@ -62,11 +62,13 @@ class SupabaseGenerator:
         Returns:
             SQL CREATE TABLE statement
         """
-        table_name = concept['name']
+        # Use enriched table name if available, fallback to name
+        table_name = concept.get('name')
+        pk_name = "id"
         
         # Start with table creation
         sql_lines = [f'CREATE TABLE "{table_name}" (']
-        sql_lines.append('  "id" SERIAL PRIMARY KEY,')
+        sql_lines.append(f'  "{pk_name}" SERIAL PRIMARY KEY,')
         
         # Add fields
         for field in concept['fields']:
@@ -74,60 +76,14 @@ class SupabaseGenerator:
             if field_sql:
                 sql_lines.append(f"  {field_sql},")
         
-        # Add id_presentation column if id_presentation is defined
-        trigger_sql = ""
-        presentation_config = concept.get('id_presentation')
-        if presentation_config and 'fields' in presentation_config:
-            presentation_fields = presentation_config['fields']
-            if presentation_fields:
-                # Check if complex (recursive/relationships)
-                is_complex = False
-                for field_name in presentation_fields:
-                    if '.' in field_name:
-                        is_complex = True
-                        break
-                
-                if not is_complex:
-                    # Simple case: use generated column
-                    field_refs = []
-                    for field_name in presentation_fields:
-                        # Handle ID field explicitly
-                        if field_name == 'id':
-                            field_refs.append(f'COALESCE("id"::TEXT, \'\')')
-                            continue
-
-                        # Check if field exists in the concept
-                        field_exists = any(field['name'] == field_name for field in concept['fields'])
-                        if field_exists:
-                            # Find the field to get its type
-                            field = next(field for field in concept['fields'] if field['name'] == field_name)
-                            field_type = field['type']
-                            
-                            # Convert non-text fields to text
-                            if field_type in ['integer', 'decimal', 'boolean', 'date', 'datetime']:
-                                field_refs.append(f'COALESCE("{field_name}"::TEXT, \'\')')
-                            elif field_type == 'relation_to_one':
-                                # Use the ID
-                                field_refs.append(f'COALESCE("{field_name}"::TEXT, \'\')')
-                            elif field_type == 'relation_to_many':
-                                # Skip
-                                pass
-                            else:
-                                field_refs.append(f'COALESCE("{field_name}", \'\')')
-                        else:
-                            # Handle relationship fields
-                            pass
-                
-                    if field_refs:
-                        # Create the concatenated expression
-                        separator = presentation_config.get('separator', ' ')
-                        # Escape single quotes in separator
-                        separator = separator.replace("'", "''")
-                        concat_expr = f" || '{separator}' || ".join(field_refs)
-                        sql_lines.append(f'  "id_presentation" TEXT GENERATED ALWAYS AS ({concat_expr}) STORED,')
-                else:
-                    # Complex case: use trigger (generated later)
-                    sql_lines.append(f'  "id_presentation" TEXT,')
+        # Add id_presentation column based on enriched metadata
+        presentation_mode = concept.get('_be_presentation_mode', 'none')
+        
+        if presentation_mode == 'generated_column':
+            expr = concept.get('_be_presentation_expr', "''")
+            sql_lines.append(f'  "id_presentation" TEXT GENERATED ALWAYS AS ({expr}) STORED,')
+        elif presentation_mode == 'trigger':
+            sql_lines.append(f'  "id_presentation" TEXT,')
         
         # Add created_at and updated_at timestamps
         sql_lines.append('  "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,')
@@ -139,18 +95,19 @@ class SupabaseGenerator:
         # Add trigger to update updated_at timestamp on row updates
         trigger_name = f"{table_name}_update_updated_at"
         sql_lines.append(f"""
-CREATE OR REPLACE FUNCTION "update_{table_name}_updated_at"()
+CREATE OR REPLACE FUNCTION "update_{table_name}_updated_at"() 
 RETURNS TRIGGER AS $$BEGIN
     NEW."updated_at" = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER "{trigger_name}"
-BEFORE UPDATE ON "{table_name}"
+CREATE TRIGGER "{trigger_name}" 
+BEFORE UPDATE ON "{table_name}" 
 FOR EACH ROW
 EXECUTE FUNCTION "update_{table_name}_updated_at"();
-""")
+"""
+)
 
         # Add unique constraints
         unique_fields = [field for field in concept['fields'] if field.get('unique', False)]
@@ -163,7 +120,7 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
     
     def _generate_field_sql(self, field: Dict[str, Any], concept: Dict[str, Any]) -> str:
         """
-        Generate SQL for a single field.
+        Generate SQL for a single field using enriched metadata.
         
         Args:
             field: Field definition
@@ -173,78 +130,27 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
             SQL field definition or empty string if field should be skipped
         """
         field_name = field['name']
-        field_type = field['type']
         
-        if field_type == 'relation_to_many':
+        # Use enriched SQL type
+        sql_type = field.get('_be_sql_type')
+        
+        if not sql_type:
+            # Skip fields without SQL type (e.g., relation_to_many)
             return ""
         
-        # Map field types to PostgreSQL types
-        type_mapping = {
-            'string': 'TEXT',
-            'integer': 'INTEGER',
-            'decimal': 'DECIMAL',
-            'boolean': 'BOOLEAN',
-            'date': 'DATE',
-            'datetime': 'TIMESTAMP WITH TIME ZONE',
-            'enum': 'TEXT',
-            'relation_to_one': 'INTEGER'
-        }
-        
-        base_type = type_mapping.get(field_type, 'TEXT')
-        
-        # Handle text field sizes
-        if field_type == 'string':
-            field_size = field.get('size')
-            if field_size == 's':
-                sql_type = 'VARCHAR(255)'  # Small text fields
-            elif field_size == 'm':
-                sql_type = 'TEXT'  # Medium text fields (default)
-            elif field_size == 'l':
-                sql_type = 'TEXT'  # Large text fields (same as medium but can be handled differently in UI)
-            else:
-                sql_type = base_type
-        else:
-            sql_type = base_type
-        
-        # Handle special cases
-        if field_type == 'decimal':
-            precision = field.get('precision', 10)
-            scale = field.get('scale', 2)
-            sql_type = f"DECIMAL({precision}, {scale})"
-        elif field_type == 'enum':
-            sql_type = 'TEXT'  # We'll add CHECK constraint later
-        
-        # Build field definition
+        # Handle Calculated Fields
         if 'calculated' in field:
             expr = field['calculated']
-            # Simple heuristic: wrap field names in double quotes if they look like field names
-            # This is very basic, but for "quantity*unit_price" it should work if we are careful.
-            # However, the user provided "quantity*unit_price". 
-            # We should probably let the user provide the SQL expression or do some basic parsing.
-            # For now, let's assume the user knows what they are doing but we'll try to be helpful.
             sql_parts = [f'"{field_name}" {sql_type} GENERATED ALWAYS AS ({expr}) STORED']
             return ' '.join(sql_parts)
 
         field_parts = [f'"{field_name}" {sql_type}']
         
-        # Determine if required
-        is_required = field.get('required')
-        if is_required is None:
-            # Apply defaults
-            if field_type == 'relation_to_one' and field.get('subtype') == 'part_of':
-                # If self-referencing (recursive), default to False (root must be null)
-                # Otherwise, strict ownership implies True
-                if field.get('target') == concept['name']:
-                    is_required = False
-                else:
-                    is_required = True
-            else:
-                is_required = False
-        
-        # Add constraints
-        if is_required:
+        # Use enriched Not Null constraint
+        if field.get('_be_not_null', False):
             field_parts.append("NOT NULL")
         
+        # Defaults
         if 'default' in field:
             default_value = field['default']
             if isinstance(default_value, str):
@@ -255,10 +161,10 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
                 field_parts.append(f"DEFAULT {str(default_value).upper()}")
         
         # Add enum constraints
-        if field_type == 'enum' and 'enum_values' in field:
+        if field['type'] == 'enum' and 'enum_values' in field:
             allowed_values = ', '.join([f"'{value}'" for value in field['enum_values']])
             constraint_name = f"{field_name}_enum_check"
-            field_parts.append(f"CONSTRAINT \"{constraint_name}\" CHECK (\"{field_name}\" IN ({allowed_values}))")
+            field_parts.append(f"""CONSTRAINT "{constraint_name}" CHECK ("{field_name}" IN ({allowed_values}))""")
         
         return ' '.join(field_parts)
     
@@ -308,30 +214,7 @@ CREATE TABLE "{join_table_name}" (
 """
                             join_tables.append(sql)
 
-            # Handle legacy relationships block (if any)
-            if 'relationships' in concept:
-                for relationship in concept['relationships']:
-                    if relationship['type'] == 'many-to-many':
-                        target_concept = relationship['target']
-                        
-                        # Create join table name (alphabetical order to avoid duplicates)
-                        table1 = concept['name']
-                        table2 = target_concept
-                        join_table_name = f"{min(table1, table2)}_{max(table1, table2)}"
-                        
-                        # Only create the join table once
-                        if join_table_name not in [jt.split('(')[0].strip() for jt in join_tables]:
-                            sql = f"""
-CREATE TABLE "{join_table_name}" (
-  "{table1}_id" INTEGER NOT NULL,
-  "{table2}_id" INTEGER NOT NULL,
-  "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY ("{table1}_id", "{table2}_id"),
-  FOREIGN KEY ("{table1}_id") REFERENCES "{table1}"("id") ON DELETE CASCADE,
-  FOREIGN KEY ("{table2}_id") REFERENCES "{table2}"("id") ON DELETE CASCADE
-);
-"""
-                            join_tables.append(sql)
+
         
         return join_tables
     
@@ -362,35 +245,7 @@ ALTER TABLE "{table_name}"
   FOREIGN KEY ("{field_name}") REFERENCES "{target_table}"("id");"""
                     fk_constraints.append(fk_sql)
 
-            # Handle legacy relationships block
-            if 'relationships' in concept:
-                for relationship in concept['relationships']:
-                    if relationship['type'] in ['belongs-to', 'one-to-many']:
-                        target_concept = relationship['target']
-                        target_table = target_concept
-                        
-                        # Determine field name
-                        if 'field_name' in relationship:
-                            field_name = relationship['field_name']
-                        else:
-                            # Default field name based on target concept
-                            field_name = f"{target_table}_id"
-                        
-                        # Create foreign key constraint
-                        constraint_name = f"fk_{table_name}_{field_name}"
-                        
-                        # For belongs-to relationships, add the foreign key to the current table
-                        if relationship['type'] == 'belongs-to':
-                            not_null_clause = " NOT NULL" if relationship.get('required', False) else ""
-                            fk_sql = f"""
-ALTER TABLE "{table_name}"
-  ADD COLUMN IF NOT EXISTS "{field_name}" INTEGER{not_null_clause},
-  ADD CONSTRAINT "{constraint_name}"
-  FOREIGN KEY ("{field_name}") REFERENCES "{target_table}"("id");"""
-                            fk_constraints.append(fk_sql)
-                        
-                        # For one-to-many relationships, we might need to add the foreign key to the target table
-                        # This is more complex and would require analyzing the inverse relationship
+
         
         return fk_constraints
     
@@ -415,13 +270,7 @@ ALTER TABLE "{table_name}"
             if not concept:
                 return
                 
-            # Visit dependencies first
-            if 'relationships' in concept:
-                for relationship in concept['relationships']:
-                    if relationship['type'] == 'belongs-to':
-                        target_concept = relationship['target']
-                        if target_concept != concept_name:
-                            visit(target_concept)
+
             
             visited.add(concept_name)
             sorted_concepts.append(concept)
@@ -518,28 +367,7 @@ ALTER TABLE "{table_name}"
             field_names.extend(['created_at', 'updated_at'])
             field_values.extend([f"'2023-01-01T10:00:00Z'", f"'2023-01-01T10:00:00Z'"])
             
-            # Add foreign keys for belongs-to relationships
-            if 'relationships' in concept:
-                for relationship in concept['relationships']:
-                    if relationship['type'] == 'belongs-to':
-                        field_name = relationship.get('field_name', f"{relationship['target']}_id")
-                        field_names.append(field_name)
-                        
-                        target_concept_name = relationship['target']
-                        
-                        if target_concept_name == concept['name']:
-                             # For self-references, use NULL for now (simple hierarchy)
-                             field_values.append('NULL')
-                        else:
-                            # Check target concept data size to determine modulus
-                            target_concept = self.concept_map.get(target_concept_name)
-                            target_size = target_concept.get('data_size', 's')
-                            target_count = num_records_by_data_size(target_size)
-                            
-                            # Distribute FKs across available target IDs (1 to target_count)
-                            # (i-1) % target_count yields 0..target_count-1. Add 1 to get 1..target_count.
-                            target_id = ((i - 1) % target_count) + 1
-                            field_values.append(str(target_id))
+
 
             fields_str = ', '.join([f'"{field_name}"' for field_name in field_names])
             values_str = ', '.join(field_values)
@@ -605,14 +433,7 @@ ALTER TABLE "{table_name}"
                             }
                             break
                     
-                    if not rel and 'relationships' in concept:
-                        for r in concept['relationships']:
-                            if r['type'] == 'belongs-to':
-                                fk_col = r.get('field_name', f"{r['target']}_id")
-                                # Match by FK name or Target name
-                                if fk_col == rel_name or r['target'] == rel_name:
-                                    rel = r
-                                    break
+
                     
                     if rel:
                         fk_col = rel.get('field_name', f"{rel['target']}_id")
@@ -622,18 +443,19 @@ ALTER TABLE "{table_name}"
                         selects.append(f"""
     IF NEW."{fk_col}" IS NOT NULL THEN
         SELECT "{target_field}"::TEXT INTO {part_var} FROM "{target_table}" WHERE "id" = NEW."{fk_col}";
-    END IF;""")
+    END IF;"""
+)
                         parts.append(f"COALESCE({part_var}, '')")
                     else:
                         parts.append("''")
                 else:
                     # Local field
                     if field_name == 'id':
-                        parts.append(f"COALESCE(NEW.\"id\"::TEXT, '')")
+                        parts.append(f"""COALESCE(NEW."id"::TEXT, '')""")
                     else:
                         field_exists = any(f['name'] == field_name for f in concept['fields'])
                         if field_exists:
-                            parts.append(f"COALESCE(NEW.\"{field_name}\"::TEXT, '')")
+                            parts.append(f"""COALESCE(NEW."{field_name}"::TEXT, '')""")
                         else:
                             parts.append("''")
             
@@ -656,7 +478,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER "{table_name}_update_id_presentation"
-BEFORE INSERT OR UPDATE ON "{table_name}"
+BEFORE INSERT OR UPDATE ON "{table_name}" 
 FOR EACH ROW
 EXECUTE FUNCTION "update_{table_name}_id_presentation"();
 """

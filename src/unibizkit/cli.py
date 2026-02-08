@@ -8,8 +8,10 @@ import argparse
 import logging
 import sys
 import os
+import json
 from pathlib import Path
 from .schema_loader import SchemaLoader, SchemaValidationError
+from .schema_processor import SchemaProcessor
 from .supabase_generator import SupabaseGenerator
 from .react_admin_generator import ReactAdminGenerator
 
@@ -142,10 +144,21 @@ Examples:
         schema_loader = SchemaLoader(str(schema_path))
         business_schema = schema_loader.load_and_validate()
         
-        logger.info(f"Schema validated successfully: {business_schema['name']}")
+        # Enrich Schema (Intermediate Representation)
+        logger.info("Enriching schema with internal metadata...")
+        processor = SchemaProcessor(business_schema)
+        extended_schema = processor.process()
         
-        # Create output directory
+        # Save Extended Schema (for debugging/verification)
         output_dir.mkdir(exist_ok=True)
+        dump_path = output_dir / "concepts_extended.json"
+        with open(dump_path, 'w', encoding='utf-8') as f:
+            json.dump(extended_schema, f, indent=2)
+        logger.info(f"Extended schema saved to: {dump_path}")
+
+        # Pass the EXTENDED schema to generators
+        schema_loader.business_schema = extended_schema
+        schema_loader.concepts = extended_schema['concepts']
         
         # Generate Supabase schema
         if not args.skip_backend:
@@ -182,9 +195,7 @@ Examples:
     def _handle_validate_command(self, args):
         """Handle the validate command."""
         
-        # For validate, we don't strictly need output_dir, so we ignore the second return value
-        # But we reuse the logic to find the schema file
-        schema_path, _ = self._resolve_paths(args.input_path)
+        schema_path, output_dir = self._resolve_paths(args.input_path, args.output_dir)
         
         logger.info(f"Validating schema: {schema_path}")
         
@@ -196,14 +207,65 @@ Examples:
         business_schema = schema_loader.load_and_validate()
         
         logger.info(f"Schema is valid: {business_schema['name']}")
+        
+        # Enrich Schema to test processor
+        logger.info("Enriching schema to verify processor logic...")
+        processor = SchemaProcessor(business_schema)
+        extended_schema = processor.process()
+        
+        # Validate against Extended Schema Definition
+        try:
+            extended_schema_def_path = Path(__file__).parent.parent.parent / "schemas" / "concepts_extended_schema.json"
+            if extended_schema_def_path.exists():
+                import jsonschema
+                from jsonschema.validators import validator_for
+                from referencing import Registry, Resource
+                
+                # Load base schema for reference resolution
+                base_schema_path = extended_schema_def_path.parent / "concepts_schema.json"
+                with open(base_schema_path, 'r', encoding='utf-8') as f:
+                    base_schema = json.load(f)
+                
+                # Load extended schema definition
+                with open(extended_schema_def_path, 'r', encoding='utf-8') as f:
+                    extended_schema_def = json.load(f)
+                
+                # Create Registry with base schema
+                # referencing allows us to map the filename used in $ref to the schema content
+                base_resource = Resource.from_contents(base_schema)
+                registry = Registry().with_resource(uri="concepts_schema.json", resource=base_resource)
+                
+                # Validate
+                ValidatorClass = validator_for(extended_schema_def)
+                validator = ValidatorClass(extended_schema_def, registry=registry)
+                validator.validate(extended_schema)
+                
+                logger.info("Enriched schema validation successful (compliant with concepts_extended_schema.json)")
+            else:
+                logger.warning(f"Extended schema definition not found at {extended_schema_def_path}, skipping validation.")
+        except jsonschema.ValidationError as e:
+            logger.error(f"Enriched schema validation failed: {e.message}")
+            # We don't exit here to allow dumping for inspection
+        except Exception as e:
+            logger.error(f"Error during extended schema validation: {e}")
+
+        # Dump extended schema to Output Directory
+        # Ensure output directory exists (it might not if we are just validating)
+        output_dir.mkdir(exist_ok=True)
+        dump_path = output_dir / "concepts_extended.json"
+        
+        with open(dump_path, 'w', encoding='utf-8') as f:
+            json.dump(extended_schema, f, indent=2)
+            
+        logger.info(f"Extended schema dumped to: {dump_path}")
+        
         logger.info(f"Version: {business_schema['version']}")
         logger.info(f"Number of concepts: {len(business_schema['concepts'])}")
         
-        # List concepts
-        for concept in business_schema['concepts']:
-            logger.info(f"  - {concept['name']}: {len(concept['fields'])} fields")
-            if 'relationships' in concept:
-                logger.info(f"    Relationships: {len(concept['relationships'])}")
+        # List concepts with enriched type
+        for concept in extended_schema['concepts']:
+            c_type = concept.get('_type', 'unknown')
+            logger.info(f"  - {concept['name']} [{c_type}]: {len(concept['fields'])} fields")
 
 def main():
     """Main entry point."""
