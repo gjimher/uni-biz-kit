@@ -298,7 +298,7 @@ ALTER TABLE "{table_name}"
         """
         table_name = concept["name"]
         data_size = concept["data_size"]
-        num_records_by_data_size = lambda ds: 100 if ds == "m" else 3
+        num_records_by_data_size = lambda ds: 100 if ds == "m" else 10
         num_records = num_records_by_data_size(data_size)
         
         # Generate sample records
@@ -343,8 +343,44 @@ ALTER TABLE "{table_name}"
                 elif field_type == "relation_to_one":
                     target_concept_name = field["target"]
                     if target_concept_name == concept["name"]:
-                         # For self-references, use NULL for now (simple hierarchy)
-                         value = 'NULL'
+                        # Recursive relationship (e.g., category.parent)
+                        # Generic hierarchy: Level k has 2^(k+1) nodes.
+                        # Each parent has 2 children.
+                        if i <= 2:
+                            value = "NULL"
+                        else:
+                            # Find level k such that i is in range [start_k, end_k]
+                            # Level 0: 1-2
+                            # Level 1: 3-6
+                            # Level 2: 7-14
+                            # ...
+                            k = 1
+                            while True:
+                                level_start = 2 * (2**k - 1) + 1
+                                level_end = 2 * (2**(k+1) - 1)
+                                if level_start <= i <= level_end:
+                                    prev_level_start = 2 * (2**(k-1) - 1) + 1
+                                    parent_idx = (i - level_start) // 2 + prev_level_start
+                                    value = str(parent_idx)
+                                    break
+                                k += 1
+                                if k > 20: # Safety break
+                                    value = "NULL"
+                                    break
+                    elif field.get("subtype") == "part_of":
+                        # Triangular distribution: parent 1 gets 1, parent 2 gets 2, parent 3 gets 3...
+                        # Find p such that sum(1..p-1) < i <= sum(1..p)
+                        # sum(1..p) = p*(p+1)/2
+                        p = 1
+                        while (p * (p + 1)) // 2 < i:
+                            p += 1
+                        
+                        # Check target count to avoid exceeding available parents
+                        target_concept = self.concept_map.get(target_concept_name)
+                        target_count = num_records_by_data_size(target_concept["data_size"]) if target_concept else 10
+                        
+                        parent_id = ((p - 1) % target_count) + 1
+                        value = str(parent_id)
                     else:
                         # Check target concept data size to determine modulus
                         target_concept = self.concept_map.get(target_concept_name)

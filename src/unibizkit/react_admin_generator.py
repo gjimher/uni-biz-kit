@@ -1018,7 +1018,7 @@ export const {resource_name}_show = (props) => (
             'edit_fields': '\n'.join(edit_fields),
             'show_fields': '\n'.join(show_fields),
             'child_tabs': '\n'.join(child_tabs),
-            'filter_fields': '\n'.join(filter_fields)
+            'filter_fields': ',\n'.join(filter_fields)
         }
     
     def _map_field_type_to_component(self, field_type: str) -> str:
