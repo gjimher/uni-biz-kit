@@ -20,6 +20,8 @@
             "enum": ["generated_column", "trigger", "none"]
           },
           "_be_presentation_expr": { "type": "string" },
+          "_fe_owned_children": { "type": "array" },
+          "_meta_m2m_links": { "type": "array" },
           
           "fields": {
             "type": "array",
@@ -36,11 +38,24 @@
                     "enum": ["editable", "read_only", "hidden"]
                 }
               },
-              "required": ["_be_sql_type", "_fe_component"]
+              "required": [
+                "_be_sql_type", 
+                "_be_not_null", 
+                "_fe_component", 
+                "_fe_list_component", 
+                "_fe_grid_width", 
+                "_fe_visibility"
+              ]
             }
           }
         },
-        "required": ["_type"]
+        "required": [
+          "_type", 
+          "_be_presentation_mode", 
+          "_be_presentation_expr",
+          "_fe_owned_children",
+          "_meta_m2m_links"
+        ]
       }
     }
   }

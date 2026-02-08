@@ -6,12 +6,34 @@ Handles loading and validating business concept schemas against the JSON schema 
 
 import json
 import jsonschema
+from jsonschema import Draft7Validator, validators
 from pathlib import Path
 from typing import Dict, Any, List
 import logging
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+def extend_with_default(validator_class):
+    """
+    Extends a jsonschema validator to automatically fill in default values.
+    """
+    validate_properties = validator_class.VALIDATORS["properties"]
+
+    def set_defaults(validator, properties, instance, schema):
+        for property, subschema in properties.items():
+            if "default" in subschema:
+                instance.setdefault(property, subschema["default"])
+
+        for error in validate_properties(validator, properties, instance, schema):
+            yield error
+
+    return validators.extend(
+        validator_class, {"properties": set_defaults},
+    )
+
+# Create a validator that injects defaults
+DefaultValidatingDraft7Validator = extend_with_default(Draft7Validator)
 
 class SchemaValidationError(Exception):
     """Exception raised when schema validation fails."""
@@ -61,8 +83,11 @@ class SchemaLoader:
             with open(path, 'r', encoding='utf-8') as f:
                 business_schema = json.load(f)
             
-            # Validate against the schema
-            jsonschema.validate(instance=business_schema, schema=self.validation_schema)
+            # Apply special defaults before main validation/default injection
+            self._apply_special_defaults(business_schema)
+            
+            # Validate against the schema and inject defaults
+            DefaultValidatingDraft7Validator(self.validation_schema).validate(business_schema)
             
             logger.info(f"Successfully loaded and validated schema: {path}")
             self.business_schema = business_schema
@@ -81,6 +106,26 @@ class SchemaLoader:
             logger.error(error_msg)
             raise SchemaValidationError(error_msg)
     
+    def _apply_special_defaults(self, data: Dict[str, Any]):
+        """
+        Apply special conditional defaults that cannot be easily expressed 
+        in standard JSON schema.
+        """
+        if 'concepts' not in data:
+            return
+            
+        for concept in data["concepts"]:
+            if 'fields' not in concept:
+                continue
+                
+            for field in concept["fields"]:
+                # Rule: required defaults to true for relation_to_one with subtype 'part_of'
+                if "required" not in field:
+                    if field["type"] == "relation_to_one" and field["subtype"] == "part_of":
+                        # Self-reference usually implies nullable root in a hierarchy
+                        if field["target"] != concept["name"]:
+                            field["required"] = True
+    
     def get_concept_by_name(self, name: str) -> Dict[str, Any]:
         """
         Get a concept by its name.
@@ -97,8 +142,8 @@ class SchemaLoader:
         if not self.business_schema:
             raise ValueError("No business schema loaded")
         
-        for concept in self.business_schema['concepts']:
-            if concept['name'] == name:
+        for concept in self.business_schema["concepts"]:
+            if concept["name"] == name:
                 return concept
         
         raise KeyError(f"Concept '{name}' not found in schema")
@@ -116,4 +161,4 @@ class SchemaLoader:
         if not self.business_schema:
             raise ValueError("No business schema loaded")
         
-        return self.business_schema['concepts']
+        return self.business_schema["concepts"]

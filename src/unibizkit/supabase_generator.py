@@ -22,7 +22,7 @@ class SupabaseGenerator:
         """
         self.schema_loader = schema_loader
         self.concepts = schema_loader.get_all_concepts()
-        self.concept_map = {concept['name']: concept for concept in self.concepts}
+        self.concept_map = {concept["name"]: concept for concept in self.concepts}
     
     def generate_sql_schema(self) -> str:
         """
@@ -63,7 +63,7 @@ class SupabaseGenerator:
             SQL CREATE TABLE statement
         """
         # Use enriched table name if available, fallback to name
-        table_name = concept.get('name')
+        table_name = concept["name"]
         pk_name = "id"
         
         # Start with table creation
@@ -71,18 +71,18 @@ class SupabaseGenerator:
         sql_lines.append(f'  "{pk_name}" SERIAL PRIMARY KEY,')
         
         # Add fields
-        for field in concept['fields']:
+        for field in concept["fields"]:
             field_sql = self._generate_field_sql(field, concept)
             if field_sql:
                 sql_lines.append(f"  {field_sql},")
         
         # Add id_presentation column based on enriched metadata
-        presentation_mode = concept.get('_be_presentation_mode', 'none')
+        presentation_mode = concept["_be_presentation_mode"]
         
-        if presentation_mode == 'generated_column':
-            expr = concept.get('_be_presentation_expr', "''")
+        if presentation_mode == "generated_column":
+            expr = concept["_be_presentation_expr"]
             sql_lines.append(f'  "id_presentation" TEXT GENERATED ALWAYS AS ({expr}) STORED,')
-        elif presentation_mode == 'trigger':
+        elif presentation_mode == "trigger":
             sql_lines.append(f'  "id_presentation" TEXT,')
         
         # Add created_at and updated_at timestamps
@@ -110,15 +110,16 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
 )
 
         # Add unique constraints
-        unique_fields = [field for field in concept['fields'] if field.get('unique', False)]
+        unique_fields = [field for field in concept["fields"] if field["unique"]]
         for field in unique_fields:
-            field_name = field['name']
+            field_name = field["name"]
             constraint_name = f"{table_name}_{field_name}_unique"
             sql_lines.append(f'CREATE UNIQUE INDEX "{constraint_name}" ON "{table_name}" ("{field_name}");')
         
         return '\n'.join(sql_lines)
     
     def _generate_field_sql(self, field: Dict[str, Any], concept: Dict[str, Any]) -> str:
+
         """
         Generate SQL for a single field using enriched metadata.
         
@@ -129,10 +130,10 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
         Returns:
             SQL field definition or empty string if field should be skipped
         """
-        field_name = field['name']
+        field_name = field["name"]
         
         # Use enriched SQL type
-        sql_type = field.get('_be_sql_type')
+        sql_type = field["_be_sql_type"]
         
         if not sql_type:
             # Skip fields without SQL type (e.g., relation_to_many)
@@ -140,19 +141,19 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
         
         # Handle Calculated Fields
         if 'calculated' in field:
-            expr = field['calculated']
+            expr = field["calculated"]
             sql_parts = [f'"{field_name}" {sql_type} GENERATED ALWAYS AS ({expr}) STORED']
             return ' '.join(sql_parts)
 
         field_parts = [f'"{field_name}" {sql_type}']
         
         # Use enriched Not Null constraint
-        if field.get('_be_not_null', False):
+        if field["_be_not_null"]:
             field_parts.append("NOT NULL")
         
         # Defaults
         if 'default' in field:
-            default_value = field['default']
+            default_value = field["default"]
             if isinstance(default_value, str):
                 field_parts.append(f"DEFAULT '{default_value}'")
             elif isinstance(default_value, (int, float)):
@@ -161,8 +162,8 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
                 field_parts.append(f"DEFAULT {str(default_value).upper()}")
         
         # Add enum constraints
-        if field['type'] == 'enum' and 'enum_values' in field:
-            allowed_values = ', '.join([f"'{value}'" for value in field['enum_values']])
+        if field["type"] == "enum" and 'enum_values' in field:
+            allowed_values = ', '.join([f"'{value}'" for value in field["enum_values"]])
             constraint_name = f"{field_name}_enum_check"
             field_parts.append(f"""CONSTRAINT "{constraint_name}" CHECK ("{field_name}" IN ({allowed_values}))""")
         
@@ -179,9 +180,9 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
         
         for concept in self.concepts:
             # Handle new field-based relationships
-            for field in concept['fields']:
-                if field['type'] == 'relation_to_many':
-                    target_concept_name = field['target']
+            for field in concept["fields"]:
+                if field["type"] == "relation_to_many":
+                    target_concept_name = field["target"]
                     target_concept = self.concept_map.get(target_concept_name)
                     
                     if not target_concept:
@@ -189,14 +190,14 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
                         
                     # Check if target has a relation_to_one pointing back (which would make this 1:N)
                     is_one_to_many = False
-                    for target_field in target_concept['fields']:
-                        if target_field['type'] == 'relation_to_one' and target_field['target'] == concept['name']:
+                    for target_field in target_concept["fields"]:
+                        if target_field["type"] == "relation_to_one" and target_field["target"] == concept["name"]:
                              is_one_to_many = True
                              break
                     
                     if not is_one_to_many:
                         # It's Many-to-Many
-                        table1 = concept['name']
+                        table1 = concept["name"]
                         table2 = target_concept_name
                         join_table_name = f"{min(table1, table2)}_{max(table1, table2)}"
                         
@@ -228,13 +229,13 @@ CREATE TABLE "{join_table_name}" (
         fk_constraints = []
         
         for concept in self.concepts:
-            table_name = concept['name']
+            table_name = concept["name"]
             
             # Handle new field-based relationships
-            for field in concept['fields']:
-                if field['type'] == 'relation_to_one':
-                    target_table = field['target']
-                    field_name = field['name'] # The column name is the field name
+            for field in concept["fields"]:
+                if field["type"] == "relation_to_one":
+                    target_table = field["target"]
+                    field_name = field["name"] # The column name is the field name
                     
                     constraint_name = f"fk_{table_name}_{field_name}"
                     
@@ -276,7 +277,7 @@ ALTER TABLE "{table_name}"
             sorted_concepts.append(concept)
 
         for concept in self.concepts:
-            visit(concept['name'])
+            visit(concept["name"])
             
         for concept in sorted_concepts:
             sample_data = self._generate_sample_data_for_concept(concept)
@@ -295,9 +296,9 @@ ALTER TABLE "{table_name}"
         Returns:
             SQL INSERT statements
         """
-        table_name = concept['name']
-        data_size = concept.get('data_size', 's')
-        num_records_by_data_size = lambda ds: 100 if ds == 'm' else 3
+        table_name = concept["name"]
+        data_size = concept["data_size"]
+        num_records_by_data_size = lambda ds: 100 if ds == "m" else 3
         num_records = num_records_by_data_size(data_size)
         
         # Generate sample records
@@ -307,55 +308,55 @@ ALTER TABLE "{table_name}"
             field_values = []
             field_names = []
             
-            for field in concept['fields']:
-                field_name = field['name']
-                field_type = field['type']
+            for field in concept["fields"]:
+                field_name = field["name"]
+                field_type = field["type"]
                 
                 # Skip calculated fields as they are handled by the DB
                 if 'calculated' in field:
                     continue
                 
                 # Generate sample value based on type
-                if field_type == 'string':
-                    if field_name == 'email':
+                if field_type == "string":
+                    if field_name == "email":
                         value = f"'{table_name}_{field_name}_{i}@example.com'"
                     else:
                         value = f"'{table_name}_{field_name}_{i}'"
-                elif field_type == 'integer':
+                elif field_type == "integer":
                     value = str(i * 10)
-                elif field_type == 'decimal':
+                elif field_type == "decimal":
                     value = f"{i * 10}.{i:02d}"
-                elif field_type == 'boolean':
+                elif field_type == "boolean":
                     value = 'TRUE' if i % 2 == 0 else 'FALSE'
-                elif field_type == 'enum':
-                    enum_values = field.get('enum_values', ['value1', 'value2'])
+                elif field_type == "enum":
+                    enum_values = field["enum_values"]
                     # Cycle through enum values
                     val_idx = (i - 1) % len(enum_values)
                     value = f"'{enum_values[val_idx]}'"
-                elif field_type == 'date':
+                elif field_type == "date":
                     # Cycle through days 1-28
                     day = ((i - 1) % 28) + 1
                     value = f"'2023-01-{day:02d}'"
-                elif field_type == 'datetime':
+                elif field_type == "datetime":
                     day = ((i - 1) % 28) + 1
                     value = f"'2023-01-{day:02d}T10:00:00Z'"
-                elif field_type == 'relation_to_one':
-                    target_concept_name = field['target']
-                    if target_concept_name == concept['name']:
+                elif field_type == "relation_to_one":
+                    target_concept_name = field["target"]
+                    if target_concept_name == concept["name"]:
                          # For self-references, use NULL for now (simple hierarchy)
                          value = 'NULL'
                     else:
                         # Check target concept data size to determine modulus
                         target_concept = self.concept_map.get(target_concept_name)
                         if target_concept:
-                            target_size = target_concept.get('data_size', 's')
+                            target_size = target_concept["data_size"]
                             target_count = num_records_by_data_size(target_size)
                             # Distribute FKs across available target IDs (1 to target_count)
                             target_id = ((i - 1) % target_count) + 1
                             value = str(target_id)
                         else:
                              value = 'NULL'
-                elif field_type == 'relation_to_many':
+                elif field_type == "relation_to_many":
                     continue
                 else:
                     value = f"'{table_name}_{field_name}_{i}'"
@@ -389,11 +390,11 @@ ALTER TABLE "{table_name}"
         triggers = []
         
         for concept in self.concepts:
-            presentation_config = concept.get('id_presentation')
-            if not presentation_config or 'fields' not in presentation_config:
+            presentation_config = concept["id_presentation"]
+            if 'fields' not in presentation_config:
                 continue
                 
-            presentation_fields = presentation_config['fields']
+            presentation_fields = presentation_config["fields"]
             if not presentation_fields:
                 continue
                 
@@ -408,7 +409,7 @@ ALTER TABLE "{table_name}"
                 continue
                 
             # Generate Trigger
-            table_name = concept['name']
+            table_name = concept["name"]
             declarations = []
             selects = []
             parts = []
@@ -424,20 +425,20 @@ ALTER TABLE "{table_name}"
                     rel = None
                     
                     # Check fields for relation_to_one
-                    for f in concept['fields']:
-                        if f['type'] == 'relation_to_one' and f['name'] == rel_name:
+                    for f in concept["fields"]:
+                        if f["type"] == "relation_to_one" and f["name"] == rel_name:
                             rel = {
                                 'type': 'belongs-to', 
-                                'field_name': f['name'],
-                                'target': f['target']
+                                'field_name': f["name"],
+                                'target': f["target"]
                             }
                             break
                     
 
                     
                     if rel:
-                        fk_col = rel.get('field_name', f"{rel['target']}_id")
-                        target_table = rel['target']
+                        fk_col = rel.get("field_name", f"{rel["target"]}_id")
+                        target_table = rel["target"]
                         declarations.append(f"{part_var} TEXT;")
                         
                         selects.append(f"""
@@ -450,19 +451,20 @@ ALTER TABLE "{table_name}"
                         parts.append("''")
                 else:
                     # Local field
-                    if field_name == 'id':
+                    if field_name == "id":
                         parts.append(f"""COALESCE(NEW."id"::TEXT, '')""")
                     else:
-                        field_exists = any(f['name'] == field_name for f in concept['fields'])
+                        field_exists = any(f["name"] == field_name for f in concept["fields"])
                         if field_exists:
                             parts.append(f"""COALESCE(NEW."{field_name}"::TEXT, '')""")
                         else:
                             parts.append("''")
             
-            separator = presentation_config.get('separator', ' ')
+            separator = presentation_config["separator"]
             # Escape single quotes in separator
             separator = separator.replace("'", "''")
             concat_expr = f" || '{separator}' || ".join(parts)
+
             
             trigger_sql = f"""
 

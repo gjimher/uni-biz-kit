@@ -1,0 +1,106 @@
+
+import pytest
+import json
+import tempfile
+from pathlib import Path
+from unibizkit.schema_loader import SchemaLoader
+
+def test_defaults_population():
+    """
+    Test that default values from the JSON schema are correctly populated
+    into the loaded business schema.
+    """
+    schema_content = {
+        "version": "1.0.0",
+        "name": "Test App",
+        "concepts": [
+            {
+                "name": "product",
+                "fields": [
+                    {
+                        "name": "name",
+                        "type": "string"
+                    }
+                ],
+                "id_presentation": {
+                    "fields": ["name"]
+                }
+            }
+        ]
+    }
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(schema_content, f)
+        temp_path = f.name
+        
+    try:
+        loader = SchemaLoader()
+        loaded_schema = loader.load_and_validate(temp_path)
+        
+        # Check if data_size was populated (default is 's')
+        product_concept = loaded_schema['concepts'][0]
+        
+        assert 'data_size' in product_concept, "data_size should be populated with default 's'"
+        assert product_concept['data_size'] == 's'
+        
+        # Check nested id_presentation defaults
+        assert 'separator' in product_concept['id_presentation'], "separator should be populated with default ' '"
+        assert product_concept['id_presentation']['separator'] == ' '
+        
+        assert 'show' in product_concept['id_presentation'], "show should be populated with default False"
+        assert product_concept['id_presentation']['show'] is False
+        
+        # Check field defaults
+        field = product_concept['fields'][0]
+        assert 'required' in field, "required should be populated with default False"
+        assert field['required'] is False
+        assert 'unique' in field, "unique should be populated with default False"
+        assert field['unique'] is False
+
+    finally:
+        Path(temp_path).unlink()
+
+def test_special_required_default():
+    """
+    Test that 'required' defaults to True for relation_to_one with subtype 'part_of'.
+    """
+    schema_content = {
+        "version": "1.0.0",
+        "name": "Test App",
+        "concepts": [
+            {
+                "name": "order_item",
+                "fields": [
+                    {
+                        "name": "order",
+                        "type": "relation_to_one",
+                        "subtype": "part_of",
+                        "target": "order"
+                    }
+                ],
+                "id_presentation": {
+                    "fields": ["order"]
+                }
+            }
+        ]
+    }
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(schema_content, f)
+        temp_path = f.name
+        
+    try:
+        loader = SchemaLoader()
+        loaded_schema = loader.load_and_validate(temp_path)
+        
+        order_item = loaded_schema['concepts'][0]
+        field = order_item['fields'][0]
+        
+        assert field['name'] == 'order'
+        assert 'required' in field, "required should be populated"
+        assert field['required'] is True, "required should default to True for part_of relations"
+        
+    finally:
+        if Path(temp_path).exists():
+            Path(temp_path).unlink()
+

@@ -26,7 +26,7 @@ class ReactAdminGenerator:
         self.schema_loader = schema_loader
         self.concepts = schema_loader.get_all_concepts()
         self.output_dir = Path(output_dir)
-        self.concept_map = {concept['name']: concept for concept in self.concepts}
+        self.concept_map = {concept["name"]: concept for concept in self.concepts}
     
     def generate_frontend(self):
         """
@@ -195,7 +195,7 @@ root.render(
         resource_components = []
         
         for concept in self.concepts:
-            resource_name = concept['name']
+            resource_name = concept["name"]
             import_statements.append(f"import {{ {resource_name}_list, {resource_name}_create, {resource_name}_edit, {resource_name}_show }} from './resources/{resource_name}/{resource_name}.js';")
             resource_components.append(f"""    <Resource name="{resource_name}" list={{ {resource_name}_list }} create={{ {resource_name}_create }} edit={{ {resource_name}_edit }} show={{ {resource_name}_show }} />""")
         
@@ -221,16 +221,16 @@ export default App;"""
         # Build Many-to-Many configuration map
         m2m_config = {}
         for concept in self.concepts:
-            resource_name = concept['name']
+            resource_name = concept["name"]
             links = self._find_many_to_many_links(resource_name)
             if links:
                 m2m_config[resource_name] = {}
                 for link in links:
-                    field_name = link.get('field_name')
+                    field_name = link.get("field_name")
                     m2m_config[resource_name][field_name] = {
-                        'resource': link['join_table'],
-                        'linkField': link['my_fk'],
-                        'targetField': link['other_fk']
+                        'resource': link["join_table"],
+                        'linkField': link["my_fk"],
+                        'targetField': link["other_fk"]
                     }
         
         import json
@@ -356,7 +356,7 @@ export const dataProvider = {{
         Args:
             concept: Concept definition
         """
-        resource_name = concept['name']
+        resource_name = concept["name"]
         resource_dir = self.output_dir / "src" / "resources" / resource_name
         resource_dir.mkdir(exist_ok=True)
         
@@ -371,7 +371,7 @@ export const dataProvider = {{
             concept: Concept definition
             resource_dir: Directory where resource files will be created
         """
-        resource_name = concept['name']
+        resource_name = concept["name"]
         
         # Check for owned children (ownership: true in child's belongs-to relationship)
         owned_children = self._find_owned_children(resource_name)
@@ -395,14 +395,14 @@ export const dataProvider = {{
         child_dialog_components = ""
         if owned_children:
             for child_info in owned_children:
-                child_concept = child_info['concept']
-                child_name = child_concept['name']
-                fk_field_name = child_info['field_name']
+                child_concept = child_info["concept"]
+                child_name = child_concept["name"]
+                fk_field_name = child_info["field_name"]
                                 
                 # Generate create/edit fields for the child, excluding the foreign key to parent
                 child_fields_res = self._generate_field_components(child_concept, exclude_fields=[fk_field_name])
-                child_create_fields = child_fields_res['create_fields']
-                child_edit_fields = child_fields_res['edit_fields']
+                child_create_fields = child_fields_res["create_fields"]
+                child_edit_fields = child_fields_res["edit_fields"]
                 
                 # Create Component Name
                 create_comp_name = f"CREATE_{child_name.upper()}_FOR_{resource_name.upper()}"
@@ -510,17 +510,17 @@ const {edit_comp_name} = () => {{
     <TabbedForm>
       <FormTab label="Summary">
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
-          {field_components['edit_fields']}
+          {field_components["edit_fields"]}
         </Grid>
       </FormTab>
-      {field_components['child_tabs']}
+      {field_components["child_tabs"]}
     </TabbedForm>
   </Edit>"""
         else:
             edit_component = f"""<Edit title={{<Title name="{resource_name}" />}} {{...props}}>
     <SimpleForm>
       <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
-        {field_components['edit_fields']}
+        {field_components["edit_fields"]}
       </Grid>
     </SimpleForm>
   </Edit>"""
@@ -529,19 +529,19 @@ const {edit_comp_name} = () => {{
 import {{ {react_admin_imports} }} from 'react-admin';
 import {{ {mui_imports_str} }} from '@mui/material';
 import {{ Title }} from '../../components/title';
-{field_components['imports']}
+{field_components["imports"]}
 
 {child_dialog_components}
 
 const {resource_name}_filters = [
-{field_components['filter_fields']}
+{field_components["filter_fields"]}
 ];
 
 export const {resource_name}_list = (props) => (
   <List {{...props}} filters={{{resource_name}_filters}}>
     <Datagrid rowClick="edit">
       {id_field_list}
-      {field_components['list_fields']}
+      {field_components["list_fields"]}
     </Datagrid>
   </List>
 );
@@ -550,7 +550,7 @@ export const {resource_name}_create = (props) => (
   <Create {{...props}}>
     <SimpleForm>
       <Grid container rowSpacing={{0}} columnSpacing={{2}}>
-        {field_components['create_fields']}
+        {field_components["create_fields"]}
       </Grid>
     </SimpleForm>
   </Create>
@@ -564,7 +564,7 @@ export const {resource_name}_show = (props) => (
   <Show title={{<Title name="{resource_name}" />}} {{...props}}>
     <SimpleShowLayout>
       {id_field_show}
-      {field_components['show_fields']}
+      {field_components["show_fields"]}
     </SimpleShowLayout>
   </Show>
 );
@@ -586,12 +586,12 @@ export const {resource_name}_show = (props) => (
         children = []
         for concept in self.concepts:
             # Check fields for part_of relationship
-            for field in concept['fields']:
-                if field['type'] == 'relation_to_one' and field.get('subtype') == 'part_of':
-                     if field['target'] == parent_concept_name:
+            for field in concept["fields"]:
+                if field["type"] == "relation_to_one" and field["subtype"] == "part_of":
+                     if field["target"] == parent_concept_name:
                          children.append({
                              'concept': concept,
-                             'field_name': field['name'],
+                             'field_name': field["name"],
                              'rel': field
                          })
 
@@ -615,15 +615,15 @@ export const {resource_name}_show = (props) => (
             
         # 1. Links where concept is the source
         # Check fields
-        for field in concept['fields']:
-            if field['type'] == 'relation_to_many':
-                target_name = field['target']
+        for field in concept["fields"]:
+            if field["type"] == "relation_to_many":
+                target_name = field["target"]
                 target_concept = self.concept_map.get(target_name)
                 if target_concept:
                     # Check if it's M:N or 1:N inverse
                     is_one_to_many = False
-                    for target_field in target_concept['fields']:
-                        if target_field['type'] == 'relation_to_one' and target_field['target'] == concept_name:
+                    for target_field in target_concept["fields"]:
+                        if target_field["type"] == "relation_to_one" and target_field["target"] == concept_name:
                              is_one_to_many = True
                              break
                     
@@ -638,7 +638,7 @@ export const {resource_name}_show = (props) => (
                             'join_table': join_table,
                             'my_fk': f"{concept_name}_id",
                             'other_fk': f"{target_name}_id",
-                            'field_name': field['name'],
+                            'field_name': field["name"],
                             'rel': field
                         })
 
@@ -646,17 +646,17 @@ export const {resource_name}_show = (props) => (
                         
         # 2. Links where concept is the target
         for other_concept in self.concepts:
-            other_name = other_concept['name']
+            other_name = other_concept["name"]
             if other_name == concept_name:
                 continue
 
             # Check fields
-            for field in other_concept['fields']:
-                if field['type'] == 'relation_to_many' and field['target'] == concept_name:
+            for field in other_concept["fields"]:
+                if field["type"] == "relation_to_many" and field["target"] == concept_name:
                      # Check if I have relation_to_one pointing back
                      is_one_to_many = False
-                     for my_field in concept['fields']: 
-                         if my_field['type'] == 'relation_to_one' and my_field['target'] == other_concept['name']:
+                     for my_field in concept["fields"]: 
+                         if my_field["type"] == "relation_to_one" and my_field["target"] == other_concept["name"]:
                              is_one_to_many = True
                              break
                      
@@ -671,7 +671,7 @@ export const {resource_name}_show = (props) => (
                             'join_table': join_table,
                             'my_fk': f"{concept_name}_id",
                             'other_fk': f"{other_name}_id",
-                            'field_name': other_concept.get('plural_name', f"{other_name}s"),
+                            'field_name': other_concept["plural_name"],
                             'rel': field
                         })
                 
@@ -704,10 +704,10 @@ export const {resource_name}_show = (props) => (
         if owned_children:
             for child in owned_children:
                  # Add child field types
-                 for field in child['concept']['fields']:
+                 for field in child["concept"]["fields"]:
                     # Use enriched component type
-                    comp = field.get('_fe_component', 'TextInput')
-                    list_comp = field.get('_fe_list_component', 'TextField')
+                    comp = field["_fe_component"]
+                    list_comp = field["_fe_list_component"]
                     needed_components.add(comp)
                     needed_components.add(list_comp)
                  
@@ -725,28 +725,28 @@ export const {resource_name}_show = (props) => (
             needed_components.add('ChipField')
 
         # Add components based on field types
-        for field in concept['fields']:
-            needed_components.add(field.get('_fe_component', 'TextInput'))
-            needed_components.add(field.get('_fe_list_component', 'TextField'))
+        for field in concept["fields"]:
+            needed_components.add(field["_fe_component"])
+            needed_components.add(field["_fe_list_component"])
             
             # Special imports for references
-            if field['type'] == 'relation_to_one':
+            if field["type"] == "relation_to_one":
                 # Autocomplete vs Select was decided in enriched schema
                 needed_components.add('ReferenceInput')
                 needed_components.add('ReferenceField')
                 needed_components.add('SelectInput') # Fallback/always useful?
-                if field.get('_fe_component') == 'AutocompleteInput':
+                if field["_fe_component"] == "AutocompleteInput":
                      needed_components.add('AutocompleteInput')
             
-            elif field['type'] == 'relation_to_many':
+            elif field["type"] == "relation_to_many":
                 # Check if it's M:N or 1:N
                 # ... Simplified: if it's 1:N inverse, we need:
                 # needed_components.add('ReferenceManyField') # Already added by default mapping
                 needed_components.add('EditButton')
         
         # Add id_presentation components
-        presentation_config = concept.get('id_presentation')
-        if presentation_config and presentation_config.get('show', False):
+        presentation_config = concept["id_presentation"]
+        if presentation_config["show"]:
             needed_components.add('TextField')
             needed_components.add('TextInput')
         
@@ -780,32 +780,32 @@ export const {resource_name}_show = (props) => (
             current_pos += width
             return current_pos
 
-        # Add global search if data_size != 's'
-        if concept.get('data_size', 's') != 's':
+        # Add global search if data_size != "s"
+        if concept["data_size"] != "s":
             filter_fields.append(f'  <TextInput label="Search" source="id_presentation@ilike" alwaysOn />')
         
         # Generate child tabs
         if owned_children:
             for child_info in owned_children:
-                child_concept = child_info['concept']
-                fk_field_name = child_info['field_name']
-                child_name = child_concept['name']
-                child_plural = child_concept.get('plural_name', f"{child_name}s")
-                parent_name = concept['name']
+                child_concept = child_info["concept"]
+                fk_field_name = child_info["field_name"]
+                child_name = child_concept["name"]
+                child_plural = child_concept["plural_name"]
+                parent_name = concept["name"]
                 
                 child_columns = []
                 child_columns.append(f'<TextField source="id_presentation" label="Id" />')
                 
-                relevant_fields = [f for f in child_concept['fields'] if f['name'] != fk_field_name]
+                relevant_fields = [f for f in child_concept["fields"] if f["name"] != fk_field_name]
                 count = 0
                 for field in relevant_fields:
                     if count > 4: break
-                    fname = field['name']
+                    fname = field["name"]
                     # Use enriched list component
-                    comp = field.get('_fe_list_component', 'TextField')
+                    comp = field["_fe_list_component"]
                     
-                    if field['type'] == 'relation_to_one':
-                        target = field['target']
+                    if field["type"] == "relation_to_one":
+                        target = field["target"]
                         child_columns.append(f'<ReferenceField source="{fname}" reference="{target}"><TextField source="id_presentation" /></ReferenceField>')
                     else:
                          child_columns.append(f'<{comp} source="{fname}" />')
@@ -831,15 +831,15 @@ export const {resource_name}_show = (props) => (
                 child_tabs.append(tab_content)
         
         # Process Fields
-        for field in concept['fields']:
-            field_name = field['name']
+        for field in concept["fields"]:
+            field_name = field["name"]
             
             # Enriched Metadata
-            comp_type = field.get('_fe_component', 'TextInput')
-            list_comp = field.get('_fe_list_component', 'TextField')
-            width_units = field.get('_fe_grid_width', 3)
-            visibility = field.get('_fe_visibility', 'editable')
-            is_required = field.get('_be_not_null', False)
+            comp_type = field["_fe_component"]
+            list_comp = field["_fe_list_component"]
+            width_units = field["_fe_grid_width"]
+            visibility = field["_fe_visibility"]
+            is_required = field["_be_not_null"]
             
             # Skip if excluded
             if field_name in exclude_fields:
@@ -856,15 +856,15 @@ export const {resource_name}_show = (props) => (
             input_html = ""
             
             # Relation handling
-            if field['type'] == 'relation_to_one':
-                target = field['target']
+            if field["type"] == "relation_to_one":
+                target = field["target"]
                 # Determine input based on data_size (handled by schema processor now!)
                 # processor set _fe_component correctly (e.g. AutocompleteInput)
                 # But we need to wrap it in ReferenceInput
                 
                 # Check specific input type from schema
                 input_inner = ""
-                if comp_type == 'AutocompleteInput':
+                if comp_type == "AutocompleteInput":
                      input_inner = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}}{full_width}{validation}{margin} />'
                 else:
                      input_inner = f'<SelectInput optionText="id_presentation"{full_width}{validation}{margin} />'
@@ -872,19 +872,19 @@ export const {resource_name}_show = (props) => (
                 input_html = f'          <ReferenceInput source="{field_name}" reference="{target}">{input_inner}</ReferenceInput>'
                 
                 # Filter field
-                if concept.get('data_size', 's') != 's':
+                if concept["data_size"] != "s":
                      filter_inner = input_inner.replace(f'{{validation}}{{margin}}', '')
                      filter_fields.append(f'  <ReferenceInput source="{field_name}" reference="{target}">{filter_inner}</ReferenceInput>')
 
-            elif field['type'] == 'relation_to_many':
+            elif field["type"] == "relation_to_many":
                 # Similar logic as before for 1:N inverse vs M:N
                 # ... (Logic for 1:N Inverse ReferenceManyField) ...
-                target_name = field['target']
+                target_name = field["target"]
                 target_concept = self.concept_map.get(target_name)
                 is_one_to_many = False
                 if target_concept:
-                    for target_field in target_concept['fields']:
-                        if target_field['type'] == 'relation_to_one' and target_field['target'] == concept['name']:
+                    for target_field in target_concept["fields"]:
+                        if target_field["type"] == "relation_to_one" and target_field["target"] == concept["name"]:
                              is_one_to_many = True
                              break
                 if is_one_to_many:
@@ -894,20 +894,21 @@ export const {resource_name}_show = (props) => (
                 else:
                     continue # M:N handled later
 
-            elif field['type'] == 'enum':
-                enum_values = field.get('enum_values', [])
+            elif field["type"] == "enum":
+                enum_values = field["enum_values"]
                 choices_str = ', '.join([f"{{ id: '{val}', name: '{val}' }}" for val in enum_values])
                 choices_array = f"[{choices_str}]"
                 input_html = f'          <SelectInput source="{field_name}" choices={{{choices_array}}}{full_width}{validation}{margin} />'
-                if concept.get('data_size', 's') != 's':
+                if concept["data_size"] != "s":
                     filter_fields.append(f'  <SelectInput source="{field_name}" choices={{{choices_array}}} />')
+
 
             else:
                 # Standard types
                 extra_props = ""
-                if field.get('size') == 'l':
+                if field["size"] == "l":
                     extra_props = " multiline rows={4}"
-                if field['type'] == 'decimal':
+                if field["type"] == "decimal":
                      # formatting?
                      pass
                 
@@ -915,12 +916,12 @@ export const {resource_name}_show = (props) => (
 
             # Construct List Component
             list_html = ""
-            if field['type'] == 'relation_to_one':
-                target = field['target']
+            if field["type"] == "relation_to_one":
+                target = field["target"]
                 list_html = f'      <ReferenceField source="{field_name}" reference="{target}"><TextField source="id_presentation" /></ReferenceField>'
-            elif field['type'] == 'relation_to_many':
+            elif field["type"] == "relation_to_many":
                 pass # Not in list
-            elif field['type'] == 'decimal':
+            elif field["type"] == "decimal":
                  list_html = f"""      <NumberField source="{field_name}" options={{{{ style: 'currency', currency: 'USD' }}}} />"""
             else:
                 list_html = f'      <{list_comp} source="{field_name}" />'
@@ -932,10 +933,10 @@ export const {resource_name}_show = (props) => (
 
             # Add to Create/Edit
             # Check visibility
-            if visibility != 'hidden':
+            if visibility != "hidden":
                 if input_html:
                     # CREATE
-                    if visibility == 'editable': # Read-only excluded from Create? Or shown disabled?
+                    if visibility == "editable": # Read-only excluded from Create? Or shown disabled?
                         # Usually calculated/read-only not shown in create
                         create_grid_pos = update_grid(create_grid_pos, width_units, create_fields)
                         create_fields.append(f"        <Grid item {grid_props}>")
@@ -945,7 +946,7 @@ export const {resource_name}_show = (props) => (
                     # EDIT
                     edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
                     edit_fields.append(f"        <Grid item {grid_props}>")
-                    if visibility == 'read_only':
+                    if visibility == "read_only":
                         input_html_disabled = input_html.replace('source=', 'disabled source=')
                         edit_fields.append(input_html_disabled)
                     else:
@@ -953,20 +954,20 @@ export const {resource_name}_show = (props) => (
                     edit_fields.append(f"        </Grid>")
 
             # Handle 1:N Inverse explicitly if needed
-            if field['type'] == 'relation_to_many':
+            if field["type"] == "relation_to_many":
                 # ... same logic as before to append ReferenceManyField to Edit ...
-                target_name = field['target']
+                target_name = field["target"]
                 target_concept = self.concept_map.get(target_name)
                 is_one_to_many = False
                 if target_concept:
-                    for target_field in target_concept['fields']:
-                        if target_field['type'] == 'relation_to_one' and target_field['target'] == concept['name']:
+                    for target_field in target_concept["fields"]:
+                        if target_field["type"] == "relation_to_one" and target_field["target"] == concept["name"]:
                              is_one_to_many = True
-                             target_fk = target_field['name']
+                             target_fk = target_field["name"]
                              break
                 if is_one_to_many:
                      ref_many = f"""        <Grid item xs={{12}} sm={{{width_units}}}>
-          <ReferenceManyField reference="{target_name}" target="&quot;{target_fk}&quot;" label="{field['name']}">
+          <ReferenceManyField reference="{target_name}" target="&quot;{target_fk}&quot;" label="{field["name"]}">
             <Datagrid>
               <TextField source="id_presentation" />
               <EditButton />
@@ -981,11 +982,11 @@ export const {resource_name}_show = (props) => (
         # Add Many-to-Many inputs to Create/Edit
         if many_to_many_links:
             for link_info in many_to_many_links:
-                target_name = link_info['target_concept']['name']
-                field_name = link_info.get('field_name', f"{target_name}s")
-                rel = link_info.get('rel', {})
+                target_name = link_info["target_concept"]["name"]
+                field_name = link_info.get("field_name", f"{target_name}s")
+                rel = link_info.get("rel", {})
                 
-                rel_size = rel.get('size', 's')
+                rel_size = rel["size"]
                 width_units = 3
                 if rel_size in ['m', 'l']:
                     width_units = 6

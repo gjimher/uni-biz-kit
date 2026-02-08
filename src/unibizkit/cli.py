@@ -77,9 +77,9 @@ Examples:
         args = self.parser.parse_args()
         
         try:
-            if args.task == 'generate':
+            if args.task == "generate":
                 self._handle_generate_command(args)
-            elif args.task == 'validate':
+            elif args.task == "validate":
                 self._handle_validate_command(args)
             else:
                 logger.error(f"Unknown task: {args.task}")
@@ -158,7 +158,7 @@ Examples:
 
         # Pass the EXTENDED schema to generators
         schema_loader.business_schema = extended_schema
-        schema_loader.concepts = extended_schema['concepts']
+        schema_loader.concepts = extended_schema["concepts"]
         
         # Generate Supabase schema
         if not args.skip_backend:
@@ -206,7 +206,7 @@ Examples:
         schema_loader = SchemaLoader(str(schema_path))
         business_schema = schema_loader.load_and_validate()
         
-        logger.info(f"Schema is valid: {business_schema['name']}")
+        logger.info(f"Schema is valid: {business_schema["name"]}")
         
         # Enrich Schema to test processor
         logger.info("Enriching schema to verify processor logic...")
@@ -259,18 +259,18 @@ Examples:
             
         logger.info(f"Extended schema dumped to: {dump_path}")
         
-        logger.info(f"Version: {business_schema['version']}")
-        logger.info(f"Number of concepts: {len(business_schema['concepts'])}")
+        logger.info(f"Version: {business_schema["version"]}")
+        logger.info(f"Number of concepts: {len(business_schema["concepts"])}")
         
         # List concepts with enriched type
-        for concept in extended_schema['concepts']:
-            c_type = concept.get('_type', 'unknown')
-            logger.info(f"  - {concept['name']} [{c_type}]: {len(concept['fields'])} fields")
+        for concept in extended_schema["concepts"]:
+            c_type = concept["_type"]
+            logger.info(f"  - {concept["name"]} [{c_type}]: {len(concept["fields"])} fields")
 
 def main():
     """Main entry point."""
     cli = CLI()
     cli.run()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

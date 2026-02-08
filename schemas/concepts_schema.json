@@ -124,7 +124,8 @@
                 "size": {
                   "type": "string",
                   "description": "Size of text field (s, m, l) - only applicable to string fields",
-                  "enum": ["s", "m", "l"]
+                  "enum": ["s", "m", "l"],
+                  "default": "s"
                 },
                 "min": {
                   "type": "number",
@@ -149,8 +150,8 @@
                 "enum_values": {
                   "type": "array",
                   "description": "Allowed values for enum fields",
-                  "minItems": 1,
-                  "items": { "type": "string" }
+                  "items": { "type": "string" },
+                  "default": []
                 },
                 "calculated": {
                   "type": "string",
