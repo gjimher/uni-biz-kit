@@ -19,7 +19,7 @@ def app_server(xprocess, request):
         frontend_dir = os.path.abspath("test-ecommerce-app/frontend")
         args = ["npm", "start", "--prefix", frontend_dir]
         cwd = frontend_dir
-        timeout = 120
+        timeout = 15
         print("starting web server in port 3005: npm start")
 
     xprocess.ensure("app_server_pure", Starter)
@@ -43,7 +43,7 @@ def test_create_product_as_user(page: Page, app_server):
     page.get_by_label("Create").click()
     
     # 4. Fill Product Details
-    page.get_by_label("Name").fill("User Journey Product")
+    page.get_by_label("Name").fill("_User Journey Product")
     page.get_by_label("Price").fill("49.99")
     page.get_by_label("Stock quantity").fill("100")
     page.get_by_label("Sku").fill("PURE-E2E-001")
@@ -74,5 +74,10 @@ def test_create_product_as_user(page: Page, app_server):
     # The user specifically asked to check it in the list
     page.get_by_role("menuitem", name="Products").click()
     
-    expect(page.get_by_role("cell", name="User Journey Product").first).to_be_visible()
+    # Sort by Name to ensure it's on the first page
+    page.get_by_role("button", name="Name").click()
+    # Wait for sort to apply
+    page.wait_for_timeout(500)
+
+    expect(page.get_by_role("cell", name="_User Journey Product").first).to_be_visible()
     expect(page.get_by_role("cell", name="PURE-E2E-001").first).to_be_visible()

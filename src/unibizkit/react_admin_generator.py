@@ -265,7 +265,8 @@ export const dataProvider = {{
          const {{ resource: joinResource, linkField, targetField }} = config[field];
          const {{ data }} = await supabaseClient
              .from(joinResource)
-                              .select(`"${{targetField}}"`)             .eq(`"${{linkField}}"`, result.data.id);
+             .select(`"${{targetField}}"`)
+             .eq(`"${{linkField}}"`, result.data.id);
          
          if (data) {{
              result.data[field] = data.map(item => item[targetField]);

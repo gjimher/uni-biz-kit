@@ -17,11 +17,5 @@ def pytest_collection_modifyitems(config, items):
         else:
             other_tests.append(item)
     
-    # If we are in slow mode and have e2e tests, skip frontend tests
-    if config.getoption("--slow") and e2e_tests:
-        skip_frontend = pytest.mark.skip(reason="Skipping frontend tests because e2e tests are running in slow mode")
-        for item in other_tests:
-            if "test_ecommerce_frontend.py" in str(item.fspath):
-                item.add_marker(skip_frontend)
-            
+    # Move tests starting with test_e2e to the end.
     items[:] = other_tests + e2e_tests
