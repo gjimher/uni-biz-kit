@@ -89,6 +89,14 @@
       },
       "fields": [
         {
+          "name": "parent",
+          "type": "relation_to_one",
+          "subtype": "part_of",
+          "target": "category",
+
+          "description": "Parent category"
+        },
+        {
           "name": "name",
           "type": "string",
           "required": true,
@@ -112,14 +120,6 @@
           "min_length": 2,
           "max_length": 50,
           "description": "URL-friendly slug for the category"
-        },
-        {
-          "name": "parent",
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "category",
-
-          "description": "Parent category"
         }
       ]
     },
@@ -243,6 +243,13 @@
       },
       "fields": [
         {
+          "name": "order",
+          "type": "relation_to_one",
+          "subtype": "part_of",
+          "target": "order"
+
+        },
+        {
           "name": "product",
           "type": "relation_to_one",
           "subtype": "related_to",
@@ -276,13 +283,6 @@
           "min": 0,
           "calculated": "quantity*unit_price",
           "description": "Total price for this order item"
-        },
-        {
-          "name": "order",
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "order"
-
         }
       ]
     }

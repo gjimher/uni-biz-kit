@@ -392,113 +392,15 @@ export const dataProvider = {{
             mui_imports.extend(["Box", "Button", "Dialog", "DialogTitle", "DialogContent", "DialogActions"])
         mui_imports_str = ", ".join(mui_imports)
         
-        # Generate Dialog Components for Children
-        child_dialog_components = ""
+        # Generate Dialog Components for Children RECURSIVELY
+        child_dialog_components_list = []
+        visited_dialogs = set()
         if owned_children:
             for child_info in owned_children:
-                child_concept = child_info["concept"]
-                child_name = child_concept["name"]
-                fk_field_name = child_info["field_name"]
-                                
-                # Generate create/edit fields for the child, excluding the foreign key to parent
-                child_fields_res = self._generate_field_components(child_concept, exclude_fields=[fk_field_name])
-                child_create_fields = child_fields_res["create_fields"]
-                child_edit_fields = child_fields_res["edit_fields"]
-                
-                # Create Component Name
-                create_comp_name = f"CREATE_{child_name.upper()}_FOR_{resource_name.upper()}"
-                
-                child_dialog_components += f"""
-const {create_comp_name} = () => {{
-  const {{ id }} = useRecordContext();
-  const [open, setOpen] = React.useState(false);
-  const notify = useNotify();
-  const refresh = useRefresh();
-  
-  const handleClick = () => setOpen(true);
-  const handleClose = () => setOpen(false);
-  
-  const onSuccess = () => {{
-    notify('{child_name} created', {{ type: 'info', messageArgs: {{ smart_count: 1 }} }});
-    setOpen(false);
-    refresh();
-  }};
-  
-  return (
-    <>
-      <Button onClick={{handleClick}} variant="contained" size="small">Add {child_name}</Button>
-      <Dialog open={{open}} onClose={{handleClose}} fullWidth maxWidth="md">
-        <DialogTitle>Create {child_name}</DialogTitle>
-        <DialogContent>
-          <Create resource="{child_name}" redirect={{false}} mutationOptions={{{{ onSuccess }}}} title=" ">
-            <SimpleForm defaultValues={{{{ {fk_field_name}: id }}}}>
-              <Grid container rowSpacing={{0}} columnSpacing={{2}}>
-{child_create_fields}
-              </Grid>
-            </SimpleForm>
-          </Create>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}};
-"""
-                # Edit Component Name
-                edit_comp_name = f"EDIT_{child_name.upper()}_FOR_{resource_name.upper()}"
-                
-                child_id_field = ""
-
-                child_dialog_components += f"""
-const {edit_comp_name} = () => {{
-  const record = useRecordContext();
-  const [open, setOpen] = React.useState(false);
-  const notify = useNotify();
-  const refresh = useRefresh();
-  const [update] = useUpdate();
-  
-  const handleClick = (e) => {{
-    e.stopPropagation();
-    setOpen(true);
-  }};
-  
-  const handleClose = () => setOpen(false);
-  
-  const onSubmit = (data) => {{
-    update(
-      '{child_name}',
-      {{ id: record.id, data: data, previousData: record }},
-      {{
-        onSuccess: () => {{
-          notify('{child_name} updated', {{ type: 'info', messageArgs: {{ smart_count: 1 }} }});
-          setOpen(false);
-          refresh();
-        }},
-        onError: (error) => {{
-          notify('Error: ' + error.message, {{ type: 'warning' }});
-        }}
-      }}
-    );
-  }};
-  
-  if (!record) return null;
-
-  return (
-    <>
-      <Button onClick={{handleClick}} size="small" color="primary">Edit</Button>
-      <Dialog open={{open}} onClose={{handleClose}} fullWidth maxWidth="md" onClick={{(e) => e.stopPropagation()}}>
-        <DialogTitle>Edit {child_name}</DialogTitle>
-        <DialogContent>
-          <SimpleForm record={{record}} onSubmit={{onSubmit}}>
-              <Grid container rowSpacing={{0}} columnSpacing={{2}}>{child_id_field}
-{child_edit_fields}
-              </Grid>
-            </SimpleForm>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}};
-"""
+                # Generate dialogs for child (and its descendants)
+                child_dialog_components_list.extend(self._generate_recursive_dialogs(child_info["concept"], resource_name, visited=visited_dialogs))
+        
+        child_dialog_components = "\n".join(child_dialog_components_list)
 
         # Prepare ID fields for main resource
         id_field_list = '<TextField source="id_presentation" label="Id" />'
@@ -573,7 +475,174 @@ export const {resource_name}_show = (props) => (
         
         with open(resource_dir / f"{resource_name}.js", 'w', encoding='utf-8') as f:
             f.write(resource_content)
-    
+
+    def _collect_all_descendants(self, concept_name: str, visited=None) -> List[Dict[str, Any]]:
+        """
+        Recursively find all descendant concepts (children, grandchildren, etc.).
+        """
+        if visited is None: visited = set()
+        descendants = []
+        children = self._find_owned_children(concept_name)
+        for child in children:
+            c_name = child["concept"]["name"]
+            # Avoid self-references and already visited concepts to prevent infinite recursion
+            if c_name not in visited:
+                visited.add(c_name)
+                descendants.append(child)
+                descendants.extend(self._collect_all_descendants(c_name, visited))
+        return descendants
+
+    def _generate_recursive_dialogs(self, concept: Dict[str, Any], parent_name: str, visited=None) -> List[str]:
+        """
+        Recursively generate dialog components for a concept and its descendants.
+        """
+        if visited is None: visited = set()
+        resource_name = concept["name"]
+        
+        # Avoid infinite recursion in self-referencing relationships or duplicate dialogs
+        state_key = (resource_name, parent_name)
+        if state_key in visited:
+            return []
+        visited.add(state_key)
+
+        components = []
+        
+        # 1. Find children of this concept (Grandchildren of the root)
+        my_children = self._find_owned_children(resource_name)
+        
+        # 2. Recursively generate dialogs for children first
+        for child_info in my_children:
+            # For self-referencing children, we only go one level deep for popups
+            if child_info["concept"]["name"] == resource_name:
+                continue
+            components.extend(self._generate_recursive_dialogs(child_info["concept"], resource_name, visited))
+
+        # 3. Generate CREATE and EDIT for current concept
+        fk_field_name = ""
+        for field in concept["fields"]:
+            if field["type"] == "relation_to_one" and field["target"] == parent_name:
+                fk_field_name = field["name"]
+                break
+        
+        # Generate fields
+        fields_res = self._generate_field_components(concept, owned_children=my_children, exclude_fields=[fk_field_name])
+        
+        create_fields = fields_res["create_fields"]
+        edit_fields = fields_res["edit_fields"]
+        child_tabs = fields_res["child_tabs"]
+        
+        # Component Names
+        create_comp_name = f"CREATE_{resource_name.upper()}_FOR_{parent_name.upper()}"
+        edit_comp_name = f"EDIT_{resource_name.upper()}_FOR_{parent_name.upper()}"
+        
+        # CREATE Component
+        create_comp = f"""
+const {create_comp_name} = () => {{
+  const {{ id }} = useRecordContext();
+  const [open, setOpen] = React.useState(false);
+  const notify = useNotify();
+  const refresh = useRefresh();
+  
+  const handleClick = () => setOpen(true);
+  const handleClose = () => setOpen(false);
+  
+  const onSuccess = () => {{
+    notify('{resource_name} created', {{ type: 'info', messageArgs: {{ smart_count: 1 }} }});
+    setOpen(false);
+    refresh();
+  }};
+  
+  return (
+    <>
+      <Button onClick={{handleClick}} variant="contained" size="small">Add {resource_name}</Button>
+      <Dialog open={{open}} onClose={{handleClose}} fullWidth maxWidth="md">
+        <DialogTitle>Create {resource_name}</DialogTitle>
+        <DialogContent>
+          <Create resource="{resource_name}" redirect={{false}} mutationOptions={{{{ onSuccess }}}} title=" ">
+            <SimpleForm defaultValues={{{{ {fk_field_name}: id }}}}>
+              <Grid container rowSpacing={{0}} columnSpacing={{2}}>
+{create_fields}
+              </Grid>
+            </SimpleForm>
+          </Create>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}};
+"""
+        components.append(create_comp)
+
+        # EDIT Component
+        # Determine if TabbedForm is needed
+        form_content = ""
+        if my_children:
+             form_content = f"""<TabbedForm record={{record}} onSubmit={{onSubmit}} syncWithLocation={{false}}>
+              <FormTab label="Summary">
+                <Grid container rowSpacing={{0}} columnSpacing={{2}}>
+{edit_fields}
+                </Grid>
+              </FormTab>
+{child_tabs}
+            </TabbedForm>"""
+        else:
+             form_content = f"""<SimpleForm record={{record}} onSubmit={{onSubmit}}>
+              <Grid container rowSpacing={{0}} columnSpacing={{2}}>
+{edit_fields}
+              </Grid>
+            </SimpleForm>"""
+
+        edit_comp = f"""
+const {edit_comp_name} = () => {{
+  const record = useRecordContext();
+  const [open, setOpen] = React.useState(false);
+  const notify = useNotify();
+  const refresh = useRefresh();
+  const [update] = useUpdate();
+  
+  const handleClick = (e) => {{
+    e.stopPropagation();
+    setOpen(true);
+  }};
+  
+  const handleClose = () => setOpen(false);
+  
+  const onSubmit = (data) => {{
+    update(
+      '{resource_name}',
+      {{ id: record.id, data: data, previousData: record }},
+      {{
+        onSuccess: () => {{
+          notify('{resource_name} updated', {{ type: 'info', messageArgs: {{ smart_count: 1 }} }});
+          setOpen(false);
+          refresh();
+        }},
+        onError: (error) => {{
+          notify('Error: ' + error.message, {{ type: 'warning' }});
+        }}
+      }}
+    );
+  }};
+  
+  if (!record) return null;
+
+  return (
+    <>
+      <Button onClick={{handleClick}} size="small" color="primary">Edit</Button>
+      <Dialog open={{open}} onClose={{handleClose}} fullWidth maxWidth="md" onClick={{(e) => e.stopPropagation()}}>
+        <DialogTitle><Title name="{resource_name}" /></DialogTitle>
+        <DialogContent>
+            {form_content}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}};
+"""
+        components.append(edit_comp)
+        
+        return components
+
     def _find_owned_children(self, parent_concept_name: str) -> List[Dict[str, Any]]:
         """
         Find all concepts that have an ownership relationship with the parent concept.
@@ -691,8 +760,13 @@ export const {resource_name}_show = (props) => (
             'TextField', 'TextInput', 'required', 'useRecordContext'
         }
         
+        # Collect all recursive descendants to ensure their field types are imported
+        all_descendants = []
+        if owned_children:
+             all_descendants = self._collect_all_descendants(concept["name"])
+        
         # Add components for children tabs
-        if owned_children or many_to_many_links:
+        if all_descendants or many_to_many_links:
             needed_components.add('TabbedForm')
             needed_components.add('FormTab')
             needed_components.add('ReferenceManyField')
@@ -702,8 +776,8 @@ export const {resource_name}_show = (props) => (
             needed_components.add('useUpdate')
             needed_components.add('EditButton')
             
-        if owned_children:
-            for child in owned_children:
+        if all_descendants:
+            for child in all_descendants:
                  # Add child field types
                  for field in child["concept"]["fields"]:
                     # Use enriched component type
