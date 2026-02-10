@@ -66,7 +66,20 @@ class SchemaProcessor:
         # 1. Determine Type (Archetype)
         c_type = self._determine_concept_type(concept)
         
-        # 2. Reconstruct dictionary to enforce order
+        # 2. Add part_of_order for part_of concepts
+        if c_type in ['part_of', 'recursive_part_of']:
+             # Add part_of_order field if not exists
+             if not any(f["name"] == "part_of_order" for f in concept["fields"]):
+                 concept["fields"].append({
+                     "name": "part_of_order",
+                     "type": "integer",
+                     "description": "Auto-generated order for part_of items",
+                     "required": False,
+                     "unique": False,
+                     "size": "s"
+                 })
+
+        # 3. Reconstruct dictionary to enforce order
         new_concept = {}
         
         # Keys to keep at the very top
@@ -167,7 +180,11 @@ class SchemaProcessor:
     def _determine_sql_type(self, field: Dict[str, Any]) -> str:
         """Map abstract type to PostgreSQL type."""
         field_type = field["type"]
+        field_name = field["name"]
         
+        if field_name == "part_of_order":
+            return "SERIAL"
+            
         if field_type == "relation_to_many":
             return "" # Handled via join tables
             
@@ -204,6 +221,9 @@ class SchemaProcessor:
             
         if field["name"] == "id":
             return 'read_only' 
+            
+        if field["name"] == "part_of_order":
+            return 'internal'
             
         return 'editable'
 

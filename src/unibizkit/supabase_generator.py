@@ -312,8 +312,8 @@ ALTER TABLE "{table_name}"
                 field_name = field["name"]
                 field_type = field["type"]
                 
-                # Skip calculated fields as they are handled by the DB
-                if 'calculated' in field:
+                # Skip calculated fields or SERIAL fields as they are handled by the DB
+                if 'calculated' in field or field.get("_be_sql_type") == "SERIAL":
                     continue
                 
                 # Generate sample value based on type

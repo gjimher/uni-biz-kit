@@ -883,7 +883,7 @@ const {edit_comp_name} = () => {{
                 child_columns = []
                 child_columns.append(f'<TextField source="id_presentation" label="Id" />')
                 
-                relevant_fields = [f for f in child_concept["fields"] if f["name"] != fk_field_name]
+                relevant_fields = [f for f in child_concept["fields"] if f["name"] != fk_field_name and f.get("_fe_visibility") != "internal"]
                 count = 0
                 for field in relevant_fields:
                     if count > 4: break
@@ -904,9 +904,13 @@ const {edit_comp_name} = () => {{
                 child_columns.append(f"<{edit_dialog_comp_name} />")
                 child_columns_str = '\n        '.join(child_columns)
                 
+                sort_prop = ""
+                if any(f["name"] == "part_of_order" for f in child_concept["fields"]):
+                    sort_prop = " sort={{ field: 'part_of_order', order: 'ASC' }}"
+
                 tab_content = f"""
       <FormTab label="{child_plural}">
-        <ReferenceManyField reference="{child_name}" target="&quot;{fk_field_name}&quot;" label={{false}}>
+        <ReferenceManyField reference="{child_name}" target="&quot;{fk_field_name}&quot;" label={{false}}{sort_prop}>
           <Box display="flex" justifyContent="flex-end" mb={{1}}>
             <{dialog_comp_name} />
           </Box>
@@ -1014,13 +1018,13 @@ const {edit_comp_name} = () => {{
                 list_html = f'      <{list_comp} source="{field_name}" />'
 
             # Append to lists
-            if list_html: list_fields.append(list_html)
+            if list_html and visibility != "internal": list_fields.append(list_html)
             # Show uses same as list mostly
-            if list_html: show_fields.append(list_html)
+            if list_html and visibility != "internal": show_fields.append(list_html)
 
             # Add to Create/Edit
             # Check visibility
-            if visibility != "hidden":
+            if visibility != "internal":
                 if input_html:
                     # CREATE
                     if visibility == "editable": # Read-only excluded from Create? Or shown disabled?
