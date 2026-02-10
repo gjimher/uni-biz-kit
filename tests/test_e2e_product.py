@@ -53,24 +53,13 @@ def test_create_product_as_user(page: Page, app_server):
     # We use 'published' as a valid enum value from the schema
     page.get_by_role("option", name="published").click()
     
-    # 6. Select Category
-    # We open the dropdown and pick the first available option from the seed
-    page.get_by_label("Categories").click()
-    # Wait for options to be visible
-    category_option = page.get_by_role("option").first
-    category_option.wait_for(state="visible")
-    category_option.click()
-    # Close dropdown (MUI Select multiple doesn't close on click)
-    page.keyboard.press("Escape")
-    page.wait_for_timeout(500)
-    
-    # 7. Save
+    # 6. Save (Categories are now in the Relations tab on Edit page)
     page.get_by_label("Save").click()
     
     # Wait for success notification and redirection
     page.wait_for_timeout(1000)
     
-    # 8. Verify it exists in the list
+    # 7. Verify it exists in the list
     # The user specifically asked to check it in the list
     page.get_by_role("menuitem", name="Products").click()
     
@@ -79,5 +68,12 @@ def test_create_product_as_user(page: Page, app_server):
     # Wait for sort to apply
     page.wait_for_timeout(500)
 
-    expect(page.get_by_role("cell", name="_User Journey Product").first).to_be_visible()
+    product_cell = page.get_by_role("cell", name="_User Journey Product").first
+    expect(product_cell).to_be_visible()
     expect(page.get_by_role("cell", name="PURE-E2E-001").first).to_be_visible()
+
+    # 8. Verify Relations Tab
+    # Open the product to check the Relations tab
+    product_cell.click()
+    page.get_by_role("tab", name="Relations").click()
+    expect(page.get_by_label("Categories")).to_be_visible()

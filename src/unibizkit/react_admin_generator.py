@@ -408,6 +408,15 @@ export const dataProvider = {{
         id_field_edit = ""
 
         # Determine if we use SimpleForm or TabbedForm for Edit
+        relations_tab = ""
+        if field_components.get("m2m_edit_fields"):
+            relations_tab = f"""
+      <FormTab label="Relations">
+        <Grid container rowSpacing={{0}} columnSpacing={{2}}>
+{field_components["m2m_edit_fields"]}
+        </Grid>
+      </FormTab>"""
+
         if owned_children or many_to_many_links:
             edit_component = f"""<Edit title={{<Title name="{resource_name}" />}} {{...props}}>
     <TabbedForm>
@@ -417,6 +426,7 @@ export const dataProvider = {{
         </Grid>
       </FormTab>
       {field_components["child_tabs"]}
+      {relations_tab}
     </TabbedForm>
   </Edit>"""
         else:
@@ -838,12 +848,14 @@ const {edit_comp_name} = () => {{
         show_fields = []
         child_tabs = []
         filter_fields = []
+        m2m_edit_fields = []
         
         exclude_fields = exclude_fields or []
         
         # Grid State Tracking
         create_grid_pos = 0
         edit_grid_pos = 0
+        m2m_grid_pos = 0
         
         def update_grid(current_pos, width, fields_list):
             if width == 6:
@@ -1067,8 +1079,7 @@ const {edit_comp_name} = () => {{
                     width_units = 6
                 
                 # Update grid positions
-                create_grid_pos = update_grid(create_grid_pos, width_units, create_fields)
-                edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
+                m2m_grid_pos = update_grid(m2m_grid_pos, width_units, m2m_edit_fields)
                 
                 input_block = f"""        <Grid item xs={{12}} sm={{{width_units}}}>
           <ReferenceArrayInput source="{field_name}" reference="{target_name}">
@@ -1076,8 +1087,7 @@ const {edit_comp_name} = () => {{
           </ReferenceArrayInput>
         </Grid>"""
                 
-                create_fields.append(input_block)
-                edit_fields.append(input_block)
+                m2m_edit_fields.append(input_block)
                 
                 show_block = f"""      <ReferenceArrayField source="{field_name}" reference="{target_name}">
         <SingleFieldList>
@@ -1091,6 +1101,7 @@ const {edit_comp_name} = () => {{
             'list_fields': '\n'.join(list_fields),
             'create_fields': '\n'.join(create_fields),
             'edit_fields': '\n'.join(edit_fields),
+            'm2m_edit_fields': '\n'.join(m2m_edit_fields),
             'show_fields': '\n'.join(show_fields),
             'child_tabs': '\n'.join(child_tabs),
             'filter_fields': ',\n'.join(filter_fields)
