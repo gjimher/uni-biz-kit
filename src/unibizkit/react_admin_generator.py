@@ -73,6 +73,160 @@ export const Title = ({ name }) => {
         with open(self.output_dir / "src" / "components" / "title.js", 'w', encoding='utf-8') as f:
             f.write(title_js_content)
 
+        reorderable_datagrid_js = """import * as React from 'react';
+import { 
+    Datagrid, 
+    DatagridBody, 
+    RecordContextProvider, 
+    useListContext, 
+    useUpdate, 
+    useNotify, 
+    useRefresh 
+} from 'react-admin';
+import { TableRow, TableCell } from '@mui/material';
+import DragHandleIcon from '@mui/icons-material/Reorder';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+
+const DragHandle = () => (
+    <TableCell padding="none">
+        <DragHandleIcon style={{ cursor: 'grab', color: '#999', marginLeft: '10px' }} />
+    </TableCell>
+);
+
+const ReorderableDatagridRow = ({ record, id, index, children, ...rest }) => (
+    <Draggable draggableId={String(id)} index={index}>
+        {(provided, snapshot) => (
+            <TableRow
+                ref={provided.innerRef}
+                {...provided.draggableProps}
+                {...provided.dragHandleProps}
+                style={{
+                    ...provided.draggableProps.style,
+                    backgroundColor: snapshot.isDragging ? '#eee' : 'white',
+                    display: 'table-row',
+                }}
+                {...rest}
+            >
+                <DragHandle />
+                {React.Children.map(children, (field, i) => (
+                    React.isValidElement(field) ? (
+                        <RecordContextProvider value={record}>
+                            <TableCell key={field.props.source || i}>
+                                {field}
+                            </TableCell>
+                        </RecordContextProvider>
+                    ) : null
+                ))}
+            </TableRow>
+        )}
+    </Draggable>
+);
+
+const ReorderableDatagridBody = ({ children, localData, ...rest }) => {
+    const { isLoading } = useListContext();
+    if (isLoading || !localData) return null;
+
+    return (
+        <Droppable droppableId="datagrid-body">
+            {(provided) => (
+                <tbody ref={provided.innerRef} {...provided.droppableProps} {...rest}>
+                    {localData.map((record, index) => (
+                        <ReorderableDatagridRow
+                            key={record.id}
+                            id={record.id}
+                            index={index}
+                            record={record}
+                        >
+                            {children}
+                        </ReorderableDatagridRow>
+                    ))}
+                    {provided.placeholder}
+                </tbody>
+            )}
+        </Droppable>
+    );
+};
+
+export const ReorderableDatagrid = ({ children, ...props }) => {
+    const { data, resource, refetch, isLoading } = useListContext();
+    const [localData, setLocalData] = React.useState(data);
+    const [update] = useUpdate();
+    const notify = useNotify();
+
+    React.useEffect(() => {
+        if (data) {
+            // Force sort by part_of_order to ensure UI consistency
+            // This protects against the list context returning unsorted data
+            const sortedData = [...data].sort((a, b) => {
+                const orderA = (a.part_of_order !== undefined && a.part_of_order !== null) ? a.part_of_order : Number.MAX_SAFE_INTEGER;
+                const orderB = (b.part_of_order !== undefined && b.part_of_order !== null) ? b.part_of_order : Number.MAX_SAFE_INTEGER;
+                return orderA - orderB;
+            });
+            setLocalData(sortedData);
+        }
+    }, [data]);
+
+    if (isLoading || !localData) return null;
+
+    const onDragEnd = async (result) => {
+        if (!result.destination) return;
+        if (result.destination.index === result.source.index) return;
+
+        const startIndex = result.source.index;
+        const endIndex = result.destination.index;
+        
+        // 1. Calculate new order locally
+        const reorderedData = Array.from(localData);
+        const [removed] = reorderedData.splice(startIndex, 1);
+        reorderedData.splice(endIndex, 0, removed);
+        
+        // 2. Map existing order values to the new positions
+        const allOrders = localData
+            .map((r, idx) => (r.part_of_order !== undefined && r.part_of_order !== null) ? r.part_of_order : idx)
+            .sort((a, b) => a - b);
+        
+        const updates = [];
+        const finalData = reorderedData.map((record, i) => {
+            const targetOrder = allOrders[i];
+            if (record.part_of_order !== targetOrder) {
+                const updatedRecord = { ...record, part_of_order: targetOrder };
+                updates.push(update(resource, {
+                    id: record.id,
+                    data: { part_of_order: targetOrder },
+                    previousData: record
+                }, { mutationMode: 'pessimistic' }));
+                return updatedRecord;
+            }
+            return record;
+        });
+
+        // Update UI immediately
+        setLocalData(finalData);
+
+        try {
+            if (updates.length > 0) {
+                await Promise.all(updates);
+                notify('Order updated', { type: 'info' });
+            }
+        } catch (error) {
+            notify('Error updating order: ' + error.message, { type: 'warning' });
+            setLocalData(data);
+        }
+    };
+
+
+    return (
+        <DragDropContext onDragEnd={onDragEnd}>
+            <Datagrid {...props} body={<ReorderableDatagridBody localData={localData} />}>
+                {children}
+            </Datagrid>
+        </DragDropContext>
+    );
+};
+"""
+        with open(self.output_dir / "src" / "components" / "reorderable_datagrid.js", 'w', encoding='utf-8') as f:
+            f.write(reorderable_datagrid_js)
+
     def _create_directory_structure(self):
         """Create the directory structure for the React-Admin app."""
         # Create main directories
@@ -107,13 +261,15 @@ export const Title = ({ name }) => {
   "private": true,
   "dependencies": {
     "@mui/material": "^5.15.0",
+    "@mui/icons-material": "^5.15.0",
     "@mui/x-date-pickers": "^6.19.0",
     "@supabase/supabase-js": "^2.89.0",
     "react": "^18.2.0",
     "react-admin": "^4.16.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
-    "ra-supabase": "^3.5.2"
+    "ra-supabase": "^3.5.2",
+    "@hello-pangea/dnd": "^16.5.0"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -402,6 +558,12 @@ export const dataProvider = {{
         
         child_dialog_components = "\n".join(child_dialog_components_list)
 
+        # Re-evaluating: I'll import them separately to be safe.
+        component_imports = [f"import {{ Title }} from '../../components/title';"]
+        if "ReorderableDatagrid" in field_components["child_tabs"] or "ReorderableDatagrid" in child_dialog_components:
+             component_imports.append(f"import {{ ReorderableDatagrid }} from '../../components/reorderable_datagrid';")
+        component_imports_str = "\n".join(component_imports)
+
         # Prepare ID fields for main resource
         id_field_list = '<TextField source="id_presentation" label="Id" />'
         id_field_show = ""
@@ -441,7 +603,7 @@ export const dataProvider = {{
         resource_content = f"""import * as React from 'react';
 import {{ {react_admin_imports} }} from 'react-admin';
 import {{ {mui_imports_str} }} from '@mui/material';
-import {{ Title }} from '../../components/title';
+{component_imports_str}
 {field_components["imports"]}
 
 {child_dialog_components}
@@ -902,11 +1064,16 @@ const {edit_comp_name} = () => {{
                 edit_dialog_comp_name = f"EDIT_{child_name.upper()}_FOR_{parent_name.upper()}"
                 
                 child_columns.append(f"<{edit_dialog_comp_name} />")
-                child_columns_str = '\n        '.join(child_columns)
                 
                 sort_prop = " sort={{ field: 'id_presentation', order: 'ASC' }}"
+                datagrid_comp = "Datagrid"
                 if any(f["name"] == "part_of_order" for f in child_concept["fields"]):
                     sort_prop = " sort={{ field: 'part_of_order', order: 'ASC' }}"
+                    datagrid_comp = "ReorderableDatagrid"
+                    # Add hidden field to ensure it is fetched
+                    child_columns.append(f'<NumberField source="part_of_order" sx={{{{ display: "none" }}}} />')
+
+                child_columns_str = '\n        '.join(child_columns)
 
                 tab_content = f"""
       <FormTab label="{child_plural}">
@@ -914,9 +1081,9 @@ const {edit_comp_name} = () => {{
           <Box display="flex" justifyContent="flex-end" mb={{1}}>
             <{dialog_comp_name} />
           </Box>
-          <Datagrid>
+          <{datagrid_comp}>
             {child_columns_str}
-          </Datagrid>
+          </{datagrid_comp}>
         </ReferenceManyField>
       </FormTab>"""
                 child_tabs.append(tab_content)
