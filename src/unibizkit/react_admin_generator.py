@@ -904,7 +904,7 @@ const {edit_comp_name} = () => {{
                 child_columns.append(f"<{edit_dialog_comp_name} />")
                 child_columns_str = '\n        '.join(child_columns)
                 
-                sort_prop = ""
+                sort_prop = " sort={{ field: 'id_presentation', order: 'ASC' }}"
                 if any(f["name"] == "part_of_order" for f in child_concept["fields"]):
                     sort_prop = " sort={{ field: 'part_of_order', order: 'ASC' }}"
 
@@ -960,12 +960,12 @@ const {edit_comp_name} = () => {{
                 else:
                      input_inner = f'<SelectInput optionText="id_presentation"{full_width}{validation}{margin} />'
                 
-                input_html = f'          <ReferenceInput source="{field_name}" reference="{target}">{input_inner}</ReferenceInput>'
+                input_html = f'          <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{input_inner}</ReferenceInput>'
                 
                 # Filter field
                 if concept["data_size"] != "s":
                      filter_inner = input_inner.replace(f'{{validation}}{{margin}}', '')
-                     filter_fields.append(f'  <ReferenceInput source="{field_name}" reference="{target}">{filter_inner}</ReferenceInput>')
+                     filter_fields.append(f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>')
 
             elif field["type"] == "relation_to_many":
                 # Similar logic as before for 1:N inverse vs M:N
@@ -1086,7 +1086,7 @@ const {edit_comp_name} = () => {{
                 m2m_grid_pos = update_grid(m2m_grid_pos, width_units, m2m_edit_fields)
                 
                 input_block = f"""        <Grid item xs={{12}} sm={{{width_units}}}>
-          <ReferenceArrayInput source="{field_name}" reference="{target_name}">
+          <ReferenceArrayInput source="{field_name}" reference="{target_name}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>
             <SelectArrayInput optionText="id_presentation" fullWidth margin="none" size="small" />
           </ReferenceArrayInput>
         </Grid>"""
