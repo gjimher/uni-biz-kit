@@ -232,7 +232,7 @@ my-app/
 - Enum constraints for enum fields
 - Foreign key constraints for relationships
 - Join tables for many-to-many relationships
-- Timestamps (created_at, updated_at)
+- Timestamps (_created_at, _updated_at)
 - Sample data for testing
 
 ### React-Admin Frontend Features

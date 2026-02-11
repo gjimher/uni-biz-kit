@@ -32,6 +32,17 @@ class SupabaseGenerator:
             SQL statements as a string
         """
         sql_parts = []
+
+        # Add generic updated_at function
+        sql_parts.append("""
+CREATE OR REPLACE FUNCTION update_updated_at_column() 
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW."_updated_at" = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+""")
         
         # Generate tables for each concept
         for concept in self.concepts:
@@ -86,8 +97,8 @@ class SupabaseGenerator:
             sql_lines.append(f'  "id_presentation" TEXT,')
         
         # Add created_at and updated_at timestamps
-        sql_lines.append('  "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,')
-        sql_lines.append('  "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP')
+        sql_lines.append('  "_created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,')
+        sql_lines.append('  "_updated_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP')
         
         # Close table definition
         sql_lines.append(');')
@@ -101,17 +112,10 @@ class SupabaseGenerator:
         # Add trigger to update updated_at timestamp on row updates
         trigger_name = f"{table_name}_update_updated_at"
         sql_lines.append(f"""
-CREATE OR REPLACE FUNCTION "update_{table_name}_updated_at"() 
-RETURNS TRIGGER AS $$BEGIN
-    NEW."updated_at" = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
 CREATE TRIGGER "{trigger_name}" 
 BEFORE UPDATE ON "{table_name}" 
 FOR EACH ROW
-EXECUTE FUNCTION "update_{table_name}_updated_at"();
+EXECUTE FUNCTION update_updated_at_column();
 """
 )
 
@@ -213,7 +217,7 @@ EXECUTE FUNCTION "update_{table_name}_updated_at"();
 CREATE TABLE "{join_table_name}" (
   "{table1}_id" INTEGER NOT NULL,
   "{table2}_id" INTEGER NOT NULL,
-  "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  "_created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY ("{table1}_id", "{table2}_id"),
   FOREIGN KEY ("{table1}_id") REFERENCES "{table1}"("id") ON DELETE CASCADE,
   FOREIGN KEY ("{table2}_id") REFERENCES "{table2}"("id") ON DELETE CASCADE
@@ -407,7 +411,7 @@ ALTER TABLE "{table_name}"
                 field_values.append(value)
             
             # Add timestamps
-            field_names.extend(['created_at', 'updated_at'])
+            field_names.extend(['_created_at', '_updated_at'])
             field_values.extend([f"'2023-01-01T10:00:00Z'", f"'2023-01-01T10:00:00Z'"])
             
 
