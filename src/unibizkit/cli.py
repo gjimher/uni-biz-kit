@@ -130,37 +130,90 @@ Examples:
             
         return schema_path, output_dir
 
-    def _validate_extended_schema(self, extended_schema: Dict[str, Any]):
-        """Validate the enriched schema against concepts_extended_schema.json."""
-        try:
-            extended_schema_def_path = Path(__file__).parent.parent.parent / "schemas" / "concepts_extended_schema.json"
-            if not extended_schema_def_path.exists():
-                logger.warning(f"Extended schema definition not found at {extended_schema_def_path}, skipping validation.")
-                return
+    def _generate_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
+        """
+        Dynamically generate the full extended schema definition by merging
+        concepts_schema.json and concepts_extended_required_additions.json.
+        """
+        schemas_dir = Path(__file__).parent.parent.parent / "schemas"
+        base_schema_path = schemas_dir / "concepts_schema.json"
+        additions_path = schemas_dir / "concepts_extended_required_additions.json"
+        
+        with open(base_schema_path, 'r', encoding='utf-8') as f:
+            base_schema = json.load(f)
+            
+        with open(additions_path, 'r', encoding='utf-8') as f:
+            additions = json.load(f)
+            
+        # Explicit merge of known structure
+        
+        # 1. Merge Concept Properties
+        base_concept_items = base_schema["properties"]["concepts"]["items"]
+        extra_concept_items = additions["properties"]["concepts"]["items"]
+        
+        base_concept_props = base_concept_items["properties"]
+        extra_concept_props = extra_concept_items["properties"]
+        
+        # 1a. Merge Field Properties (Nested)
+        if "fields" in extra_concept_props:
+            base_field_items = base_concept_props["fields"]["items"]
+            extra_field_items = extra_concept_props["fields"]["items"]
+            
+            # Merge properties
+            base_field_items["properties"].update(extra_field_items["properties"])
+            
+            # Auto-generate required from keys
+            if "required" not in base_field_items:
+                base_field_items["required"] = []
+            
+            # Add all keys from extra properties to required
+            base_field_items["required"].extend(extra_field_items["properties"].keys())
+            base_field_items["required"] = list(set(base_field_items["required"]))
 
-            import jsonschema
-            from jsonschema.validators import validator_for
-            from referencing import Registry, Resource
+        # 1b. Merge Direct Concept Properties
+        for key, value in extra_concept_props.items():
+            if key == "fields":
+                continue
+            base_concept_props[key] = value
+
+        # 2. Merge Concept Required (Auto-generate)
+        if "required" not in base_concept_items:
+             base_concept_items["required"] = []
+        
+        # Add all keys from extra properties (excluding fields as it is nested container) to required
+        keys_to_require = [k for k in extra_concept_props.keys() if k != "fields"]
+        base_concept_items["required"].extend(keys_to_require)
+        base_concept_items["required"] = list(set(base_concept_items["required"]))
+             
+        # Update metadata
+        base_schema["title"] = "Extended Business Application Schema"
+        base_schema["description"] = "Dynamically generated extended schema."
+        
+        # Allow $schema property in the extended schema
+        base_schema["properties"]["$schema"] = { "type": "string", "description": "Schema definition reference" }
+        
+        # Save to output dir for reference/debug
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / "concepts_extended_schema.json"
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(base_schema, f, indent=2)
             
-            # Load base schema for reference resolution
-            base_schema_path = extended_schema_def_path.parent / "concepts_schema.json"
-            with open(base_schema_path, 'r', encoding='utf-8') as f:
-                base_schema = json.load(f)
-            
-            # Load extended schema definition
-            with open(extended_schema_def_path, 'r', encoding='utf-8') as f:
-                extended_schema_def = json.load(f)
-            
-            # Create Registry with base schema
-            base_resource = Resource.from_contents(base_schema)
-            registry = Registry().with_resource(uri="concepts_schema.json", resource=base_resource)
+        return base_schema
+
+    def _validate_extended_schema(self, extended_schema: Dict[str, Any], output_dir: Path):
+        """Validate the enriched schema against dynamically generated schema."""
+        import jsonschema
+        from jsonschema.validators import validator_for
+        
+        try:
+            extended_schema_def = self._generate_extended_schema_def(output_dir)
             
             # Validate
             ValidatorClass = validator_for(extended_schema_def)
-            validator = ValidatorClass(extended_schema_def, registry=registry)
+            validator = ValidatorClass(extended_schema_def)
             validator.validate(extended_schema)
             
-            logger.info("Enriched schema validation successful (compliant with concepts_extended_schema.json)")
+            logger.info("Enriched schema validation successful")
         except jsonschema.ValidationError as e:
             error_msg = f"Enriched schema validation failed: {e.message}"
             logger.error(error_msg)
@@ -191,13 +244,18 @@ Examples:
         extended_schema = processor.process()
 
         # Validate Extended Schema
-        self._validate_extended_schema(extended_schema)
+        self._validate_extended_schema(extended_schema, output_dir)
         
         # Save Extended Schema (for debugging/verification)
         output_dir.mkdir(exist_ok=True)
         dump_path = output_dir / "concepts_extended.json"
+        
+        # Inject $schema for VSCode intellisense (at the top)
+        new_schema = {"$schema": "./concepts_extended_schema.json"}
+        new_schema.update(extended_schema)
+        
         with open(dump_path, 'w', encoding='utf-8') as f:
-            json.dump(extended_schema, f, indent=2)
+            json.dump(new_schema, f, indent=2)
         logger.info(f"Extended schema saved to: {dump_path}")
 
         # Pass the EXTENDED schema to generators
@@ -258,15 +316,19 @@ Examples:
         extended_schema = processor.process()
         
         # Validate against Extended Schema Definition
-        self._validate_extended_schema(extended_schema)
+        self._validate_extended_schema(extended_schema, output_dir)
 
         # Dump extended schema to Output Directory
         # Ensure output directory exists (it might not if we are just validating)
         output_dir.mkdir(exist_ok=True)
         dump_path = output_dir / "concepts_extended.json"
         
+        # Inject $schema for VSCode intellisense (at the top)
+        new_schema = {"$schema": "./concepts_extended_schema.json"}
+        new_schema.update(extended_schema)
+        
         with open(dump_path, 'w', encoding='utf-8') as f:
-            json.dump(extended_schema, f, indent=2)
+            json.dump(new_schema, f, indent=2)
             
         logger.info(f"Extended schema dumped to: {dump_path}")
         

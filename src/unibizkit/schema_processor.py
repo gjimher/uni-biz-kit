@@ -63,6 +63,15 @@ class SchemaProcessor:
         """
         name = concept["name"]
         
+        # Validate uniqueness of part_of
+        part_of_fields = [f for f in concept["fields"] 
+                          if f["type"] == "relation_to_one" and f.get("subtype") == "part_of"]
+        
+        if len(part_of_fields) > 1:
+             raise ValueError(f"Concept '{name}' can only have one 'part_of' relationship, found {len(part_of_fields)}.")
+        
+        part_of_field = part_of_fields[0] if part_of_fields else None
+        
         # 1. Determine Type (Archetype)
         c_type = self._determine_concept_type(concept)
         
@@ -88,8 +97,9 @@ class SchemaProcessor:
             if k in concept:
                 new_concept[k] = concept[k]
         
-        # Insert _type here
+        # Insert _type and _part_of_field here
         new_concept["_type"] = c_type
+        new_concept["_part_of_field"] = part_of_field
         
         # Insert remaining keys
         for k, v in concept.items():

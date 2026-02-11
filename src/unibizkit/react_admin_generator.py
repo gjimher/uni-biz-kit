@@ -227,6 +227,78 @@ export const ReorderableDatagrid = ({ children, ...props }) => {
         with open(self.output_dir / "src" / "components" / "reorderable_datagrid.js", 'w', encoding='utf-8') as f:
             f.write(reorderable_datagrid_js)
 
+        recursive_parent_selector_js = """import * as React from 'react';
+import { 
+    ReferenceField, 
+    TextField, 
+    ReferenceInput, 
+    AutocompleteInput,
+    FormDataConsumer,
+    useRecordContext
+} from 'react-admin';
+import { Button, Dialog, DialogTitle, DialogContent, DialogActions, Box, Typography } from '@mui/material';
+
+export const RecursiveParentSelector = ({ source, reference, label }) => {
+    const [open, setOpen] = React.useState(false);
+    const record = useRecordContext();
+    
+    // Filter out the current record to prevent self-referencing
+    const filter = React.useMemo(() => {
+        if (record && record.id) {
+             // ra-data-postgrest expects 'field@op' syntax for custom operators
+             return { "id@neq": record.id };
+        }
+        return {};
+    }, [record]);
+
+    return (
+        <>
+            <Box display="flex" alignItems="center" justifyContent="space-between" width="100%" sx={{ border: '1px solid #e0e0e0', borderRadius: 1, p: 1, minHeight: '56px' }}>
+                <Box flexGrow={1}>
+                    <Typography variant="caption" color="textSecondary" display="block">
+                        {label}
+                    </Typography>
+                    <FormDataConsumer>
+                        {({ formData }) => (
+                             <ReferenceField source={source} reference={reference} record={formData} link={false}>
+                                 <TextField source="id_presentation" />
+                             </ReferenceField>
+                        )}
+                    </FormDataConsumer>
+                </Box>
+                <Button onClick={() => setOpen(true)} size="small" variant="outlined">Change</Button>
+            </Box>
+            <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+                <DialogTitle>Select {label}</DialogTitle>
+                <DialogContent>
+                    <Box pt={1}>
+                        <ReferenceInput 
+                            source={source} 
+                            reference={reference} 
+                            sort={{ field: 'id_presentation', order: 'ASC' }}
+                            filter={filter}
+                        >
+                            <AutocompleteInput 
+                                optionText="id_presentation" 
+                                filterToQuery={searchText => ({ "id_presentation@ilike": searchText })}
+                                fullWidth 
+                                label={label}
+                                onChange={() => setOpen(false)}
+                            />
+                        </ReferenceInput>
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpen(false)}>Close</Button>
+                </DialogActions>
+            </Dialog>
+        </>
+    );
+};
+"""
+        with open(self.output_dir / "src" / "components" / "recursive_parent_selector.js", 'w', encoding='utf-8') as f:
+            f.write(recursive_parent_selector_js)
+
     def _create_directory_structure(self):
         """Create the directory structure for the React-Admin app."""
         # Create main directories
@@ -562,6 +634,8 @@ export const dataProvider = {{
         component_imports = [f"import {{ Title }} from '../../components/title';"]
         if "ReorderableDatagrid" in field_components["child_tabs"] or "ReorderableDatagrid" in child_dialog_components:
              component_imports.append(f"import {{ ReorderableDatagrid }} from '../../components/reorderable_datagrid';")
+        if "RecursiveParentSelector" in field_components["create_fields"] or "RecursiveParentSelector" in field_components["edit_fields"]:
+             component_imports.append(f"import {{ RecursiveParentSelector }} from '../../components/recursive_parent_selector';")
         component_imports_str = "\n".join(component_imports)
 
         # Prepare ID fields for main resource
@@ -1116,23 +1190,36 @@ const {edit_comp_name} = () => {{
             # Relation handling
             if field["type"] == "relation_to_one":
                 target = field["target"]
-                # Determine input based on data_size (handled by schema processor now!)
-                # processor set _fe_component correctly (e.g. AutocompleteInput)
-                # But we need to wrap it in ReferenceInput
                 
-                # Check specific input type from schema
-                input_inner = ""
-                if comp_type == "AutocompleteInput":
-                     input_inner = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}}{full_width}{validation}{margin} />'
+                # Check for recursive relation
+                if concept.get("_type") == "recursive_part_of" and field.get("subtype") == "part_of":
+                    # Recursive relation: Use RecursiveParentSelector
+                    input_html = f'          <RecursiveParentSelector source="{field_name}" reference="{target}" label="{field_name}" />'
+                    width_units = 6 # Force width 6 for recursive selector
+                    grid_props = f"xs={{12}} sm={{{width_units}}}"
+                    
+                    # Filter field - keep standard input for filters
+                    filter_inner = f'<SelectInput optionText="id_presentation" />'
+                    filter_fields.append(f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>')
                 else:
-                     input_inner = f'<SelectInput optionText="id_presentation"{full_width}{validation}{margin} />'
-                
-                input_html = f'          <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{input_inner}</ReferenceInput>'
-                
-                # Filter field
-                if concept["data_size"] != "s":
-                     filter_inner = input_inner.replace(f'{{validation}}{{margin}}', '')
-                     filter_fields.append(f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>')
+                    # Standard relation
+                    # Determine input based on data_size (handled by schema processor now!)
+                    # processor set _fe_component correctly (e.g. AutocompleteInput)
+                    # But we need to wrap it in ReferenceInput
+                    
+                    # Check specific input type from schema
+                    input_inner = ""
+                    if comp_type == "AutocompleteInput":
+                         input_inner = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}}{full_width}{validation}{margin} />'
+                    else:
+                         input_inner = f'<SelectInput optionText="id_presentation"{full_width}{validation}{margin} />'
+                    
+                    input_html = f'          <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{input_inner}</ReferenceInput>'
+                    
+                    # Filter field
+                    if concept["data_size"] != "s":
+                         filter_inner = input_inner.replace(f'{{validation}}{{margin}}', '')
+                         filter_fields.append(f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>')
 
             elif field["type"] == "relation_to_many":
                 # Similar logic as before for 1:N inverse vs M:N
@@ -1200,6 +1287,13 @@ const {edit_comp_name} = () => {{
                         create_fields.append(f"        <Grid item {grid_props}>")
                         create_fields.append(input_html)
                         create_fields.append(f"        </Grid>")
+                        
+                        # Force new line for recursive parent selector
+                        if concept.get("_type") == "recursive_part_of" and field.get("subtype") == "part_of":
+                             remaining = 12 - (create_grid_pos % 12)
+                             if remaining < 12 and remaining > 0:
+                                 create_fields.append(f'        <Grid item xs={{12}} sm={{{remaining}}} />')
+                                 create_grid_pos += remaining
                     
                     # EDIT
                     edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
@@ -1210,6 +1304,13 @@ const {edit_comp_name} = () => {{
                     else:
                         edit_fields.append(input_html)
                     edit_fields.append(f"        </Grid>")
+                    
+                    # Force new line for recursive parent selector
+                    if concept.get("_type") == "recursive_part_of" and field.get("subtype") == "part_of":
+                         remaining = 12 - (edit_grid_pos % 12)
+                         if remaining < 12 and remaining > 0:
+                             edit_fields.append(f'        <Grid item xs={{12}} sm={{{remaining}}} />')
+                             edit_grid_pos += remaining
 
             # Handle 1:N Inverse explicitly if needed
             if field["type"] == "relation_to_many":

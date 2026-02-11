@@ -49,8 +49,50 @@ class SupabaseGenerator:
         # Generate presentation triggers
         presentation_triggers = self._generate_presentation_triggers()
         sql_parts.extend(presentation_triggers)
+
+        # Generate recursive check triggers
+        recursive_triggers = self._generate_recursive_check_triggers()
+        sql_parts.extend(recursive_triggers)
         
         return '\n\n'.join(sql_parts)
+    
+    def _generate_recursive_check_triggers(self) -> List[str]:
+        """
+        Generate triggers to prevent self-referencing in recursive relationships.
+        
+        Returns:
+            List of SQL statements for triggers
+        """
+        triggers = []
+        
+        for concept in self.concepts:
+            table_name = concept["name"]
+            
+            if concept.get("_type") == "recursive_part_of":
+                for field in concept["fields"]:
+                    if field.get("subtype") == "part_of":
+                        field_name = field["name"]
+                        trigger_name = f"check_{table_name}_{field_name}_recursion"
+                        function_name = f"check_{table_name}_{field_name}_no_self_ref"
+                        
+                        sql = f"""
+CREATE OR REPLACE FUNCTION "{function_name}"() RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW."{field_name}" = NEW.id THEN
+    RAISE EXCEPTION 'Record cannot reference itself as {field_name}';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "{trigger_name}"
+BEFORE UPDATE ON "{table_name}"
+FOR EACH ROW
+EXECUTE FUNCTION "{function_name}"();
+"""
+                        triggers.append(sql)
+        
+        return triggers
     
     def _generate_table_sql(self, concept: Dict[str, Any]) -> str:
         """
