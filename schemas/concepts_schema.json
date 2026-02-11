@@ -35,6 +35,12 @@
             "type": "string",
             "description": "Description of the concept"
           },
+          "checks": {
+            "type": "array",
+            "description": "List of SQL check constraints",
+            "items": { "type": "string" },
+            "default": []
+          },
           "data_size": {
             "type": "string",
             "description": "Expected data volume (s: <100, m: <10000, l: >10000)",

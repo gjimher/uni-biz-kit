@@ -75,6 +75,12 @@ class SchemaProcessor:
         # 1. Determine Type (Archetype)
         c_type = self._determine_concept_type(concept)
         
+        # Add recursive check if needed
+        if c_type == 'recursive_part_of' and part_of_field:
+             if "checks" not in concept:
+                 concept["checks"] = []
+             concept["checks"].append(f'id != "{part_of_field["name"]}"')
+        
         # 2. Add part_of_order for part_of concepts
         if c_type in ['part_of', 'recursive_part_of']:
              # Add part_of_order field if not exists

@@ -10,6 +10,7 @@ from jsonschema import Draft7Validator, validators
 from pathlib import Path
 from typing import Dict, Any, List
 import logging
+import copy
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ def extend_with_default(validator_class):
     def set_defaults(validator, properties, instance, schema):
         for property, subschema in properties.items():
             if "default" in subschema:
-                instance.setdefault(property, subschema["default"])
+                instance.setdefault(property, copy.deepcopy(subschema["default"]))
 
         for error in validate_properties(validator, properties, instance, schema):
             yield error
