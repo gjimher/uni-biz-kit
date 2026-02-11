@@ -53,7 +53,8 @@
               "fields": {
                 "type": "array",
                 "items": { "type": "string" },
-                "description": "Fields used to generate the presentation ID"
+                "description": "Fields used to generate the presentation ID",
+                "minItems": 1
               },
               "separator": {
                 "type": "string",
@@ -65,7 +66,8 @@
                 "description": "Whether to show the presentation ID in the UI",
                 "default": false
               }
-            }
+            },
+            "required": ["fields", "separator"]
           },
           "fields": {
             "type": "array",

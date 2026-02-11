@@ -238,18 +238,22 @@ import {
 } from 'react-admin';
 import { Button, Dialog, DialogTitle, DialogContent, DialogActions, Box, Typography } from '@mui/material';
 
-export const RecursiveParentSelector = ({ source, reference, label }) => {
+export const RecursiveParentSelector = ({ source, reference, label, separator, displayField }) => {
     const [open, setOpen] = React.useState(false);
     const record = useRecordContext();
     
-    // Filter out the current record to prevent self-referencing
+    // Filter out the current record to prevent self-referencing and cycles
     const filter = React.useMemo(() => {
         if (record && record.id) {
              // ra-data-postgrest expects 'field@op' syntax for custom operators
-             return { "id@neq": record.id };
+             const filters = { "id@neq": record.id };
+             if (record[displayField]) {
+                 filters["id_presentation@not.ilike"] = `%${separator}${record[displayField]}${separator}%`;
+             }
+             return filters;
         }
         return {};
-    }, [record]);
+    }, [record, separator, displayField]);
 
     return (
         <>
@@ -1194,7 +1198,14 @@ const {edit_comp_name} = () => {{
                 # Check for recursive relation
                 if concept.get("_type") == "recursive_part_of" and field.get("subtype") == "part_of":
                     # Recursive relation: Use RecursiveParentSelector
-                    input_html = f'          <RecursiveParentSelector source="{field_name}" reference="{target}" label="{field_name}" />'
+                    presentation = concept["id_presentation"]
+                    separator = presentation["separator"]
+                    
+                    # Determine display field (last field in id_presentation that is not the parent ref)
+                    pres_fields = presentation["fields"]
+                    display_field = pres_fields[-1]
+
+                    input_html = f'          <RecursiveParentSelector source="{field_name}" reference="{target}" label="{field_name}" separator="{separator}" displayField="{display_field}" />'
                     width_units = 6 # Force width 6 for recursive selector
                     grid_props = f"xs={{12}} sm={{{width_units}}}"
                     

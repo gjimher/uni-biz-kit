@@ -50,6 +50,7 @@ uni-biz-kit models/test-ecommerce-app --output-dir my-output-dir
 
 **Important Rules:**
 *   **Preserve `test-ecommerce-app`:** The tests automatically clean relevant files inside this directory but preserve heavy artifacts like `node_modules`. Never delete the directory itself.
+*   **Accessing `test-ecommerce-app`:** This directory is in `.gitignore`. To read or list files inside it using tools (like `read_file` or `list_directory`), you **must** explicitly set `file_filtering_options: { respect_git_ignore: false }` or equivalent.
 *   **Use Tests for Verification:** Instead of manually running `unibizkit` and checking files, rely on the integration tests.
 *   **Timeouts:** Tests may run for longer than 60 seconds.
 
@@ -85,3 +86,6 @@ pytest
 
 *   **Simplicity over Architecture:** We prefer simple, maintainable code over complex architectural patterns.
 *   **Naming Conventions:** React Admin components must follow `SCREAMING_SNAKE_CASE` conventions (e.g., `CREATE_ORDER_ITEM_FOR_ORDER`). This satisfies React and ESLint requirements for JSX components (which must be PascalCase or SCREAMING_SNAKE_CASE) while avoiding complex case conversion logic from the database's snake_case. When in doubt, we prioritize simplicity over aesthetic code style.
+*   **Dictionary Access:**
+    *   **Schema Fields:** Do not use `.get()` for fields that are marked as `required` or have a `default` value in `schemas/concepts_schema.json`. Trust the validation and enrichment process.
+    *   **Extended Fields:** Fields starting with `_` (e.g., `_type`, `_be_sql_type`) are guaranteed to be populated by the `SchemaProcessor`. Always access them directly using brackets `[]` (e.g., `concept["_type"]`), **never** use `.get()`.
