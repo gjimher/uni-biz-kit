@@ -50,16 +50,18 @@ class SchemaLoader:
         """
         self.schema_path = schema_path
         self.business_schema = None
-        self.validation_schema = self._load_validation_schema()
+        self.presentation_config = None
+        self.validation_schema = self._load_validation_schema("concepts_schema.json")
+        self.presentation_validation_schema = self._load_validation_schema("presentation_schema.json")
     
-    def _load_validation_schema(self) -> Dict[str, Any]:
-        """Load the validation schema from the schemas directory."""
+    def _load_validation_schema(self, schema_name: str) -> Dict[str, Any]:
+        """Load a validation schema from the schemas directory."""
         try:
-            schema_file = Path(__file__).parent.parent.parent / "schemas" / "concepts_schema.json"
+            schema_file = Path(__file__).parent.parent.parent / "schemas" / schema_name
             with open(schema_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            logger.error(f"Failed to load validation schema: {e}")
+            logger.error(f"Failed to load validation schema {schema_name}: {e}")
             raise
     
     def load_and_validate(self, schema_path: str = None) -> Dict[str, Any]:
@@ -92,6 +94,17 @@ class SchemaLoader:
             
             logger.info(f"Successfully loaded and validated schema: {path}")
             self.business_schema = business_schema
+
+            # Try to load presentation.json if it exists in the same directory
+            presentation_path = Path(path).parent / "presentation.json"
+            if presentation_path.exists():
+                self.load_presentation(str(presentation_path))
+            else:
+                # Load with defaults from schema
+                self.presentation_config = {}
+                DefaultValidatingDraft7Validator(self.presentation_validation_schema).validate(self.presentation_config)
+                logger.info("No presentation.json found, using default presentation settings.")
+
             return business_schema
             
         except jsonschema.ValidationError as e:
@@ -106,6 +119,24 @@ class SchemaLoader:
             error_msg = f"Failed to load schema: {e}"
             logger.error(error_msg)
             raise SchemaValidationError(error_msg)
+
+    def load_presentation(self, presentation_path: str):
+        """
+        Load and validate the presentation settings.
+        """
+        try:
+            with open(presentation_path, 'r', encoding='utf-8') as f:
+                presentation_config = json.load(f)
+            
+            # Validate and inject defaults
+            DefaultValidatingDraft7Validator(self.presentation_validation_schema).validate(presentation_config)
+            
+            self.presentation_config = presentation_config
+            logger.info(f"Successfully loaded and validated presentation settings: {presentation_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load presentation settings from {presentation_path}: {e}. Using defaults.")
+            self.presentation_config = {}
+            DefaultValidatingDraft7Validator(self.presentation_validation_schema).validate(self.presentation_config)
     
     def _apply_special_defaults(self, data: Dict[str, Any]):
         """

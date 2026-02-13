@@ -252,11 +252,34 @@ Examples:
         
         # Inject $schema for VSCode intellisense (at the top)
         new_schema = {"$schema": "./concepts_extended_schema.json"}
+        # Remove original $schema if present to avoid overwriting our new link
+        if "$schema" in extended_schema:
+            del extended_schema["$schema"]
         new_schema.update(extended_schema)
         
         with open(dump_path, 'w', encoding='utf-8') as f:
             json.dump(new_schema, f, indent=2)
         logger.info(f"Extended schema saved to: {dump_path}")
+
+        # Save Presentation Extended
+        pres_dump_path = output_dir / "presentation_extended.json"
+        # Inject $schema for VSCode
+        new_pres_config = {"$schema": "./presentation_extended_schema.json"}
+        # Remove original $schema if present to avoid overwriting our new link
+        pres_config_copy = schema_loader.presentation_config.copy()
+        if "$schema" in pres_config_copy:
+            del pres_config_copy["$schema"]
+        new_pres_config.update(pres_config_copy)
+
+        with open(pres_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(new_pres_config, f, indent=2)
+        logger.info(f"Presentation extended saved to: {pres_dump_path}")
+
+        # Save Presentation Extended Schema (copy of the original)
+        pres_schema_dump_path = output_dir / "presentation_extended_schema.json"
+        with open(pres_schema_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(schema_loader.presentation_validation_schema, f, indent=2)
+        logger.info(f"Presentation extended schema saved to: {pres_schema_dump_path}")
 
         # Pass the EXTENDED schema to generators
         schema_loader.business_schema = extended_schema
@@ -325,12 +348,35 @@ Examples:
         
         # Inject $schema for VSCode intellisense (at the top)
         new_schema = {"$schema": "./concepts_extended_schema.json"}
+        # Remove original $schema if present to avoid overwriting our new link
+        if "$schema" in extended_schema:
+            del extended_schema["$schema"]
         new_schema.update(extended_schema)
         
         with open(dump_path, 'w', encoding='utf-8') as f:
             json.dump(new_schema, f, indent=2)
             
         logger.info(f"Extended schema dumped to: {dump_path}")
+
+        # Save Presentation Extended
+        pres_dump_path = output_dir / "presentation_extended.json"
+        # Inject $schema for VSCode
+        new_pres_config = {"$schema": "./presentation_extended_schema.json"}
+        # Remove original $schema if present to avoid overwriting our new link
+        pres_config_copy = schema_loader.presentation_config.copy()
+        if "$schema" in pres_config_copy:
+            del pres_config_copy["$schema"]
+        new_pres_config.update(pres_config_copy)
+
+        with open(pres_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(new_pres_config, f, indent=2)
+        logger.info(f"Presentation extended saved to: {pres_dump_path}")
+
+        # Save Presentation Extended Schema (copy of the original)
+        pres_schema_dump_path = output_dir / "presentation_extended_schema.json"
+        with open(pres_schema_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(schema_loader.presentation_validation_schema, f, indent=2)
+        logger.info(f"Presentation extended schema saved to: {pres_schema_dump_path}")
         
         logger.info(f"Version: {business_schema["version"]}")
         logger.info(f"Number of concepts: {len(business_schema["concepts"])}")

@@ -1,4 +1,5 @@
 {
+  "$schema": "../../schemas/concepts_schema.json",
   "version": "1.0.0",
   "name": "ECommerce Platform",
   "description": "A complete e-commerce business application with products, customers, orders, and categories",
@@ -32,6 +33,7 @@
         {
           "name": "price",
           "type": "decimal",
+          "subtype": "money",
           "required": true,
           "precision": 10,
           "scale": 2,
@@ -202,6 +204,7 @@
         {
           "name": "total_amount",
           "type": "decimal",
+          "subtype": "money",
           "required": true,
           "precision": 10,
           "scale": 2,
@@ -268,6 +271,7 @@
         {
           "name": "unit_price",
           "type": "decimal",
+          "subtype": "money",
           "required": true,
           "precision": 10,
           "scale": 2,
@@ -277,6 +281,7 @@
         {
           "name": "total_price",
           "type": "decimal",
+          "subtype": "money",
           "required": true,
           "precision": 10,
           "scale": 2,

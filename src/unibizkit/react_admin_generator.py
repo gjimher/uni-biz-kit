@@ -27,6 +27,7 @@ class ReactAdminGenerator:
         self.concepts = schema_loader.get_all_concepts()
         self.output_dir = Path(output_dir)
         self.concept_map = {concept["name"]: concept for concept in self.concepts}
+        self.presentation_config = schema_loader.presentation_config
     
     def generate_frontend(self):
         """
@@ -403,8 +404,9 @@ root.render(
     
     def _generate_index_html(self):
         """Generate index.html file in public directory."""
-        index_html_content = """<!DOCTYPE html>
-<html lang="en">
+        locale = self.presentation_config["locale"]
+        index_html_content = f"""<!DOCTYPE html>
+<html lang="{locale}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1280,7 +1282,12 @@ const {edit_comp_name} = () => {{
             elif field["type"] == "relation_to_many":
                 pass # Not in list
             elif field["type"] == "decimal":
-                 list_html = f"""      <NumberField source="{field_name}" options={{{{ style: 'currency', currency: 'USD' }}}} />"""
+                 if field.get("subtype") == "money":
+                     currency = self.presentation_config["currency"]
+                     locale = self.presentation_config["locale"]
+                     list_html = f"""      <NumberField source="{field_name}" options={{{{ style: 'currency', currency: '{currency}' }}}} locales="{locale}" />"""
+                 else:
+                     list_html = f'      <{list_comp} source="{field_name}" />'
             else:
                 list_html = f'      <{list_comp} source="{field_name}" />'
 

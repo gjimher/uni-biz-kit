@@ -4,6 +4,10 @@
   "description": "Schema for defining business concepts and their relationships",
   "type": "object",
   "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path to the JSON schema"
+    },
     "version": {
       "type": "string",
       "description": "Schema version",
@@ -67,7 +71,7 @@
                 "default": false
               }
             },
-            "required": ["fields", "separator"]
+            "required": ["fields"]
           },
           "fields": {
             "type": "array",
@@ -95,8 +99,8 @@
                 },
                 "subtype": {
                   "type": "string",
-                  "description": "Subtype for relation_to_one fields",
-                  "enum": ["part_of", "related_to"]
+                  "description": "Subtype for fields. 'part_of'/'related_to' for relations, 'money' for decimal.",
+                  "enum": ["part_of", "related_to", "money"]
                 },
                 "target": {
                   "type": "string",
