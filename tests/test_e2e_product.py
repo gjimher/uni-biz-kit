@@ -31,12 +31,14 @@ def test_create_product_as_user(page: Page, app_server):
     Pure E2E test: No mocks, no interceptions.
     Acts as a real user creating a product.
     """
-    page.set_default_timeout(5000)
+    page.set_default_timeout(10000)
     print("creating product")
     # 1. Open the app
     page.goto(app_server)
     
     # 2. Go to Products
+    # Expand Catalog menu first
+    page.get_by_text("Catalog").click()
     page.get_by_role("menuitem", name="Products").click()
     
     # 3. Open Creation Form

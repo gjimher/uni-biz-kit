@@ -10,33 +10,18 @@
     },
     "locale": {
       "type": "string",
-      "description": "The BCP 47 language tag for the UI locale (e.g., 'es-ES' for Spain, 'en-US' for USA). This determines the default formatting for numbers, dates, and currencies.",
+      "description": "The BCP 47 language tag for the UI messages and defaults (e.g., 'en-GB').",
       "default": "en-GB"
+    },
+    "number_locale": {
+      "type": "string",
+      "description": "The BCP 47 language tag specifically for number and currency formatting (e.g., 'de-DE' for 1.234,56 format).",
+      "default": "de-DE"
     },
     "currency": {
       "type": "string",
       "description": "The ISO 4217 currency code to be used in the application. Examples: 'EUR' for Euro (€), 'USD' for US Dollar ($), 'GBP' for British Pound (£).",
       "default": "EUR"
-    },
-    "number_formatting": {
-      "type": "object",
-      "description": "Specific number formatting overrides if the locale defaults are not sufficient.",
-      "default": {},
-      "properties": {
-        "decimal_separator": {
-          "type": "string",
-          "description": "The character used to separate the integer part from the fractional part (e.g., ',' in Spain, '.' in USA).",
-          "maxLength": 1,
-          "default": ","
-        },
-        "thousands_separator": {
-          "type": "string",
-          "description": "The character used to separate thousands (e.g., '.' in Spain, ',' in USA).",
-          "maxLength": 1,
-          "default": "."
-        }
-      },
-      "additionalProperties": false
     },
     "menu": {
       "type": "array",

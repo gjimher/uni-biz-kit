@@ -1250,6 +1250,11 @@ const {edit_comp_name} = () => {{
                     if field["type"] == "relation_to_one":
                         target = field["target"]
                         child_columns.append(f'<ReferenceField source="{fname}" reference="{target}"><TextField source="id_presentation" /></ReferenceField>')
+                    elif field["type"] == "decimal" and field.get("subtype") == "money":
+                         currency = self.presentation_config["currency"]
+                         # Use specific currency locale, default is handled by schema validation
+                         number_locale = self.presentation_config["number_locale"]
+                         child_columns.append(f'<NumberField source="{fname}" options={{{{ style: "currency", currency: "{currency}" }}}} locales="{number_locale}" />')
                     else:
                          child_columns.append(f'<{comp} source="{fname}" />')
                     count += 1
@@ -1399,8 +1404,12 @@ const {edit_comp_name} = () => {{
             elif field["type"] == "decimal":
                  if field.get("subtype") == "money":
                      currency = self.presentation_config["currency"]
-                     locale = self.presentation_config["locale"]
-                     list_html = f"""      <NumberField source="{field_name}" options={{{{ style: 'currency', currency: '{currency}' }}}} locales="{locale}" />"""
+                     
+                     # Use specific currency locale for number formatting
+                     # Default is handled by schema validation
+                     number_locale = self.presentation_config["number_locale"]
+                     
+                     list_html = f"""      <NumberField source="{field_name}" options={{{{ style: 'currency', currency: '{currency}' }}}} locales="{number_locale}" />"""
                  else:
                      list_html = f'      <{list_comp} source="{field_name}" />'
             else:
