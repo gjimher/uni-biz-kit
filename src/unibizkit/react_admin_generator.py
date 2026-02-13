@@ -1107,9 +1107,8 @@ const {edit_comp_name} = () => {{
             current_pos += width
             return current_pos
 
-        # Add global search if data_size != "s"
-        if concept["data_size"] != "s":
-            filter_fields.append(f'  <TextInput label="Search" source="id_presentation@ilike" alwaysOn />')
+        # Add global search
+        filter_fields.append(f'  <TextInput label="Search" source="id_presentation@ilike" alwaysOn />')
         
         # Generate child tabs
         if owned_children:
@@ -1228,9 +1227,8 @@ const {edit_comp_name} = () => {{
                     input_html = f'          <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{input_inner}</ReferenceInput>'
                     
                     # Filter field
-                    if concept["data_size"] != "s":
-                         filter_inner = input_inner.replace(f'{{validation}}{{margin}}', '')
-                         filter_fields.append(f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>')
+                    filter_inner = input_inner.replace(f'{{validation}}{{margin}}', '')
+                    filter_fields.append(f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>')
 
             elif field["type"] == "relation_to_many":
                 # Similar logic as before for 1:N inverse vs M:N
@@ -1255,8 +1253,7 @@ const {edit_comp_name} = () => {{
                 choices_str = ', '.join([f"{{ id: '{val}', name: '{val}' }}" for val in enum_values])
                 choices_array = f"[{choices_str}]"
                 input_html = f'          <SelectInput source="{field_name}" choices={{{choices_array}}}{full_width}{validation}{margin} />'
-                if concept["data_size"] != "s":
-                    filter_fields.append(f'  <SelectInput source="{field_name}" choices={{{choices_array}}} />')
+                filter_fields.append(f'  <SelectInput source="{field_name}" choices={{{choices_array}}} />')
 
 
             else:
@@ -1269,6 +1266,11 @@ const {edit_comp_name} = () => {{
                      pass
                 
                 input_html = f'          <{comp_type} source="{field_name}"{extra_props}{full_width}{validation}{margin} />'
+                
+                # Add filter for standard fields
+                # We skip long text fields ('l') as filters
+                if field["size"] != "l":
+                    filter_fields.append(f'  <{comp_type} source="{field_name}" />')
 
             # Construct List Component
             list_html = ""
