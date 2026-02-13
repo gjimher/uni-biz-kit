@@ -42,7 +42,13 @@ class ReactAdminGenerator:
         
         # Generate main app files
         self._generate_package_json()
-        self._generate_app_js()
+        
+        # Generate Menu and Layout if configured
+        has_custom_menu = self._generate_menu_component()
+        if has_custom_menu:
+            self._generate_layout_component()
+            
+        self._generate_app_js(has_custom_layout=has_custom_menu)
         self._generate_index_js()
         
         # Generate data provider
@@ -56,7 +62,142 @@ class ReactAdminGenerator:
             self._generate_resource_files(concept)
         
         logger.info("React-Admin frontend generation completed")
+
+    def _generate_menu_component(self) -> bool:
+        """
+        Generate the custom Menu component if 'menu' is defined in presentation config.
+        Returns True if generated, False otherwise.
+        """
+        menu_config = self.presentation_config.get("menu")
+        if not menu_config:
+            return False
+            
+        import json
+        menu_items_json = json.dumps(menu_config, indent=2)
+        
+        menu_js_content = f"""import * as React from 'react';
+import {{ Menu, useTranslate }} from 'react-admin';
+import {{ Collapse, List, ListItemButton, ListItemIcon, ListItemText }} from '@mui/material';
+import ExpandLess from '@mui/icons-material/ExpandLess';
+import ExpandMore from '@mui/icons-material/ExpandMore';
+import SubMenuIcon from '@mui/icons-material/ViewList';
+
+const menuItems = {menu_items_json};
+
+const SubMenu = ({{ handleToggle, isOpen, name, icon, children, dense }}) => {{
+    const translate = useTranslate();
+    const header = (
+        <ListItemButton onClick={{handleToggle}} dense={{dense}}>
+            <ListItemIcon sx={{{{ minWidth: 40 }}}}>
+                {{isOpen ? <ExpandLess /> : icon || <ExpandMore />}}
+            </ListItemIcon>
+            <ListItemText primary={{name}} />
+        </ListItemButton>
+    );
+
+    return (
+        <React.Fragment>
+            {{header}}
+            <Collapse in={{isOpen}} timeout="auto" unmountOnExit>
+                <List
+                    component="div"
+                    disablePadding
+                    sx={{{{
+                        '& a': {{
+                            paddingLeft: (theme) => theme.spacing(4),
+                            transition: 'padding-left 195ms cubic-bezier(0.4, 0, 0.2, 1) 0ms',
+                        }},
+                    }}}}
+                >
+                    {{children}}
+                </List>
+            </Collapse>
+        </React.Fragment>
+    );
+}};
+
+const RenderMenu = ({{ items, state, handleToggle }}) => {{
+  return items.map((item, index) => {{
+     if (item.children) {{
+         return (
+             <SubMenu 
+                key={{item.label}} 
+                name={{item.label}} 
+                icon={{<SubMenuIcon />}}
+                isOpen={{state[item.label]}} 
+                handleToggle={{() => handleToggle(item.label)}}
+             >
+                <RenderMenu items={{item.children}} state={{state}} handleToggle={{handleToggle}} />
+             </SubMenu>
+         );
+     }} else {{
+         return <Menu.Item key={{item.concept}} to={{`/${{item.concept}}`}} primaryText={{item.label}} />;
+     }}
+  }});
+}};
+
+export const MyMenu = () => {{
+    const [state, setState] = React.useState({{}});
+    const handleToggle = (menu) => {{
+        setState(state => ({{ ...state, [menu]: !state[menu] }}));
+    }};
     
+    return (
+        <Menu>
+             <RenderMenu items={{menuItems}} state={{state}} handleToggle={{handleToggle}} />
+        </Menu>
+    );
+}};
+"""
+        with open(self.output_dir / "src" / "layout" / "MyMenu.js", 'w', encoding='utf-8') as f:
+            f.write(menu_js_content)
+        return True
+
+    def _generate_layout_component(self):
+        """Generate the custom Layout component."""
+        layout_js_content = """import * as React from 'react';
+import { Layout } from 'react-admin';
+import { MyMenu } from './MyMenu';
+
+export const MyLayout = (props) => <Layout {...props} menu={MyMenu} />;
+"""
+        with open(self.output_dir / "src" / "layout" / "MyLayout.js", 'w', encoding='utf-8') as f:
+            f.write(layout_js_content)
+    
+    def _generate_app_js(self, has_custom_layout: bool = False):
+        """Generate App.js file."""
+        # Import statements for all resources
+        import_statements = []
+        resource_components = []
+        
+        for concept in self.concepts:
+            resource_name = concept["name"]
+            import_statements.append(f"import {{ {resource_name}_list, {resource_name}_create, {resource_name}_edit, {resource_name}_show }} from './resources/{resource_name}/{resource_name}.js';")
+            resource_components.append(f"""    <Resource name="{resource_name}" list={{ {resource_name}_list }} create={{ {resource_name}_create }} edit={{ {resource_name}_edit }} show={{ {resource_name}_show }} />""")
+        
+        layout_import = ""
+        layout_prop = ""
+        if has_custom_layout:
+            layout_import = "import { MyLayout } from './layout/MyLayout';"
+            layout_prop = " layout={MyLayout}"
+            
+        app_js_content = f"""import * as React from 'react';
+import {{ Admin, Resource }} from 'react-admin';
+import {{ dataProvider }} from './dataProvider';
+{layout_import}
+{chr(10).join(import_statements)}
+
+const App = () => (
+  <Admin dataProvider={{dataProvider}}{layout_prop}>
+{chr(10).join(resource_components)}
+  </Admin>
+);
+
+export default App;"""
+        
+        with open(self.output_dir / "src" / "App.js", 'w', encoding='utf-8') as f:
+            f.write(app_js_content)
+
     def _generate_custom_components(self):
         """Generate custom reusable components."""
         title_js_content = """import * as React from 'react';
@@ -422,33 +563,7 @@ root.render(
         with open(self.output_dir / "public" / "index.html", 'w', encoding='utf-8') as f:
             f.write(index_html_content)
     
-    def _generate_app_js(self):
-        """Generate App.js file."""
-        # Import statements for all resources
-        import_statements = []
-        resource_components = []
-        
-        for concept in self.concepts:
-            resource_name = concept["name"]
-            import_statements.append(f"import {{ {resource_name}_list, {resource_name}_create, {resource_name}_edit, {resource_name}_show }} from './resources/{resource_name}/{resource_name}.js';")
-            resource_components.append(f"""    <Resource name="{resource_name}" list={{ {resource_name}_list }} create={{ {resource_name}_create }} edit={{ {resource_name}_edit }} show={{ {resource_name}_show }} />""")
-        
-        app_js_content = f"""import * as React from 'react';
-import {{ Admin, Resource }} from 'react-admin';
-import {{ dataProvider }} from './dataProvider';
-{chr(10).join(import_statements)}
 
-const App = () => (
-  <Admin dataProvider={{dataProvider}}>
-{chr(10).join(resource_components)}
-  </Admin>
-);
-
-export default App;"""
-        
-        with open(self.output_dir / "src" / "App.js", 'w', encoding='utf-8') as f:
-            f.write(app_js_content)
-    
     def _generate_data_provider(self):
         """Generate data provider configuration with Many-to-Many support."""
         

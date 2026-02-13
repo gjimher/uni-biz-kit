@@ -1,3 +1,31 @@
 {
-  "$schema": "../../schemas/presentation_schema.json"
+  "$schema": "../../schemas/presentation_schema.json",
+  "menu": [
+    {
+      "label": "Catalog",
+      "children": [
+        {
+          "label": "Products",
+          "concept": "product"
+        },
+        {
+          "label": "Categories",
+          "concept": "category"
+        }
+      ]
+    },
+    {
+      "label": "Sales",
+      "children": [
+        {
+          "label": "Orders",
+          "concept": "order"
+        },
+        {
+          "label": "Customers",
+          "concept": "customer"
+        }
+      ]
+    }
+  ]
 }
