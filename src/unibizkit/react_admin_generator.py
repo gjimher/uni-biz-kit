@@ -399,7 +399,7 @@ export const RecursiveParentSelector = ({ source, reference, label, separator, d
 
     return (
         <>
-            <Box display="flex" alignItems="center" justifyContent="space-between" width="100%" sx={{ border: '1px solid #e0e0e0', borderRadius: 1, p: 1, minHeight: '56px' }}>
+            <Box display="flex" alignItems="center" justifyContent="space-between" width="100%" sx={{ border: '1px solid #e0e0e0', borderRadius: 1, p: 1, minHeight: '56px', mb: 2 }}>
                 <Box flexGrow={1}>
                     <Typography variant="caption" color="textSecondary" display="block">
                         {label}
