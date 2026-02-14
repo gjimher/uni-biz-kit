@@ -221,6 +221,7 @@ import {
     DatagridBody, 
     RecordContextProvider, 
     useListContext, 
+    useListSortContext,
     useUpdate, 
     useNotify, 
     useRefresh 
@@ -229,19 +230,25 @@ import { TableRow, TableCell } from '@mui/material';
 import DragHandleIcon from '@mui/icons-material/Reorder';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
-const DragHandle = () => (
+const DragHandle = ({ disabled }) => (
     <TableCell padding="none">
-        <DragHandleIcon style={{ cursor: 'grab', color: '#999', marginLeft: '10px' }} />
+        <DragHandleIcon 
+            style={{ 
+                cursor: disabled ? 'default' : 'grab', 
+                color: disabled ? '#eee' : '#999', 
+                marginLeft: '10px' 
+            }} 
+        />
     </TableCell>
 );
 
-const ReorderableDatagridRow = ({ record, id, index, children, ...rest }) => (
-    <Draggable draggableId={String(id)} index={index}>
+const ReorderableDatagridRow = ({ record, id, index, isReorderable, children, ...rest }) => (
+    <Draggable draggableId={String(id)} index={index} isDragDisabled={!isReorderable}>
         {(provided, snapshot) => (
             <TableRow
                 ref={provided.innerRef}
                 {...provided.draggableProps}
-                {...provided.dragHandleProps}
+                {...(isReorderable ? provided.dragHandleProps : {})}
                 style={{
                     ...provided.draggableProps.style,
                     backgroundColor: snapshot.isDragging ? '#eee' : 'white',
@@ -249,7 +256,7 @@ const ReorderableDatagridRow = ({ record, id, index, children, ...rest }) => (
                 }}
                 {...rest}
             >
-                <DragHandle />
+                <DragHandle disabled={!isReorderable} />
                 {React.Children.map(children, (field, i) => (
                     React.isValidElement(field) ? (
                         <RecordContextProvider value={record}>
@@ -264,12 +271,12 @@ const ReorderableDatagridRow = ({ record, id, index, children, ...rest }) => (
     </Draggable>
 );
 
-const ReorderableDatagridBody = ({ children, localData, ...rest }) => {
+const ReorderableDatagridBody = ({ children, localData, isReorderable, ...rest }) => {
     const { isLoading } = useListContext();
     if (isLoading || !localData) return null;
 
     return (
-        <Droppable droppableId="datagrid-body">
+        <Droppable droppableId="datagrid-body" isDropDisabled={!isReorderable}>
             {(provided) => (
                 <tbody ref={provided.innerRef} {...provided.droppableProps} {...rest}>
                     {localData.map((record, index) => (
@@ -278,6 +285,7 @@ const ReorderableDatagridBody = ({ children, localData, ...rest }) => {
                             id={record.id}
                             index={index}
                             record={record}
+                            isReorderable={isReorderable}
                         >
                             {children}
                         </ReorderableDatagridRow>
@@ -290,29 +298,44 @@ const ReorderableDatagridBody = ({ children, localData, ...rest }) => {
 };
 
 export const ReorderableDatagrid = ({ children, ...props }) => {
-    const { data, resource, refetch, isLoading } = useListContext();
+    const { data, resource, refetch, isLoading, sort } = useListContext();
+    const { setSort } = useListSortContext();
     const [localData, setLocalData] = React.useState(data);
     const [update] = useUpdate();
     const notify = useNotify();
 
+    const isReorderable = sort && sort.field === 'part_of_order';
+
+    // Force ASC order for part_of_order to keep UI consistent
+    React.useEffect(() => {
+        if (sort && sort.field === 'part_of_order' && sort.order === 'DESC') {
+            setSort({ field: 'part_of_order', order: 'ASC' });
+        }
+    }, [sort, setSort]);
+
     React.useEffect(() => {
         if (data) {
-            // Force sort by part_of_order to ensure UI consistency
-            // This protects against the list context returning unsorted data
-            const sortedData = [...data].sort((a, b) => {
-                const orderA = (a.part_of_order !== undefined && a.part_of_order !== null) ? a.part_of_order : Number.MAX_SAFE_INTEGER;
-                const orderB = (b.part_of_order !== undefined && b.part_of_order !== null) ? b.part_of_order : Number.MAX_SAFE_INTEGER;
-                return orderA - orderB;
-            });
-            setLocalData(sortedData);
+            if (isReorderable) {
+                // Force sort by part_of_order to ensure UI consistency
+                // This protects against the list context returning unsorted data
+                const sortedData = [...data].sort((a, b) => {
+                    const orderA = (a.part_of_order !== undefined && a.part_of_order !== null) ? a.part_of_order : Number.MAX_SAFE_INTEGER;
+                    const orderB = (b.part_of_order !== undefined && b.part_of_order !== null) ? b.part_of_order : Number.MAX_SAFE_INTEGER;
+                    return orderA - orderB;
+                });
+                setLocalData(sortedData);
+            } else {
+                setLocalData(data);
+            }
         }
-    }, [data]);
+    }, [data, isReorderable]);
 
     if (isLoading || !localData) return null;
 
     const onDragEnd = async (result) => {
         if (!result.destination) return;
         if (result.destination.index === result.source.index) return;
+        if (!isReorderable) return;
 
         const startIndex = result.source.index;
         const endIndex = result.destination.index;
@@ -359,7 +382,7 @@ export const ReorderableDatagrid = ({ children, ...props }) => {
 
     return (
         <DragDropContext onDragEnd={onDragEnd}>
-            <Datagrid {...props} body={<ReorderableDatagridBody localData={localData} />}>
+            <Datagrid {...props} body={<ReorderableDatagridBody localData={localData} isReorderable={isReorderable} />}>
                 {children}
             </Datagrid>
         </DragDropContext>
