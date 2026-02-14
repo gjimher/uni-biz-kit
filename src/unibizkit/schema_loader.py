@@ -95,15 +95,12 @@ class SchemaLoader:
             logger.info(f"Successfully loaded and validated schema: {path}")
             self.business_schema = business_schema
 
-            # Try to load presentation.json if it exists in the same directory
+            # Try to load presentation.json
             presentation_path = Path(path).parent / "presentation.json"
-            if presentation_path.exists():
-                self.load_presentation(str(presentation_path))
-            else:
-                # Load with defaults from schema
-                self.presentation_config = {}
-                DefaultValidatingDraft7Validator(self.presentation_validation_schema).validate(self.presentation_config)
-                logger.info("No presentation.json found, using default presentation settings.")
+            if not presentation_path.exists():
+                raise FileNotFoundError(f"'presentation.json' is mandatory. Please provide it in {presentation_path.parent} (it can be an empty object '{{}}' if you want defaults).")
+            
+            self.load_presentation(str(presentation_path))
 
             return business_schema
             
@@ -124,19 +121,14 @@ class SchemaLoader:
         """
         Load and validate the presentation settings.
         """
-        try:
-            with open(presentation_path, 'r', encoding='utf-8') as f:
-                presentation_config = json.load(f)
-            
-            # Validate and inject defaults
-            DefaultValidatingDraft7Validator(self.presentation_validation_schema).validate(presentation_config)
-            
-            self.presentation_config = presentation_config
-            logger.info(f"Successfully loaded and validated presentation settings: {presentation_path}")
-        except Exception as e:
-            logger.warning(f"Failed to load presentation settings from {presentation_path}: {e}. Using defaults.")
-            self.presentation_config = {}
-            DefaultValidatingDraft7Validator(self.presentation_validation_schema).validate(self.presentation_config)
+        with open(presentation_path, 'r', encoding='utf-8') as f:
+            presentation_config = json.load(f)
+        
+        # Validate and inject defaults
+        DefaultValidatingDraft7Validator(self.presentation_validation_schema).validate(presentation_config)
+        
+        self.presentation_config = presentation_config
+        logger.info(f"Successfully loaded and validated presentation settings: {presentation_path}")
     
     def _apply_special_defaults(self, data: Dict[str, Any]):
         """

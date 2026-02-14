@@ -4,57 +4,39 @@
 
 ## Project Architecture
 
-1.  **Input Model:** A JSON file defining business concepts, fields, and relationships (validated against `schemas/concepts_schema.json`).
+1.  **Input Model:** A directory containing:
+    *   `concepts.json`: Defines business concepts, fields, and relationships (validated against `schemas/concepts_schema.json`).
+    *   `presentation.json`: Configures UI-wide settings like currency, locales, and custom menus (validated against `schemas/presentation_schema.json`).
 2.  **Core Logic (`src/unibizkit/`):**
     *   `cli.py`: Entry point handling arguments and commands.
-    *   `schema_loader.py`: Validates and loads the input JSON schema.
+    *   `schema_loader.py`: Validates and loads the input JSON schemas, injecting default values.
+    *   `schema_processor.py`: Enriches the raw schema with internal metadata (`_`-prefixed fields).
     *   `supabase_generator.py`: Generates SQL DDL and sample data for PostgreSQL.
     *   `react_admin_generator.py`: Scaffolds a complete React-Admin frontend project.
-3.  **Output:** A directory containing `backend/` (SQL files) and `frontend/` (React application).
+3.  **Output:** A directory containing:
+    *   `backend/`: SQL files.
+    *   `frontend/`: React application.
+    *   `concepts_extended.json`: The fully enriched IR (Intermediate Representation) used by generators.
+    *   `concepts_extended_schema.json`: A dynamically generated JSON Schema used to validate the enriched IR.
+    *   `presentation_extended.json` & `presentation_extended_schema.json`: Enriched presentation config and its schema.
 
 ## Project Structure
 
 *   `src/unibizkit/`: Main package source code.
-*   `schemas/`: Contains the meta-schema (`concepts_schema.json`) defining the contract for input models.
+*   `schemas/`: 
+    *   `concepts_schema.json`: The meta-schema for the user's business concepts.
+    *   `presentation_schema.json`: The meta-schema for UI configuration.
+    *   `concepts_extended_required_additions.json`: Defines the additional internal fields (like `_type`, `_be_sql_type`, `_fe_component`) that the `SchemaProcessor` adds during enrichment. This is merged with `concepts_schema.json` to create the `concepts_extended_schema.json` in the output folder.
 *   `models/`: Business definitions used for testing and examples (e.g., `test-ecommerce-app/`).
 *   `docs/`: Project documentation (`Development.md`, `USAGE.md`).
 *   `tests/`: Integration and unit tests.
 *   `test-ecommerce-app/`: Dedicated output directory for integration tests. **Do not delete this folder**, as it may contain cached dependencies (like `node_modules`).
-*   `ecommerce-app/`: A reference implementation ("golden master") used for comparison and guiding generator improvements.
 
-## Development Setup
+## Development workflow
 
 The project uses standard Python tooling.
 
-**Installation:**
-```bash
-pip install -r requirements-dev.txt
-pip install -e .
-```
-
-## CLI Usage
-
-The primary entry point is `uni-biz-kit`.
-
-**Validate a Schema:**
-```bash
-uni-biz-kit --task validate models/test-ecommerce-app
-```
-
-**Generate an Application:**
-```bash
-uni-biz-kit models/test-ecommerce-app --output-dir my-output-dir
-```
-
-## Testing & Verification
-
-**Important Rules:**
-*   **Preserve `test-ecommerce-app`:** The tests automatically clean relevant files inside this directory but preserve heavy artifacts like `node_modules`. Never delete the directory itself.
-*   **Accessing `test-ecommerce-app`:** This directory is in `.gitignore`. To read or list files inside it using tools (like `read_file` or `list_directory`), you **must** explicitly set `file_filtering_options: { respect_git_ignore: false }` or equivalent.
-*   **Use Tests for Verification:** Instead of manually running `unibizkit` and checking files, rely on the integration tests.
-*   **Timeouts:** Tests may run for longer than 60 seconds.
-
-**Running Tests:**
+Change generators, run pytest and check generated code in test-ecommcerce-app output directory.
 
 To verify SQL generation:
 ```bash
@@ -70,13 +52,6 @@ To run all tests:
 ```bash
 pytest
 ```
-
-## Contribution Workflow
-
-1.  **Analyze Reference:** Check `ecommerce-app/frontend` for desired code patterns.
-2.  **Modify Generator:** Update `src/unibizkit/` to match those patterns.
-3.  **Verify:** Run `pytest tests/test_ecommerce_frontend.py` to generate code into `test-ecommerce-app`.
-4.  **Compare:** Compare `test-ecommerce-app/frontend` with `ecommerce-app/frontend` to ensure correctness.
 
 **Commit Messages:**
 *   Write in English.

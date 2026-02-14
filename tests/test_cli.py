@@ -53,6 +53,8 @@ class TestCLI:
             temp_path = Path(temp_dir)
             with open(temp_path / "concepts.json", 'w') as f:
                 json.dump(valid_schema, f)
+            with open(temp_path / "presentation.json", 'w') as f:
+                json.dump({}, f)
             
             with patch('sys.argv', ['uni-biz-kit', str(temp_path), '--task', 'validate']):
                 # Should not raise an exception
@@ -116,6 +118,8 @@ class TestCLI:
             temp_path = Path(temp_dir)
             with open(temp_path / "concepts.json", 'w') as f:
                 json.dump(valid_schema, f)
+            with open(temp_path / "presentation.json", 'w') as f:
+                json.dump({}, f)
         
             try:
                 # Default task is generate
@@ -166,6 +170,8 @@ class TestCLI:
             temp_path = Path(temp_dir)
             with open(temp_path / "concepts.json", 'w') as f:
                 json.dump(valid_schema, f)
+            with open(temp_path / "presentation.json", 'w') as f:
+                json.dump({}, f)
         
             try:
                 # Test skip frontend
@@ -219,6 +225,8 @@ class TestCLI:
             temp_path = Path(temp_dir)
             with open(temp_path / "concepts.json", 'w') as f:
                 json.dump(valid_schema, f)
+            with open(temp_path / "presentation.json", 'w') as f:
+                json.dump({}, f)
         
             custom_dir = 'my-custom-app'
             try:
