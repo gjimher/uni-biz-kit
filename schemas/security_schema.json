@@ -15,7 +15,7 @@
     },
     "roles": {
       "type": "array",
-      "description": "Initial roles to seed",
+      "description": "Initial roles to seed. If not provided and authentication is required, 'admin' and 'user' roles are created by default.",
       "items": {
         "type": "object",
         "properties": {
@@ -27,7 +27,7 @@
     },
     "users": {
       "type": "array",
-      "description": "Initial users to seed",
+      "description": "Initial users to seed. If not provided and authentication is required, default users 'admin@test.com' and 'user@test.com' are created.",
       "items": {
         "type": "object",
         "properties": {

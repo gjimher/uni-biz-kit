@@ -333,15 +333,8 @@ Examples:
             with open(sample_data_file, 'w', encoding='utf-8') as f:
                 f.write(sample_data)
 
-            # Write auth users data for API-based creation
-            auth_users = supabase_generator.generate_auth_users_data()
-            auth_users_file = backend_dir / "supabase_auth_users.json"
-            with open(auth_users_file, 'w', encoding='utf-8') as f:
-                json.dump(auth_users, f, indent=2)
-            
             logger.info(f"Supabase schema generated: {sql_file}")
             logger.info(f"Sample data generated: {sample_data_file}")
-            logger.info(f"Auth users data generated: {auth_users_file}")
         
         # Generate React-Admin frontend
         if not args.skip_frontend:

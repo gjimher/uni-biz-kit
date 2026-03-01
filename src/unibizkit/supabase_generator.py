@@ -311,21 +311,6 @@ ALTER TABLE "{table_name}"
 
         
         return fk_constraints
-    
-    def generate_auth_users_data(self) -> List[Dict[str, Any]]:
-        """
-        Generate user data for API-based creation.
-        """
-        security_config = self.schema_loader.security_config
-        if not security_config.get("authentication_required"):
-            return []
-            
-        users = security_config.get("users", [
-            {"email": "admin@test.com", "password": "adminadmin", "roles": ["admin"]},
-            {"email": "user@test.com", "password": "useruser", "roles": ["user"]}
-        ])
-        
-        return users
 
     def generate_sample_data_sql(self) -> str:
         """

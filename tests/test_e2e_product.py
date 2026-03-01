@@ -14,11 +14,12 @@ def test_auth_api_login():
     backend_dir = os.path.abspath("test-app/backend")
     frontend_dir = os.path.abspath("test-app/frontend")
     
-    auth_users_file = os.path.join(backend_dir, "supabase_auth_users.json")
-    assert os.path.exists(auth_users_file), "supabase_auth_users.json not found"
+    security_extended_file = os.path.abspath("test-app/security_extended.json")
+    assert os.path.exists(security_extended_file), "security_extended.json not found"
     
-    with open(auth_users_file, 'r') as f:
-        auth_users = json.load(f)
+    with open(security_extended_file, 'r') as f:
+        security_data = json.load(f)
+        auth_users = security_data.get("users", [])
     
     load_dotenv(os.path.join(frontend_dir, ".env"))
     api_url = os.getenv("REACT_APP_SUPABASE_URL")

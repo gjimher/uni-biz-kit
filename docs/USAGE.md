@@ -322,20 +322,20 @@ curl -X GET -H "apikey: $REACT_APP_SUPABASE_KEY" "$REACT_APP_SUPABASE_URL/rest/v
 
 ### Create Auth Users
 
-Since Supabase Auth users cannot be easily created via SQL in some environments, UniBizKit generates a `supabase_auth_users.json` file in the `backend/` directory. You can create these users using the Supabase Admin API:
+Since Supabase Auth users cannot be easily created via SQL in some environments, UniBizKit generates a `security_extended.json` file in the output directory. You can create these users using the Supabase Admin API:
 
 ```bash
 # Load environment variables
 source .env
 
-# Create users using curl
-jq -c '.[]' supabase_auth_users.json | while read user; do
+# Create users using curl from security_extended.json (located in the parent directory)
+jq -c '.users[]' ../security_extended.json | while read user; do
   email=$(echo $user | jq -r '.email')
   password=$(echo $user | jq -r '.password')
   role=$(echo $user | jq -r '.roles[0]')
   
   echo "Creating user: $email"
-  curl -X POST "$REACT_APP_SUPABASE_URL/auth/v1/admin/users" \
+  curl -X POST "$SUPABASE_URL/auth/v1/admin/users" \
     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
     -H "Content-Type: application/json" \

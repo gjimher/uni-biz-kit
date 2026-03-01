@@ -175,10 +175,11 @@ class TestAppBackend:
 
             # Create users via API
             print("Creating Auth users via API...")
-            auth_users_file = backend_dir / "supabase_auth_users.json"
-            if auth_users_file.exists():
-                with open(auth_users_file, 'r') as f:
-                    auth_users = json.load(f)
+            security_extended_file = output_dir / "security_extended.json"
+            if security_extended_file.exists():
+                with open(security_extended_file, 'r') as f:
+                    security_data = json.load(f)
+                    auth_users = security_data.get("users", [])
                 
                 load_dotenv(backend_dir / ".env", override=True)
                 service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")

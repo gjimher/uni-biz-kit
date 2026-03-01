@@ -41,6 +41,9 @@ class SchemaProcessor:
         Returns:
             The extended schema dictionary.
         """
+        # 0. Enrich Security
+        self._enrich_security()
+
         # 1. Pass 1: Local Concept Processing (Fields, Basic Metadata)
         # We need to iterate by index to modify the list in place with a reordered dict
         for idx, concept in enumerate(self.concepts):
@@ -62,6 +65,21 @@ class SchemaProcessor:
             self._process_relationships(concept)
 
         return self.extended_schema
+
+    def _enrich_security(self):
+        """Inject default roles and users if missing."""
+        if self.security_extended.get("authentication_required"):
+            if "roles" not in self.security_extended or not self.security_extended["roles"]:
+                self.security_extended["roles"] = [
+                    {"name": "admin", "description": "System Administrator"},
+                    {"name": "user", "description": "Standard User"}
+                ]
+            
+            if "users" not in self.security_extended or not self.security_extended["users"]:
+                self.security_extended["users"] = [
+                    {"email": "admin@test.com", "password": "adminadmin", "roles": ["admin"]},
+                    {"email": "user@test.com", "password": "useruser", "roles": ["user"]}
+                ]
 
     def _process_concept_basics(self, concept: Dict[str, Any]) -> Dict[str, Any]:
         """
