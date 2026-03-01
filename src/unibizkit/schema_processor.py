@@ -14,27 +14,34 @@ import copy
 from typing import Dict, Any, List, Optional
 
 class SchemaProcessor:
-    def __init__(self, schema: Dict[str, Any]):
+    def __init__(self, schema: Dict[str, Any], security_config: Optional[Dict[str, Any]] = None, presentation_config: Optional[Dict[str, Any]] = None):
         """
         Initialize the Schema Processor.
         
         Args:
             schema: The raw loaded business schema.
+            security_config: The loaded security configuration.
+            presentation_config: The loaded presentation configuration.
         """
         self.raw_schema = schema
+        self.security_config = security_config or {"authentication_required": False}
+        self.security_extended = copy.deepcopy(self.security_config)
+        self.presentation_extended = copy.deepcopy(presentation_config or {})
+        
         # We work on a deep copy to avoid mutating the original
         self.extended_schema = copy.deepcopy(schema)
+        
         self.concepts = self.extended_schema["concepts"]
         self.concept_map = {c["name"]: c for c in self.concepts}
 
     def process(self) -> Dict[str, Any]:
         """
-        Enrich the schema with internal metadata.
+        Enrich the schema and presentation with internal metadata.
         
         Returns:
             The extended schema dictionary.
         """
-        # Pass 1: Local Concept Processing (Fields, Basic Metadata)
+        # 1. Pass 1: Local Concept Processing (Fields, Basic Metadata)
         # We need to iterate by index to modify the list in place with a reordered dict
         for idx, concept in enumerate(self.concepts):
             # Process basics returns a NEW dict with reordered keys

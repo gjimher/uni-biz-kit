@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Security Schema",
+  "description": "Schema for defining application security settings",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path to the JSON schema"
+    },
+    "authentication_required": {
+      "type": "boolean",
+      "description": "Whether authentication is required to access the application",
+      "default": true
+    },
+    "roles": {
+      "type": "array",
+      "description": "Initial roles to seed",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" }
+        },
+        "required": ["name"]
+      }
+    },
+    "users": {
+      "type": "array",
+      "description": "Initial users to seed",
+      "items": {
+        "type": "object",
+        "properties": {
+          "email": { "type": "string" },
+          "password": { "type": "string" },
+          "roles": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["email", "password", "roles"]
+      }
+    },
+    "rules": {
+      "type": "array",
+      "description": "Security rules for role-based access control",
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": { "type": "string", "description": "Role name (e.g., 'admin', 'user')" },
+          "concept": { "type": "string", "description": "Concept name or '*' for all" },
+          "access": { "enum": ["read", "write"], "description": "Access level" }
+        },
+        "required": ["role", "concept", "access"]
+      }
+    }
+  },
+  "required": ["authentication_required"],
+  "additionalProperties": false
+}

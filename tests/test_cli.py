@@ -55,7 +55,9 @@ class TestCLI:
                 json.dump(valid_schema, f)
             with open(temp_path / "presentation.json", 'w') as f:
                 json.dump({}, f)
-            
+            with open(temp_path / "security.json", 'w') as f:
+                json.dump({"authentication_required": False}, f)
+    
             with patch('sys.argv', ['uni-biz-kit', str(temp_path), '--task', 'validate']):
                 # Should not raise an exception
                 cli.run()
@@ -120,6 +122,8 @@ class TestCLI:
                 json.dump(valid_schema, f)
             with open(temp_path / "presentation.json", 'w') as f:
                 json.dump({}, f)
+            with open(temp_path / "security.json", 'w') as f:
+                json.dump({"authentication_required": False}, f)
         
             try:
                 # Default task is generate
@@ -172,6 +176,8 @@ class TestCLI:
                 json.dump(valid_schema, f)
             with open(temp_path / "presentation.json", 'w') as f:
                 json.dump({}, f)
+            with open(temp_path / "security.json", 'w') as f:
+                json.dump({"authentication_required": False}, f)
         
             try:
                 # Test skip frontend
@@ -227,6 +233,8 @@ class TestCLI:
                 json.dump(valid_schema, f)
             with open(temp_path / "presentation.json", 'w') as f:
                 json.dump({}, f)
+            with open(temp_path / "security.json", 'w') as f:
+                json.dump({"authentication_required": False}, f)
         
             custom_dir = 'my-custom-app'
             try:

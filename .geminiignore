@@ -1,0 +1,4 @@
+# to check generated code
+!/test-ecommerce-app
+!/test-ecommerce-app/**
+/test-ecommerce-app/**/node_modules/

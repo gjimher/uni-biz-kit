@@ -33,6 +33,9 @@ class SupabaseGenerator:
         """
         sql_parts = []
 
+        # Ensure pgcrypto is available for password hashing
+        sql_parts.append("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
+
         # Add generic updated_at function
         sql_parts.append("""
 CREATE OR REPLACE FUNCTION update_updated_at_column() 
@@ -61,7 +64,56 @@ $$ LANGUAGE plpgsql;
         presentation_triggers = self._generate_presentation_triggers()
         sql_parts.extend(presentation_triggers)
         
+        # Generate Security Policies (RLS)
+        if self.schema_loader.security_config.get("authentication_required"):
+            security_policies = self._generate_security_policies()
+            sql_parts.extend(security_policies)
+        
         return '\n\n'.join(sql_parts)
+
+    def _generate_security_policies(self) -> List[str]:
+        """
+        Generate Row Level Security (RLS) policies.
+        """
+        policies = []
+        
+        tables_to_secure = [c["name"] for c in self.concepts]
+        
+        # Calculate join table names cleanly.
+        join_tables = []
+        for concept in self.concepts:
+            for field in concept["fields"]:
+                if field["type"] == "relation_to_many":
+                    target_name = field["target"]
+                    target_concept = self.concept_map.get(target_name)
+                    if not target_concept: continue
+                    
+                    is_one_to_many = False
+                    for target_field in target_concept["fields"]:
+                        if target_field["type"] == "relation_to_one" and target_field["target"] == concept["name"]:
+                             is_one_to_many = True
+                             break
+                    
+                    if not is_one_to_many:
+                        t1, t2 = concept["name"], target_name
+                        jt = f"{min(t1, t2)}_{max(t1, t2)}"
+                        if jt not in join_tables:
+                            join_tables.append(jt)
+        
+        all_tables = tables_to_secure + join_tables
+        
+        for table in all_tables:
+            policies.append(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY;')
+            # Allow all authenticated users to do everything
+            policies.append(f"""
+CREATE POLICY "allow_all_authenticated" ON "{table}"
+FOR ALL
+TO authenticated
+USING (true)
+WITH CHECK (true);
+""")
+
+        return policies
     
     def _generate_table_sql(self, concept: Dict[str, Any]) -> str:
         """
@@ -260,6 +312,21 @@ ALTER TABLE "{table_name}"
         
         return fk_constraints
     
+    def generate_auth_users_data(self) -> List[Dict[str, Any]]:
+        """
+        Generate user data for API-based creation.
+        """
+        security_config = self.schema_loader.security_config
+        if not security_config.get("authentication_required"):
+            return []
+            
+        users = security_config.get("users", [
+            {"email": "admin@test.com", "password": "adminadmin", "roles": ["admin"]},
+            {"email": "user@test.com", "password": "useruser", "roles": ["user"]}
+        ])
+        
+        return users
+
     def generate_sample_data_sql(self) -> str:
         """
         Generate SQL for inserting sample data.
@@ -268,7 +335,7 @@ ALTER TABLE "{table_name}"
             SQL INSERT statements as a string
         """
         sql_parts = []
-        
+
         # Topological sort of concepts to ensure foreign key dependencies are met
         sorted_concepts = []
         visited = set()

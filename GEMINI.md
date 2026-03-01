@@ -2,16 +2,21 @@
 
 **UniBizKit** is a model-driven CLI tool that generates full-stack business applications from a declarative JSON schema. It currently targets **Supabase (PostgreSQL)** for the data layer and **React-Admin** for the presentation layer.
 
+## Critical Instructions
+
+*   **Python Command:** ALWAYS use `python` to execute python scripts or commands. NEVER use `python3`. The system is configured such that `python` is the correct executable.
+
 ## Project Architecture
 
 1.  **Input Model:** A directory containing:
     *   `concepts.json`: Defines business concepts, fields, and relationships (validated against `schemas/concepts_schema.json`).
     *   `presentation.json`: Configures UI-wide settings like currency, locales, and custom menus (validated against `schemas/presentation_schema.json`).
+    *   `security.json`: Configures application security and initial seed data (validated against `schemas/security_schema.json`).
 2.  **Core Logic (`src/unibizkit/`):**
     *   `cli.py`: Entry point handling arguments and commands.
     *   `schema_loader.py`: Validates and loads the input JSON schemas, injecting default values.
-    *   `schema_processor.py`: Enriches the raw schema with internal metadata (`_`-prefixed fields).
-    *   `supabase_generator.py`: Generates SQL DDL and sample data for PostgreSQL.
+    *   `schema_processor.py`: Enriches the raw schema with internal metadata (`_`-prefixed fields). Also injects authentication concepts (`user`, `role`) if security is enabled.
+    *   `supabase_generator.py`: Generates SQL DDL and sample data for PostgreSQL, including security seeds.
     *   `react_admin_generator.py`: Scaffolds a complete React-Admin frontend project.
 3.  **Output:** A directory containing:
     *   `backend/`: SQL files.
@@ -19,6 +24,7 @@
     *   `concepts_extended.json`: The fully enriched IR (Intermediate Representation) used by generators.
     *   `concepts_extended_schema.json`: A dynamically generated JSON Schema used to validate the enriched IR.
     *   `presentation_extended.json` & `presentation_extended_schema.json`: Enriched presentation config and its schema.
+    *   `security_extended.json` & `security_extended_schema.json`: Enriched security config and its schema.
 
 ## Project Structure
 
@@ -26,6 +32,7 @@
 *   `schemas/`: 
     *   `concepts_schema.json`: The meta-schema for the user's business concepts.
     *   `presentation_schema.json`: The meta-schema for UI configuration.
+    *   `security_schema.json`: The meta-schema for application security.
     *   `concepts_extended_required_additions.json`: Defines the additional internal fields (like `_type`, `_be_sql_type`, `_fe_component`) that the `SchemaProcessor` adds during enrichment. This is merged with `concepts_schema.json` to create the `concepts_extended_schema.json` in the output folder.
 *   `models/`: Business definitions used for testing and examples (e.g., `test-ecommerce-app/`).
 *   `docs/`: Project documentation (`Development.md`, `USAGE.md`).
@@ -36,12 +43,16 @@
 
 The project uses standard Python tooling.
 
+**IMPORTANT:** 
+* Do not run `python -m src.unibizkit.main` or `uni-biz-kit` directly for development generation. Always use `pytest` to ensure the environment and output directories are correctly handled and to verify the generated code immediately. 
+
 Change generators, run pytest and check generated code in test-ecommcerce-app output directory.
 
 To verify SQL generation:
 ```bash
 pytest tests/test_ecommerce_backend.py
 ```
+**Note:** This test recreates the database state (wipes the `public` schema and cleans up `auth` users) to ensure a clean deployment verification.
 
 To verify Frontend generation:
 ```bash

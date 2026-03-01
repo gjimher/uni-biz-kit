@@ -12,6 +12,7 @@ import shutil
 import time
 import re
 import subprocess
+import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 from unibizkit.cli import CLI
@@ -37,8 +38,8 @@ class TestEcommerceBackend:
         cli = CLI()
         
         # Use the ecommerce schema from models
-        schema_path = Path('models/test-ecommerce-app/concepts.json')
-        output_dir = Path('test-ecommerce-app')
+        schema_path = Path('models/test-ecommerce-app/concepts.json').resolve()
+        output_dir = Path('test-ecommerce-app').resolve()
         
         print("Executing uni-biz-kit: generating a complete ecommerce application from schema")
         with patch('sys.argv', ['uni-biz-kit', 'models/test-ecommerce-app', '--output-dir', str(output_dir)]):
@@ -99,25 +100,6 @@ class TestEcommerceBackend:
                 )
                 assert migration_result.returncode == 0, f"Supabase new migration failed with return code {migration_result.returncode}"
 
-                # Reset database
-                print("Executing: 'npx supabase db reset'")
-                reset_result = subprocess.run(
-                    ['npx', 'supabase', 'db', 'reset'],
-                    stdout=sys.stdout, 
-                    stderr=sys.stderr, 
-                    timeout=300
-                )
-                assert reset_result.returncode == 0, f"Supabase reset failed with return code {reset_result.returncode}"
-
-                print("Supabase new migration...")
-                migration_result = subprocess.run(
-                    ['npx', 'supabase', 'migration', 'new', 'init_schema'],
-                    stdout=sys.stdout, 
-                    stderr=sys.stderr, 
-                    timeout=300
-                )
-                assert migration_result.returncode == 0, f"Supabase new migration failed with return code {migration_result.returncode}"
-            
                 # Create .env file with supabase credentials
                 print("Creating .env files...")
                 status_result = subprocess.run(
@@ -131,12 +113,13 @@ class TestEcommerceBackend:
                 api_url = status_data.get('API_URL', '')
                 anon_key = status_data.get('ANON_KEY', '')
                 db_url = status_data.get('DB_URL', '')
+                service_role_key = status_data.get('SERVICE_ROLE_KEY', '')
 
                 # Change back to original directory
                 os.chdir(original_cwd)
 
                 # Write .env files
-                (backend_dir / ".env").write_text(f"DB_URL={db_url}\n")
+                (backend_dir / ".env").write_text(f"DB_URL={db_url}\nSUPABASE_URL={api_url}\nSUPABASE_SERVICE_ROLE_KEY={service_role_key}\n")
                 (frontend_dir / ".env").write_text(f"REACT_APP_SUPABASE_URL={api_url}\nREACT_APP_SUPABASE_KEY={anon_key}\n")
             else:
                 print("Supabase directory already exists, skipping initialization")
@@ -160,22 +143,6 @@ class TestEcommerceBackend:
             shutil.copy(str(sample_data_file), str(seed_file))
             print(f"Copied sample data to {seed_file}")
             
-            """
-            It recreates containers and runs slowly 
-
-            # Reset database
-            print("Executing: 'npx supabase db reset'")
-            reset_result = subprocess.run(
-                ['npx', 'supabase', 'db', 'reset'],
-                stdout=sys.stdout, 
-                stderr=sys.stderr, 
-                timeout=300
-            )
-            assert reset_result.returncode == 0, f"Supabase reset failed with return code {reset_result.returncode}"
-            
-            print("✓ Ecommerce backend generated and database setup successfully!")
-            """
-
             load_dotenv(".env")
             db_url = os.getenv("DB_URL")
             assert db_url
@@ -196,10 +163,62 @@ class TestEcommerceBackend:
                             EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
                         END LOOP;
                     END $$;"""))
+                
+                print("Cleaning auth.users...")
+                cur.execute("DELETE FROM auth.users;")
+
                 print("Loading schema")
                 cur.execute(schema_file.read_text())
                 print("Loading seed data")
                 cur.execute(seed_file.read_text())
+
+            # Create users via API
+            print("Creating Auth users via API...")
+            auth_users_file = backend_dir / "supabase_auth_users.json"
+            if auth_users_file.exists():
+                with open(auth_users_file, 'r') as f:
+                    auth_users = json.load(f)
+                
+                load_dotenv(backend_dir / ".env", override=True)
+                service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+                # We need the API_URL from the status, but it's also in frontend/.env as REACT_APP_SUPABASE_URL
+                load_dotenv(frontend_dir / ".env", override=True)
+                api_url = os.getenv("REACT_APP_SUPABASE_URL")
+
+                for user in auth_users:
+                    email = user["email"]
+                    password = user["password"]
+                    print(f"  Creating user: {email}")
+                    
+                    # Supabase Admin API to create user
+                    url = f"{api_url}/auth/v1/admin/users"
+                    data = json.dumps({
+                        "email": email,
+                        "password": password,
+                        "email_confirm": True
+                    }).encode('utf-8')
+                    
+                    req = urllib.request.Request(
+                        url, 
+                        data=data, 
+                        headers={
+                            'Authorization': f'Bearer {service_role_key}',
+                            'Content-Type': 'application/json',
+                            'apikey': service_role_key
+                        },
+                        method='POST'
+                    )
+                    
+                    try:
+                        with urllib.request.urlopen(req) as response:
+                            res_body = response.read().decode('utf-8')
+                            print(f"    User {email} created successfully.")
+                    except urllib.error.HTTPError as e:
+                        error_body = e.read().decode('utf-8')
+                        if e.code == 422 and "User already exists" in error_body:
+                            print(f"    User {email} already exists, skipping.")
+                        else:
+                            print(f"    Error creating user {email}: {e.code} {error_body}")
 
         finally:
             os.chdir(original_cwd)

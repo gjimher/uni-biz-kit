@@ -240,7 +240,11 @@ Examples:
         
         # Enrich Schema (Intermediate Representation)
         logger.info("Enriching schema with internal metadata...")
-        processor = SchemaProcessor(business_schema)
+        processor = SchemaProcessor(
+            business_schema, 
+            schema_loader.security_config,
+            schema_loader.presentation_config
+        )
         extended_schema = processor.process()
 
         # Validate Extended Schema
@@ -266,7 +270,7 @@ Examples:
         # Inject $schema for VSCode
         new_pres_config = {"$schema": "./presentation_extended_schema.json"}
         # Remove original $schema if present to avoid overwriting our new link
-        pres_config_copy = schema_loader.presentation_config.copy()
+        pres_config_copy = processor.presentation_extended.copy()
         if "$schema" in pres_config_copy:
             del pres_config_copy["$schema"]
         new_pres_config.update(pres_config_copy)
@@ -281,9 +285,33 @@ Examples:
             json.dump(schema_loader.presentation_validation_schema, f, indent=2)
         logger.info(f"Presentation extended schema saved to: {pres_schema_dump_path}")
 
+        # Update loader with enriched configs for generators
+        schema_loader.presentation_config = processor.presentation_extended
+
+        # Save Security Extended
+        sec_dump_path = output_dir / "security_extended.json"
+        # Inject $schema for VSCode
+        new_sec_config = {"$schema": "./security_extended_schema.json"}
+        # Remove original $schema if present to avoid overwriting our new link
+        sec_config_copy = processor.security_extended.copy()
+        if "$schema" in sec_config_copy:
+            del sec_config_copy["$schema"]
+        new_sec_config.update(sec_config_copy)
+
+        with open(sec_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(new_sec_config, f, indent=2)
+        logger.info(f"Security extended saved to: {sec_dump_path}")
+
+        # Save Security Extended Schema (copy of the original)
+        sec_schema_dump_path = output_dir / "security_extended_schema.json"
+        with open(sec_schema_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(schema_loader.security_validation_schema, f, indent=2)
+        logger.info(f"Security extended schema saved to: {sec_schema_dump_path}")
+
         # Pass the EXTENDED schema to generators
         schema_loader.business_schema = extended_schema
         schema_loader.concepts = extended_schema["concepts"]
+        schema_loader.security_config = processor.security_extended
         
         # Generate Supabase schema
         if not args.skip_backend:
@@ -304,9 +332,16 @@ Examples:
             sample_data_file = backend_dir / "supabase_sample_data.sql"
             with open(sample_data_file, 'w', encoding='utf-8') as f:
                 f.write(sample_data)
+
+            # Write auth users data for API-based creation
+            auth_users = supabase_generator.generate_auth_users_data()
+            auth_users_file = backend_dir / "supabase_auth_users.json"
+            with open(auth_users_file, 'w', encoding='utf-8') as f:
+                json.dump(auth_users, f, indent=2)
             
             logger.info(f"Supabase schema generated: {sql_file}")
             logger.info(f"Sample data generated: {sample_data_file}")
+            logger.info(f"Auth users data generated: {auth_users_file}")
         
         # Generate React-Admin frontend
         if not args.skip_frontend:
@@ -335,7 +370,11 @@ Examples:
         
         # Enrich Schema to test processor
         logger.info("Enriching schema to verify processor logic...")
-        processor = SchemaProcessor(business_schema)
+        processor = SchemaProcessor(
+            business_schema, 
+            schema_loader.security_config,
+            schema_loader.presentation_config
+        )
         extended_schema = processor.process()
         
         # Validate against Extended Schema Definition
@@ -363,7 +402,7 @@ Examples:
         # Inject $schema for VSCode
         new_pres_config = {"$schema": "./presentation_extended_schema.json"}
         # Remove original $schema if present to avoid overwriting our new link
-        pres_config_copy = schema_loader.presentation_config.copy()
+        pres_config_copy = processor.presentation_extended.copy()
         if "$schema" in pres_config_copy:
             del pres_config_copy["$schema"]
         new_pres_config.update(pres_config_copy)
@@ -377,6 +416,29 @@ Examples:
         with open(pres_schema_dump_path, 'w', encoding='utf-8') as f:
             json.dump(schema_loader.presentation_validation_schema, f, indent=2)
         logger.info(f"Presentation extended schema saved to: {pres_schema_dump_path}")
+
+        # Update loader with enriched configs for generators
+        schema_loader.presentation_config = processor.presentation_extended
+
+        # Save Security Extended
+        sec_dump_path = output_dir / "security_extended.json"
+        # Inject $schema for VSCode
+        new_sec_config = {"$schema": "./security_extended_schema.json"}
+        # Remove original $schema if present to avoid overwriting our new link
+        sec_config_copy = processor.security_extended.copy()
+        if "$schema" in sec_config_copy:
+            del sec_config_copy["$schema"]
+        new_sec_config.update(sec_config_copy)
+
+        with open(sec_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(new_sec_config, f, indent=2)
+        logger.info(f"Security extended saved to: {sec_dump_path}")
+
+        # Save Security Extended Schema (copy of the original)
+        sec_schema_dump_path = output_dir / "security_extended_schema.json"
+        with open(sec_schema_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(schema_loader.security_validation_schema, f, indent=2)
+        logger.info(f"Security extended schema saved to: {sec_schema_dump_path}")
         
         logger.info(f"Version: {business_schema["version"]}")
         logger.info(f"Number of concepts: {len(business_schema["concepts"])}")

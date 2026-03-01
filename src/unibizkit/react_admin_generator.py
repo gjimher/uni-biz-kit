@@ -9,6 +9,7 @@ from .schema_loader import SchemaLoader
 import os
 import logging
 import shutil
+import copy
 from pathlib import Path
 
 # Set up logging
@@ -48,30 +49,40 @@ class ReactAdminGenerator:
         if has_custom_menu:
             self._generate_layout_component()
             
-        self._generate_app_js(has_custom_layout=has_custom_menu)
         self._generate_index_js()
         
         # Generate data provider
         self._generate_data_provider()
         
+        # Generate auth provider
+        has_auth_provider = False
+        if self.schema_loader.security_config.get("authentication_required"):
+             self._generate_auth_provider()
+             self._generate_login_page()
+             has_auth_provider = True
+
         # Generate custom components
         self._generate_custom_components()
         
         # Generate resources for each concept
         for concept in self.concepts:
             self._generate_resource_files(concept)
+
+        # Update App.js with AuthProvider if needed (Requires rewriting App.js generation call or moving it)
+        # Actually, let's regenerate App.js with the correct props
+        self._generate_app_js(has_custom_layout=has_custom_menu, has_auth_provider=has_auth_provider)
         
         logger.info("React-Admin frontend generation completed")
 
     def _generate_menu_component(self) -> bool:
         """
-        Generate the custom Menu component if 'menu' is defined in presentation config.
-        Returns True if generated, False otherwise.
+        Generate the custom Menu component.
         """
         menu_config = self.presentation_config.get("menu")
+        
         if not menu_config:
             return False
-            
+
         import json
         menu_items_json = json.dumps(menu_config, indent=2)
         
@@ -81,6 +92,9 @@ import {{ Collapse, List, ListItemButton, ListItemIcon, ListItemText }} from '@m
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import SubMenuIcon from '@mui/icons-material/ViewList';
+import SecurityIcon from '@mui/icons-material/Security';
+import UserIcon from '@mui/icons-material/People';
+import RoleIcon from '@mui/icons-material/VerifiedUser';
 
 const menuItems = {menu_items_json};
 
@@ -89,9 +103,10 @@ const SubMenu = ({{ handleToggle, isOpen, name, icon, children, dense }}) => {{
     const header = (
         <ListItemButton onClick={{handleToggle}} dense={{dense}}>
             <ListItemIcon sx={{{{ minWidth: 40 }}}}>
-                {{isOpen ? <ExpandLess /> : icon || <ExpandMore />}}
+                {{icon}}
             </ListItemIcon>
             <ListItemText primary={{name}} />
+            {{isOpen ? <ExpandLess /> : <ExpandMore />}}
         </ListItemButton>
     );
 
@@ -119,11 +134,14 @@ const SubMenu = ({{ handleToggle, isOpen, name, icon, children, dense }}) => {{
 const RenderMenu = ({{ items, state, handleToggle }}) => {{
   return items.map((item, index) => {{
      if (item.children) {{
+         let Icon = SubMenuIcon;
+         if (item.label === 'Security') Icon = SecurityIcon;
+
          return (
              <SubMenu 
                 key={{item.label}} 
                 name={{item.label}} 
-                icon={{<SubMenuIcon />}}
+                icon={{<Icon />}}
                 isOpen={{state[item.label]}} 
                 handleToggle={{() => handleToggle(item.label)}}
              >
@@ -131,7 +149,11 @@ const RenderMenu = ({{ items, state, handleToggle }}) => {{
              </SubMenu>
          );
      }} else {{
-         return <Menu.Item key={{item.concept}} to={{`/${{item.concept}}`}} primaryText={{item.label}} />;
+         let Icon = null;
+         if (item.concept === 'user') Icon = <UserIcon />;
+         if (item.concept === 'role') Icon = <RoleIcon />;
+
+         return <Menu.Item key={{item.concept}} to={{`/${{item.concept}}`}} primaryText={{item.label}} leftIcon={{Icon}} />;
      }}
   }});
 }};
@@ -164,7 +186,7 @@ export const MyLayout = (props) => <Layout {...props} menu={MyMenu} />;
         with open(self.output_dir / "src" / "layout" / "MyLayout.js", 'w', encoding='utf-8') as f:
             f.write(layout_js_content)
     
-    def _generate_app_js(self, has_custom_layout: bool = False):
+    def _generate_app_js(self, has_custom_layout: bool = False, has_auth_provider: bool = False):
         """Generate App.js file."""
         # Import statements for all resources
         import_statements = []
@@ -181,14 +203,21 @@ export const MyLayout = (props) => <Layout {...props} menu={MyMenu} />;
             layout_import = "import { MyLayout } from './layout/MyLayout';"
             layout_prop = " layout={MyLayout}"
             
+        auth_import = ""
+        auth_prop = ""
+        if has_auth_provider:
+             auth_import = "import { authProvider } from './authProvider';\nimport { MyLoginPage } from './layout/MyLoginPage';"
+             auth_prop = " authProvider={authProvider} loginPage={MyLoginPage}"
+             
         app_js_content = f"""import * as React from 'react';
 import {{ Admin, Resource }} from 'react-admin';
 import {{ dataProvider }} from './dataProvider';
 {layout_import}
+{auth_import}
 {chr(10).join(import_statements)}
 
 const App = () => (
-  <Admin dataProvider={{dataProvider}}{layout_prop}>
+  <Admin dataProvider={{dataProvider}}{layout_prop}{auth_prop}>
 {chr(10).join(resource_components)}
   </Admin>
 );
@@ -586,6 +615,90 @@ root.render(
         with open(self.output_dir / "public" / "index.html", 'w', encoding='utf-8') as f:
             f.write(index_html_content)
     
+
+    def _generate_auth_provider(self):
+        """Generate auth provider using explicit Supabase implementation."""
+        auth_provider_content = """import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
+const supabaseClient = createClient(supabaseUrl, supabaseKey);
+
+export const authProvider = {
+    login: async ({ username, password }) => {
+        // Supabase expects email, so we assume username is email or map it
+        // Check if username looks like an email
+        let email = username;
+        if (!email.includes('@')) {
+            // Fallback for demo users (e.g. admin -> admin@test.com)
+            email = `${username}@test.com`;
+        }
+
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (error) {
+            throw new Error(error.message);
+        }
+
+        return data;
+    },
+    logout: async () => {
+        await supabaseClient.auth.signOut();
+        return Promise.resolve();
+    },
+    checkError: async (error) => {
+        if (error.status === 401 || error.status === 403) {
+             return Promise.reject();
+        }
+        return Promise.resolve();
+    },
+    checkAuth: async () => {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session) {
+            return Promise.reject();
+        }
+        return Promise.resolve();
+    },
+    getPermissions: async () => {
+        // We rely on Supabase RLS, so frontend permissions are minimal or handled differently
+        return Promise.resolve([]);
+    },
+    getIdentity: async () => {
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        if (!user) return Promise.reject();
+        return Promise.resolve({ id: user.id, fullName: user.email });
+    }
+};
+"""
+        with open(self.output_dir / "src" / "authProvider.js", 'w', encoding='utf-8') as f:
+            f.write(auth_provider_content)
+
+    def _generate_login_page(self):
+        """Generate a custom login page to change labels."""
+        login_page_content = """import * as React from 'react';
+import { Login, LoginForm, TextInput } from 'react-admin';
+
+const MyLoginForm = props => (
+    <LoginForm {...props}>
+        <TextInput
+            source="username"
+            label="Email"
+            autoFocus
+        />
+    </LoginForm>
+);
+
+export const MyLoginPage = props => (
+    <Login {...props}>
+        <MyLoginForm />
+    </Login>
+);
+"""
+        with open(self.output_dir / "src" / "layout" / "MyLoginPage.js", 'w', encoding='utf-8') as f:
+            f.write(login_page_content)
 
     def _generate_data_provider(self):
         """Generate data provider configuration with Many-to-Many support."""

@@ -51,8 +51,10 @@ class SchemaLoader:
         self.schema_path = schema_path
         self.business_schema = None
         self.presentation_config = None
+        self.security_config = None
         self.validation_schema = self._load_validation_schema("concepts_schema.json")
         self.presentation_validation_schema = self._load_validation_schema("presentation_schema.json")
+        self.security_validation_schema = self._load_validation_schema("security_schema.json")
     
     def _load_validation_schema(self, schema_name: str) -> Dict[str, Any]:
         """Load a validation schema from the schemas directory."""
@@ -86,21 +88,30 @@ class SchemaLoader:
             with open(path, 'r', encoding='utf-8') as f:
                 business_schema = json.load(f)
             
-            # Apply special defaults before main validation/default injection
-            self._apply_special_defaults(business_schema)
-            
-            # Validate against the schema and inject defaults
-            DefaultValidatingDraft7Validator(self.validation_schema).validate(business_schema)
-            
-            logger.info(f"Successfully loaded and validated schema: {path}")
-            self.business_schema = business_schema
-
             # Try to load presentation.json
             presentation_path = Path(path).parent / "presentation.json"
             if not presentation_path.exists():
                 raise FileNotFoundError(f"'presentation.json' is mandatory. Please provide it in {presentation_path.parent} (it can be an empty object '{{}}' if you want defaults).")
             
             self.load_presentation(str(presentation_path))
+
+            # Try to load security.json
+            security_path = Path(path).parent / "security.json"
+            if not security_path.exists():
+                raise FileNotFoundError(f"'security.json' is mandatory. Please provide it in {security_path.parent} (it can be an empty object '{{}}' if you want defaults).")
+            
+            self.load_security(str(security_path))
+
+            # Apply special defaults before main validation/default injection
+            self._apply_special_defaults(business_schema)
+            
+            # Validate against the schema and inject defaults
+            # This will now also apply defaults (like separator and show in id_presentation) 
+            # to the injected authentication concepts.
+            DefaultValidatingDraft7Validator(self.validation_schema).validate(business_schema)
+            
+            logger.info(f"Successfully loaded and validated schema: {path}")
+            self.business_schema = business_schema
 
             return business_schema
             
@@ -129,6 +140,19 @@ class SchemaLoader:
         
         self.presentation_config = presentation_config
         logger.info(f"Successfully loaded and validated presentation settings: {presentation_path}")
+    
+    def load_security(self, security_path: str):
+        """
+        Load and validate the security settings.
+        """
+        with open(security_path, 'r', encoding='utf-8') as f:
+            security_config = json.load(f)
+        
+        # Validate and inject defaults
+        DefaultValidatingDraft7Validator(self.security_validation_schema).validate(security_config)
+        
+        self.security_config = security_config
+        logger.info(f"Successfully loaded and validated security settings: {security_path}")
     
     def _apply_special_defaults(self, data: Dict[str, Any]):
         """

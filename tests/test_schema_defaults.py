@@ -1,4 +1,3 @@
-
 import pytest
 import json
 import tempfile
@@ -35,6 +34,8 @@ def test_defaults_population():
             json.dump(schema_content, f)
         with open(Path(temp_dir) / "presentation.json", 'w') as f:
             json.dump({}, f)
+        with open(Path(temp_dir) / "security.json", 'w') as f:
+            json.dump({"authentication_required": False}, f)
         
         try:
             loader = SchemaLoader()
@@ -95,7 +96,9 @@ def test_special_required_default():
             json.dump(schema_content, f)
         with open(Path(temp_dir) / "presentation.json", 'w') as f:
             json.dump({}, f)
-        
+        with open(Path(temp_dir) / "security.json", 'w') as f:
+            json.dump({"authentication_required": False}, f)
+            
         try:
             loader = SchemaLoader()
             loaded_schema = loader.load_and_validate(str(temp_path))
@@ -110,4 +113,3 @@ def test_special_required_default():
         finally:
             # TemporaryDirectory handles cleanup
             pass
-

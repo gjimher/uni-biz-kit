@@ -284,7 +284,7 @@ uni-biz-kit models/test-ecommerce-app --output-dir ecommerce-app
 
 Create a supabase instance for the application:
 ```bash
-cd ecommerce-app
+cd ecommerce-app/backend
 
 # clean previous instance: npx supabase stop --no-backup
 npx supabase init
@@ -293,9 +293,15 @@ npx supabase status -o json # view urls and keys
 # view containter logs: docker ps --format '{{.Names}}' | grep '^supabase_' | xargs -I {} docker logs -f {} 
 
 # save api key
-cat > frontend/.env << EOF
+cat > ../frontend/.env << EOF
 REACT_APP_SUPABASE_URL=$(npx supabase status -o json | jq -r '.API_URL')
 REACT_APP_SUPABASE_KEY=$(npx supabase status -o json | jq -r '.ANON_KEY')
+EOF
+
+cat > .env << EOF
+DB_URL=$(npx supabase status -o json | jq -r '.DB_URL')
+SUPABASE_URL=$(npx supabase status -o json | jq -r '.API_URL')
+SUPABASE_SERVICE_ROLE_KEY=$(npx supabase status -o json | jq -r '.SERVICE_ROLE_KEY')
 EOF
 ```
 
@@ -310,6 +316,34 @@ npx supabase db reset
 # check data
 source frontend/.env
 curl -X GET -H "apikey: $REACT_APP_SUPABASE_KEY" "$REACT_APP_SUPABASE_URL/rest/v1/customer?select=*" | jq '.' # ok, 3 customers
+```
+
+### Create Auth Users
+
+Since Supabase Auth users cannot be easily created via SQL in some environments, UniBizKit generates a `supabase_auth_users.json` file in the `backend/` directory. You can create these users using the Supabase Admin API:
+
+```bash
+# Load environment variables
+source .env
+
+# Create users using curl
+jq -c '.[]' supabase_auth_users.json | while read user; do
+  email=$(echo $user | jq -r '.email')
+  password=$(echo $user | jq -r '.password')
+  role=$(echo $user | jq -r '.roles[0]')
+  
+  echo "Creating user: $email"
+  curl -X POST "$REACT_APP_SUPABASE_URL/auth/v1/admin/users" \
+    -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+    -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "email": "'$email'",
+      "password": "'$password'",
+      "email_confirm": true,
+      "user_metadata": { "role": "'$role'" }
+    }'
+done
 ```
 
 ### Start the React-Admin Application
