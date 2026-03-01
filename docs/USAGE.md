@@ -288,6 +288,8 @@ cd test-app/backend
 
 # clean previous instance: npx supabase stop --no-backup
 npx supabase init
+# set project_id to parent directory name (replace "backend" with parent dir name)
+sed -i "s/project_id = \"backend\"/project_id = \"$(basename $(dirname $(pwd)))\"/" supabase/config.toml
 npx supabase start
 npx supabase status -o json # view urls and keys
 # view containter logs: docker ps --format '{{.Names}}' | grep '^supabase_' | xargs -I {} docker logs -f {} 

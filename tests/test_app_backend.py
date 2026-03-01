@@ -72,9 +72,10 @@ class TestAppBackend:
                 )
                 assert init_result.returncode == 0, f"Supabase init failed with {init_result=}"
                 
-                print("Changing Supabase ports from 54xxx to 55xxx in supabase/config.toml")
+                print("Changing Supabase project_id to ubk_test_app and ports from 54xxx to 55xxx in supabase/config.toml")
                 config_path = Path("supabase/config.toml")
                 text = config_path.read_text()
+                text = text.replace('project_id = "backend"', 'project_id = "ubk_test_app"')
                 text = re.sub(r"\b54(\d{3})\b", r"55\1", text)
                 config_path.write_text(text)
                 
