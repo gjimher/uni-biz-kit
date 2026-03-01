@@ -13,10 +13,10 @@
 pip install -e .
 
 # Generate a complete e-commerce application
-uni-biz-kit models/test-ecommerce-app --output-dir my-ecommerce-app
+uni-biz-kit models/test-app --output-dir test-app
 
 # Start the React-Admin frontend
-cd my-ecommerce-app/frontend
+cd test-app/frontend
 npm install
 npm start
 ```
@@ -53,7 +53,7 @@ npm start
 
 ## 📁 Example: ECommerce Platform
 
-The repository includes a complete e-commerce example (`models/test-ecommerce-app`) that demonstrates:
+The repository includes a complete e-commerce example (`models/test-app`) that demonstrates:
 
 - **Products** with various field types (string, decimal, enum, boolean)
 - **Categories** with hierarchical relationships
@@ -64,10 +64,10 @@ The repository includes a complete e-commerce example (`models/test-ecommerce-ap
 
 ```bash
 # Generate the e-commerce application
-uni-biz-kit models/test-ecommerce-app --output-dir ecommerce-app
+uni-biz-kit models/test-app --output-dir test-app
 
 # Explore the generated files
-ls -la ecommerce-app/
+ls -la test-app/
 ```
 
 ## 🔧 Installation

@@ -34,10 +34,10 @@
     *   `presentation_schema.json`: The meta-schema for UI configuration.
     *   `security_schema.json`: The meta-schema for application security.
     *   `concepts_extended_required_additions.json`: Defines the additional internal fields (like `_type`, `_be_sql_type`, `_fe_component`) that the `SchemaProcessor` adds during enrichment. This is merged with `concepts_schema.json` to create the `concepts_extended_schema.json` in the output folder.
-*   `models/`: Business definitions used for testing and examples (e.g., `test-ecommerce-app/`).
+*   `models/`: Business definitions used for testing and examples (e.g., `test-app/`).
 *   `docs/`: Project documentation (`Development.md`, `USAGE.md`).
 *   `tests/`: Integration and unit tests.
-*   `test-ecommerce-app/`: Dedicated output directory for integration tests. **Do not delete this folder**, as it may contain cached dependencies (like `node_modules`).
+*   `test-app/`: Dedicated output directory for integration tests. **Do not delete this folder**, as it may contain cached dependencies (like `node_modules`).
 
 ## Development workflow
 
@@ -46,17 +46,17 @@ The project uses standard Python tooling.
 **IMPORTANT:** 
 * Do not run `python -m src.unibizkit.main` or `uni-biz-kit` directly for development generation. Always use `pytest` to ensure the environment and output directories are correctly handled and to verify the generated code immediately. 
 
-Change generators, run pytest and check generated code in test-ecommcerce-app output directory.
+Change generators, run pytest and check generated code in test-app output directory.
 
 To verify SQL generation:
 ```bash
-pytest tests/test_ecommerce_backend.py
+pytest tests/test_app_backend.py
 ```
 **Note:** This test recreates the database state (wipes the `public` schema and cleans up `auth` users) to ensure a clean deployment verification.
 
 To verify Frontend generation:
 ```bash
-pytest tests/test_ecommerce_frontend.py
+pytest tests/test_app_frontend.py
 ```
 
 To run all tests:

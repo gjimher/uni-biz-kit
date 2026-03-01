@@ -149,7 +149,7 @@ uni-biz-kit path/to/model_dir --skip-backend
 
 ### ECommerce Schema
 
-The repository includes a complete e-commerce example in `models/test-ecommerce-app` that demonstrates:
+The repository includes a complete e-commerce example in `models/test-app` that demonstrates:
 
 - Products with various field types
 - Categories with hierarchical relationships
@@ -277,14 +277,14 @@ npx -y supabase --version # example output: 2.70.5
 ### Generate the e-commerce application
 
 ```bash
-uni-biz-kit models/test-ecommerce-app --output-dir ecommerce-app
+uni-biz-kit models/test-app --output-dir test-app
 ```
 
 ### configure supabase instance
 
 Create a supabase instance for the application:
 ```bash
-cd ecommerce-app/backend
+cd test-app/backend
 
 # clean previous instance: npx supabase stop --no-backup
 npx supabase init

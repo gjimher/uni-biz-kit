@@ -1,7 +1,7 @@
 """
-Backend Integration Test for Ecommerce App Generation
+Backend Integration Test for App App Generation
 
-This test generates a complete ecommerce application backend and sets up the database.
+This test generates a complete app application backend and sets up the database.
 """
 
 import pytest
@@ -20,16 +20,16 @@ from dotenv import load_dotenv
 import psycopg2
 from textwrap import dedent
 
-class TestEcommerceBackend:
-    """Backend integration tests for ecommerce app generation."""
+class TestAppBackend:
+    """Backend integration tests for app app generation."""
     
     @pytest.mark.integration
     @pytest.mark.timeout(600)  # 10 minutes timeout
-    def test_generate_ecommerce_backend_and_setup_database(self):
-        """Test generating a complete ecommerce app backend and setting up the database.
+    def test_generate_app_backend_and_setup_database(self):
+        """Test generating a complete app app backend and setting up the database.
         
         This integration test:
-        1. Generates a complete ecommerce application from schema
+        1. Generates a complete app application from schema
         2. Sets up Supabase database with schema and sample data
         3. Verifies the database setup is successful
         
@@ -37,12 +37,12 @@ class TestEcommerceBackend:
         """
         cli = CLI()
         
-        # Use the ecommerce schema from models
-        schema_path = Path('models/test-ecommerce-app/concepts.json').resolve()
-        output_dir = Path('test-ecommerce-app').resolve()
+        # Use the app schema from models
+        schema_path = Path('models/test-app/concepts.json').resolve()
+        output_dir = Path('test-app').resolve()
         
-        print("Executing uni-biz-kit: generating a complete ecommerce application from schema")
-        with patch('sys.argv', ['uni-biz-kit', 'models/test-ecommerce-app', '--output-dir', str(output_dir)]):
+        print("Executing uni-biz-kit: generating a complete app application from schema")
+        with patch('sys.argv', ['uni-biz-kit', 'models/test-app', '--output-dir', str(output_dir)]):
             # Should not raise an exception
             cli.run()
         

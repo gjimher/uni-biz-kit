@@ -1,7 +1,7 @@
 """
-Frontend Integration Test for Ecommerce App Generation
+Frontend Integration Test for App App Generation
 
-This test generates a complete ecommerce application frontend and compiles it.
+This test generates a complete app application frontend and compiles it.
 """
 
 import pytest
@@ -14,16 +14,16 @@ from unittest.mock import patch
 from unibizkit.cli import CLI
 
 
-class TestEcommerceFrontend:
-    """Frontend integration tests for ecommerce app generation."""
+class TestAppFrontend:
+    """Frontend integration tests for app app generation."""
     
     @pytest.mark.integration
     @pytest.mark.timeout(600)  # 10 minutes timeout
-    def test_generate_ecommerce_frontend_and_compile(self):
-        """Test generating a complete ecommerce app frontend and compiling it.
+    def test_generate_app_frontend_and_compile(self):
+        """Test generating a complete app app frontend and compiling it.
         
         This integration test:
-        1. Generates a complete ecommerce application from schema
+        1. Generates a complete app application from schema
         2. Compiles the React frontend using npm
         3. Verifies the build is successful
         
@@ -31,12 +31,12 @@ class TestEcommerceFrontend:
         """
         cli = CLI()
         
-        # Use the ecommerce schema from models
-        schema_path = Path('models/test-ecommerce-app/concepts.json')
-        output_dir = Path('test-ecommerce-app')
+        # Use the app schema from models
+        schema_path = Path('models/test-app/concepts.json')
+        output_dir = Path('test-app')
         
-        print("Executing uni-biz-kit: generating a complete ecommerce application from schema")
-        with patch('sys.argv', ['uni-biz-kit', 'models/test-ecommerce-app', '--output-dir', str(output_dir)]):
+        print("Executing uni-biz-kit: generating a complete app application from schema")
+        with patch('sys.argv', ['uni-biz-kit', 'models/test-app', '--output-dir', str(output_dir)]):
             # Should not raise an exception
             cli.run()
         
@@ -72,7 +72,7 @@ class TestEcommerceFrontend:
             )
             assert build_result.returncode == 0, f"Build failed with {build_result=}"
                         
-            print("✓ Ecommerce frontend generated and compiled successfully!")
+            print("✓ App frontend generated and compiled successfully!")
             
         finally:
             os.chdir(original_cwd)

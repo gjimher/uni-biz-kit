@@ -1,7 +1,7 @@
 {
   "$schema": "../../schemas/concepts_schema.json",
   "version": "1.0.0",
-  "name": "ECommerce Platform",
+  "name": "Test App",
   "description": "A complete e-commerce business application with products, customers, orders, and categories",
   "concepts": [
     {

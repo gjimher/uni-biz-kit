@@ -11,8 +11,8 @@ def test_auth_api_login():
     Verify that generated users can login via Supabase Auth API.
     This tests the API directly, similar to how the frontend does it.
     """
-    backend_dir = os.path.abspath("test-ecommerce-app/backend")
-    frontend_dir = os.path.abspath("test-ecommerce-app/frontend")
+    backend_dir = os.path.abspath("test-app/backend")
+    frontend_dir = os.path.abspath("test-app/frontend")
     
     auth_users_file = os.path.join(backend_dir, "supabase_auth_users.json")
     assert os.path.exists(auth_users_file), "supabase_auth_users.json not found"
@@ -73,7 +73,7 @@ def app_server(xprocess, request):
         env["PORT"] = "3005"
         env["BROWSER"] = "none"
         
-        frontend_dir = os.path.abspath("test-ecommerce-app/frontend")
+        frontend_dir = os.path.abspath("test-app/frontend")
         args = ["npm", "start", "--prefix", frontend_dir]
         cwd = frontend_dir
         timeout = 15
