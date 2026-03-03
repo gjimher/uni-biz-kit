@@ -1,5 +1,6 @@
 import pytest
 import os
+import time
 import json
 import urllib.request
 from playwright.sync_api import Page, expect
@@ -19,7 +20,7 @@ def test_auth_api_login():
     
     with open(security_extended_file, 'r') as f:
         security_data = json.load(f)
-        auth_users = security_data.get("users", [])
+        auth_users = security_data["users"]
     
     load_dotenv(os.path.join(frontend_dir, ".env"))
     api_url = os.getenv("REACT_APP_SUPABASE_URL")
@@ -54,9 +55,46 @@ def test_auth_api_login():
             with urllib.request.urlopen(req) as response:
                 assert response.status == 200
                 res_body = json.loads(response.read().decode('utf-8'))
-                assert "access_token" in res_body
+                access_token = res_body["access_token"]
+                assert access_token
                 assert res_body["user"]["email"] == email
                 print(f"  Login successful for {email}")
+                
+                # Check DB Insert access
+                insert_url = f"{api_url}/rest/v1/product"
+                insert_data = json.dumps({
+                    "name": f"Test product by {email}",
+                    "price": 10.00,
+                    "stock_quantity": 5,
+                    "sku": f"TEST-SKU-{email.split('@')[0]}-{int(time.time())}",
+                    "status": "draft"
+                }).encode('utf-8')                
+                insert_req = urllib.request.Request(
+                    insert_url,
+                    data=insert_data,
+                    headers={
+                        'apikey': anon_key,
+                        'Authorization': f'Bearer {access_token}',
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    method='POST'
+                )
+                
+                role = "admin" if "admin" in user["roles"] else "user"
+                
+                try:
+                    with urllib.request.urlopen(insert_req) as insert_response:
+                        if role == "user":
+                            pytest.fail(f"User {email} (role: {role}) was able to insert into product table but should not be allowed.")
+                        else:
+                            print(f"  Insert successful for {email} (role: {role})")
+                except urllib.error.HTTPError as e:
+                    if role == "admin":
+                        pytest.fail(f"Admin {email} failed to insert into product table: {e.code} {e.read().decode('utf-8')}")
+                    else:
+                        print(f"  Insert correctly blocked for {email} (role: {role}): {e.code}")
+
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8')
             pytest.fail(f"Login failed for {email}: {e.code} {error_body}")
@@ -89,14 +127,19 @@ def test_create_product_as_user(page: Page, app_server):
     Pure E2E test: No mocks, no interceptions.
     Acts as a real user creating a product.
     """
+    security_extended_file = os.path.abspath("test-app/security_extended.json")
+    with open(security_extended_file, 'r') as f:
+        security_data = json.load(f)
+        admin_user = next(u for u in security_data["users"] if "admin" in u["roles"])
+
     page.set_default_timeout(10000)
     print("logging in and creating product")
     # 1. Open the app
     page.goto(app_server)
 
     # Login
-    page.locator('input[name="username"]').fill("admin")
-    page.locator('input[name="password"]').fill("adminadmin")
+    page.locator('input[name="username"]').fill(admin_user["email"])
+    page.locator('input[name="password"]').fill(admin_user["password"])
     page.get_by_role("button", name="Sign in").click()
     
     # Wait for login to complete by checking for a menu item

@@ -194,8 +194,15 @@ export const MyLayout = (props) => <Layout {...props} menu={MyMenu} />;
         
         for concept in self.concepts:
             resource_name = concept["name"]
-            import_statements.append(f"import {{ {resource_name}_list, {resource_name}_create, {resource_name}_edit, {resource_name}_show }} from './resources/{resource_name}/{resource_name}.js';")
-            resource_components.append(f"""    <Resource name="{resource_name}" list={{ {resource_name}_list }} create={{ {resource_name}_create }} edit={{ {resource_name}_edit }} show={{ {resource_name}_show }} />""")
+            import_statements.append(f"import {{ {resource_name.upper()}_LIST, {resource_name.upper()}_CREATE, {resource_name.upper()}_EDIT, {resource_name.upper()}_SHOW }} from './resources/{resource_name}/{resource_name}.js';")
+            resource_components.append(f"""          {{(permissions?.['{resource_name}']?.includes('read') || permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('read') || permissions?.['*']?.includes('write')) ? (
+              <Resource name="{resource_name}" 
+                  list={{ {resource_name.upper()}_LIST }} 
+                  create={{(permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write')) ? {resource_name.upper()}_CREATE : null}} 
+                  edit={{ {resource_name.upper()}_EDIT }} 
+                  show={{ {resource_name.upper()}_SHOW }} 
+              />
+          ) : null}}""")
         
         layout_import = ""
         layout_prop = ""
@@ -205,9 +212,11 @@ export const MyLayout = (props) => <Layout {...props} menu={MyMenu} />;
             
         auth_import = ""
         auth_prop = ""
+        require_auth = ""
         if has_auth_provider:
              auth_import = "import { authProvider } from './authProvider';\nimport { MyLoginPage } from './layout/MyLoginPage';"
              auth_prop = " authProvider={authProvider} loginPage={MyLoginPage}"
+             require_auth = " requireAuth"
              
         app_js_content = f"""import * as React from 'react';
 import {{ Admin, Resource }} from 'react-admin';
@@ -217,8 +226,12 @@ import {{ dataProvider }} from './dataProvider';
 {chr(10).join(import_statements)}
 
 const App = () => (
-  <Admin dataProvider={{dataProvider}}{layout_prop}{auth_prop}>
+  <Admin{require_auth} dataProvider={{dataProvider}}{layout_prop}{auth_prop} mutationMode="pessimistic">
+      {{permissions => (
+          <>
 {chr(10).join(resource_components)}
+          </>
+      )}}
   </Admin>
 );
 
@@ -497,6 +510,24 @@ export const RecursiveParentSelector = ({ source, reference, label, separator, d
         with open(self.output_dir / "src" / "components" / "recursive_parent_selector.js", 'w', encoding='utf-8') as f:
             f.write(recursive_parent_selector_js)
 
+        custom_edit_toolbar_js = """import * as React from 'react';
+import { Toolbar, SaveButton, DeleteButton, usePermissions } from 'react-admin';
+
+export const CustomEditToolbar = ({ resource, ...props }) => {
+    const { permissions } = usePermissions();
+    const canEdit = permissions?.[resource]?.includes('write') || permissions?.['*']?.includes('write');
+    
+    return (
+        <Toolbar {...props}>
+            <SaveButton disabled={!canEdit} />
+            {canEdit && <DeleteButton mutationMode="pessimistic" />}
+        </Toolbar>
+    );
+};
+"""
+        with open(self.output_dir / "src" / "components" / "custom_edit_toolbar.js", 'w', encoding='utf-8') as f:
+            f.write(custom_edit_toolbar_js)
+
     def _create_directory_structure(self):
         """Create the directory structure for the React-Admin app."""
         # Create main directories
@@ -618,60 +649,78 @@ root.render(
 
     def _generate_auth_provider(self):
         """Generate auth provider using explicit Supabase implementation."""
-        auth_provider_content = """import { createClient } from '@supabase/supabase-js';
+        import json
+        rules_json = json.dumps(self.schema_loader.security_config.get("rules", []), indent=4)
+        auth_provider_content = f"""import {{ createClient }} from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
 const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
-export const authProvider = {
-    login: async ({ username, password }) => {
+const RULES = {rules_json};
+
+export const authProvider = {{
+    login: async ({{ username, password }}) => {{
         // Supabase expects email, so we assume username is email or map it
         // Check if username looks like an email
         let email = username;
-        if (!email.includes('@')) {
+        if (!email.includes('@')) {{
             // Fallback for demo users (e.g. admin -> admin@test.com)
-            email = `${username}@test.com`;
-        }
+            email = `${{username}}@test.com`;
+        }}
 
-        const { data, error } = await supabaseClient.auth.signInWithPassword({
+        const {{ data, error }} = await supabaseClient.auth.signInWithPassword({{
             email,
             password
-        });
+        }});
 
-        if (error) {
+        if (error) {{
             throw new Error(error.message);
-        }
+        }}
 
         return data;
-    },
-    logout: async () => {
+    }},
+    logout: async () => {{
         await supabaseClient.auth.signOut();
         return Promise.resolve();
-    },
-    checkError: async (error) => {
-        if (error.status === 401 || error.status === 403) {
-             return Promise.reject();
-        }
+    }},
+    checkError: async (error) => {{
+        // If the error is 401 or 403, it's likely a permission/RLS issue from Supabase.
+        // We do NOT want to log the user out (which happens if we return Promise.reject()),
+        // we just want React-Admin to show a notification error.
+        if (error.status === 401 || error.status === 403) {{
+             return Promise.resolve();
+        }}
         return Promise.resolve();
-    },
-    checkAuth: async () => {
-        const { data: { session } } = await supabaseClient.auth.getSession();
-        if (!session) {
+    }},
+    checkAuth: async () => {{
+        const {{ data: {{ session }} }} = await supabaseClient.auth.getSession();
+        if (!session) {{
             return Promise.reject();
-        }
+        }}
         return Promise.resolve();
-    },
-    getPermissions: async () => {
-        // We rely on Supabase RLS, so frontend permissions are minimal or handled differently
-        return Promise.resolve([]);
-    },
-    getIdentity: async () => {
-        const { data: { user } } = await supabaseClient.auth.getUser();
+    }},
+    getPermissions: async () => {{
+        const {{ data: {{ session }} }} = await supabaseClient.auth.getSession();
+        if (!session) return Promise.resolve({{}});
+        
+        const roles = session.user?.app_metadata?.roles || [];
+        const permissions = {{}};
+        
+        for (const rule of RULES) {{
+            if (roles.includes(rule.role)) {{
+                if (!permissions[rule.concept]) permissions[rule.concept] = [];
+                permissions[rule.concept].push(rule.access);
+            }}
+        }}
+        return Promise.resolve(permissions);
+    }},
+    getIdentity: async () => {{
+        const {{ data: {{ user }} }} = await supabaseClient.auth.getUser();
         if (!user) return Promise.reject();
-        return Promise.resolve({ id: user.id, fullName: user.email });
-    }
-};
+        return Promise.resolve({{ id: user.id, fullName: user.email }});
+    }}
+}};
 """
         with open(self.output_dir / "src" / "authProvider.js", 'w', encoding='utf-8') as f:
             f.write(auth_provider_content)
@@ -888,7 +937,10 @@ export const dataProvider = {{
         child_dialog_components = "\n".join(child_dialog_components_list)
 
         # Re-evaluating: I'll import them separately to be safe.
-        component_imports = [f"import {{ Title }} from '../../components/title';"]
+        component_imports = [
+            f"import {{ Title }} from '../../components/title';",
+            f"import {{ CustomEditToolbar }} from '../../components/custom_edit_toolbar';"
+        ]
         if "ReorderableDatagrid" in field_components["child_tabs"] or "ReorderableDatagrid" in child_dialog_components:
              component_imports.append(f"import {{ ReorderableDatagrid }} from '../../components/reorderable_datagrid';")
         if "RecursiveParentSelector" in field_components["create_fields"] or "RecursiveParentSelector" in field_components["edit_fields"]:
@@ -912,7 +964,7 @@ export const dataProvider = {{
 
         if owned_children or many_to_many_links:
             edit_component = f"""<Edit title={{<Title name="{resource_name}" />}} {{...props}}>
-    <TabbedForm>
+    <TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" />}}>
       <FormTab label="Summary">
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
           {field_components["edit_fields"]}
@@ -924,12 +976,15 @@ export const dataProvider = {{
   </Edit>"""
         else:
             edit_component = f"""<Edit title={{<Title name="{resource_name}" />}} {{...props}}>
-    <SimpleForm>
+    <SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}" />}}>
       <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
         {field_components["edit_fields"]}
       </Grid>
     </SimpleForm>
   </Edit>"""
+
+        # Generate the main resource file with List, Create, Edit, and Show components.
+        resource_name = concept["name"]
 
         resource_content = f"""import * as React from 'react';
 import {{ {react_admin_imports} }} from 'react-admin';
@@ -943,16 +998,19 @@ const {resource_name}_filters = [
 {field_components["filter_fields"]}
 ];
 
-export const {resource_name}_list = (props) => (
-  <List {{...props}} filters={{{resource_name}_filters}}>
-    <Datagrid rowClick="edit">
-      {id_field_list}
-      {field_components["list_fields"]}
-    </Datagrid>
-  </List>
-);
+export const {resource_name.upper()}_LIST = (props) => {{
+  const {{ permissions }} = usePermissions();
+  return (
+    <List {{...props}} filters={{{resource_name}_filters}}>
+      <Datagrid rowClick="edit">
+        {id_field_list}
+        {field_components["list_fields"]}
+      </Datagrid>
+    </List>
+  );
+}};
 
-export const {resource_name}_create = (props) => (
+export const {resource_name.upper()}_CREATE = (props) => (
   <Create {{...props}}>
     <SimpleForm>
       <Grid container rowSpacing={{0}} columnSpacing={{2}}>
@@ -962,11 +1020,14 @@ export const {resource_name}_create = (props) => (
   </Create>
 );
 
-export const {resource_name}_edit = (props) => (
-  {edit_component}
-);
+export const {resource_name.upper()}_EDIT = (props) => {{
+  const {{ permissions }} = usePermissions();
+  return (
+    {edit_component}
+  );
+}};
 
-export const {resource_name}_show = (props) => (
+export const {resource_name.upper()}_SHOW = (props) => (
   <Show title={{<Title name="{resource_name}" />}} {{...props}}>
     <SimpleShowLayout>
       {id_field_show}
@@ -1045,7 +1106,11 @@ const {create_comp_name} = () => {{
   const [open, setOpen] = React.useState(false);
   const notify = useNotify();
   const refresh = useRefresh();
+  const {{ permissions }} = usePermissions();
+  const canWrite = permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write');
   
+  if (!canWrite) return null;
+
   const handleClick = () => setOpen(true);
   const handleClose = () => setOpen(false);
   
@@ -1080,7 +1145,7 @@ const {create_comp_name} = () => {{
         # Determine if TabbedForm is needed
         form_content = ""
         if my_children:
-             form_content = f"""<TabbedForm record={{record}} onSubmit={{onSubmit}} syncWithLocation={{false}}>
+             form_content = f"""<TabbedForm record={{record}} onSubmit={{onSubmit}} syncWithLocation={{false}} toolbar={{<EditToolbar />}}>
               <FormTab label="Summary">
                 <Grid container rowSpacing={{0}} columnSpacing={{2}}>
 {edit_fields}
@@ -1089,7 +1154,7 @@ const {create_comp_name} = () => {{
 {child_tabs}
             </TabbedForm>"""
         else:
-             form_content = f"""<SimpleForm record={{record}} onSubmit={{onSubmit}}>
+             form_content = f"""<SimpleForm record={{record}} onSubmit={{onSubmit}} toolbar={{<EditToolbar />}}>
               <Grid container rowSpacing={{0}} columnSpacing={{2}}>
 {edit_fields}
               </Grid>
@@ -1102,6 +1167,8 @@ const {edit_comp_name} = () => {{
   const notify = useNotify();
   const refresh = useRefresh();
   const [update] = useUpdate();
+  const {{ permissions }} = usePermissions();
+  const canWrite = permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write');
   
   const handleClick = (e) => {{
     e.stopPropagation();
@@ -1122,16 +1189,24 @@ const {edit_comp_name} = () => {{
         }},
         onError: (error) => {{
           notify('Error: ' + error.message, {{ type: 'warning' }});
-        }}
+        }},
+        mutationMode: 'pessimistic'
       }}
     );
   }};
+
+  const EditToolbar = props => (
+    <Toolbar {{...props}}>
+      <SaveButton disabled={{!canWrite}} />
+      {{canWrite && <DeleteButton mutationMode="pessimistic" redirect={{false}} mutationOptions={{{{ onSuccess: () => {{ setOpen(false); refresh(); }} }}}} />}}
+    </Toolbar>
+  );
   
   if (!record) return null;
 
   return (
     <>
-      <Button onClick={{handleClick}} size="small" color="primary">Edit</Button>
+      <Button onClick={{handleClick}} size="small" color="primary">{{canWrite ? 'Edit' : 'Show'}}</Button>
       <Dialog open={{open}} onClose={{handleClose}} fullWidth maxWidth="md" onClick={{(e) => e.stopPropagation()}}>
         <DialogTitle><Title name="{resource_name}" /></DialogTitle>
         <DialogContent>
@@ -1260,7 +1335,7 @@ const {edit_comp_name} = () => {{
         needed_components = {
             'List', 'Create', 'Edit', 'Show',
             'SimpleShowLayout', 'SimpleForm', 'Datagrid',
-            'TextField', 'TextInput', 'required', 'useRecordContext'
+            'TextField', 'TextInput', 'required', 'useRecordContext', 'usePermissions'
         }
         
         # Collect all recursive descendants to ensure their field types are imported
@@ -1278,6 +1353,9 @@ const {edit_comp_name} = () => {{
             needed_components.add('useRefresh')
             needed_components.add('useUpdate')
             needed_components.add('EditButton')
+            needed_components.add('DeleteButton')
+            needed_components.add('Toolbar')
+            needed_components.add('SaveButton')
             
         if all_descendants:
             for child in all_descendants:
@@ -1399,6 +1477,7 @@ const {edit_comp_name} = () => {{
                 edit_dialog_comp_name = f"EDIT_{child_name.upper()}_FOR_{parent_name.upper()}"
                 
                 child_columns.append(f"<{edit_dialog_comp_name} />")
+                child_columns.append(f"{{(permissions?.['{child_name}']?.includes('write') || permissions?.['*']?.includes('write')) && <DeleteButton mutationMode='pessimistic' redirect={{false}} />}}")
                 
                 sort_prop = " sort={{ field: 'id_presentation', order: 'ASC' }}"
                 datagrid_comp = "Datagrid"

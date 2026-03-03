@@ -67,8 +67,8 @@ class SchemaProcessor:
         return self.extended_schema
 
     def _enrich_security(self):
-        """Inject default roles and users if missing."""
-        if self.security_extended.get("authentication_required"):
+        """Inject default roles and users if missing, and expand rule wildcards."""
+        if self.security_extended["authentication_required"]:
             if "roles" not in self.security_extended or not self.security_extended["roles"]:
                 self.security_extended["roles"] = [
                     {"name": "admin", "description": "System Administrator"},
@@ -80,6 +80,26 @@ class SchemaProcessor:
                     {"email": "admin@test.com", "password": "adminadmin", "roles": ["admin"]},
                     {"email": "user@test.com", "password": "useruser", "roles": ["user"]}
                 ]
+
+            if "rules" not in self.security_extended or not self.security_extended["rules"]:
+                self.security_extended["rules"] = [
+                    {"role": "admin", "concept": "*", "access": "write"},
+                    {"role": "user", "concept": "*", "access": "read"}
+                ]
+
+            expanded_rules = []
+            for rule in self.security_extended["rules"]:
+                if rule["concept"] == "*":
+                    for concept in self.concepts:
+                        expanded_rules.append({
+                            "role": rule["role"],
+                            "concept": concept["name"],
+                            "access": rule["access"]
+                        })
+                else:
+                    expanded_rules.append(rule)
+            
+            self.security_extended["rules"] = expanded_rules
 
     def _process_concept_basics(self, concept: Dict[str, Any]) -> Dict[str, Any]:
         """

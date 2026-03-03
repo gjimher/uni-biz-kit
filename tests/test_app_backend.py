@@ -197,7 +197,10 @@ class TestAppBackend:
                     data = json.dumps({
                         "email": email,
                         "password": password,
-                        "email_confirm": True
+                        "email_confirm": True,
+                        "app_metadata": {
+                            "roles": user.get("roles", [])
+                        }
                     }).encode('utf-8')
                     
                     req = urllib.request.Request(

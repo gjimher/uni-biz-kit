@@ -343,7 +343,7 @@ jq -c '.users[]' ../security_extended.json | while read user; do
       "email": "'$email'",
       "password": "'$password'",
       "email_confirm": true,
-      "user_metadata": { "role": "'$role'" }
+      "app_metadata": { "roles": ["'$role'"] }
     }'
 done
 ```

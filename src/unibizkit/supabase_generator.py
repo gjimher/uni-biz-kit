@@ -102,15 +102,48 @@ $$ LANGUAGE plpgsql;
         
         all_tables = tables_to_secure + join_tables
         
+        rules = self.schema_loader.security_config["rules"]
+        
         for table in all_tables:
             policies.append(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY;')
-            # Allow all authenticated users to do everything
-            policies.append(f"""
-CREATE POLICY "allow_all_authenticated" ON "{table}"
+            
+            # Find rules applicable to this table
+            table_rules = [r for r in rules if r["concept"] == table or r["concept"] == "*"]
+            
+            if not table_rules:
+                # Fallback: if no rules, allow all
+                policies.append(f"""
+CREATE POLICY "allow_all_authenticated_{table}" ON "{table}"
 FOR ALL
 TO authenticated
 USING (true)
 WITH CHECK (true);
+""")
+                continue
+
+            for rule in table_rules:
+                role = rule["role"]
+                access = rule["access"]
+                
+                # Check JWT app_metadata -> roles array for the specific role
+                # auth.jwt() -> 'app_metadata' -> 'roles' ?| array['{role}']
+                condition = f"auth.jwt() -> 'app_metadata' -> 'roles' ? '{role}'"
+                
+                if access == "read":
+                    policies.append(f"""
+CREATE POLICY "{role}_read_{table}" ON "{table}"
+FOR SELECT
+TO authenticated
+USING ({condition});
+""")
+                elif access == "write":
+                    # Write means full access (select, insert, update, delete)
+                    policies.append(f"""
+CREATE POLICY "{role}_all_{table}" ON "{table}"
+FOR ALL
+TO authenticated
+USING ({condition})
+WITH CHECK ({condition});
 """)
 
         return policies
