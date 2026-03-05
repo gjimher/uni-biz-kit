@@ -1,3 +1,20 @@
 {
-  "$schema": "../../schemas/security_schema.json"
+  "$schema": "../../schemas/security_schema.json",
+  "authentication_required": true,
+  "rules_level_2": [
+    {
+      "role": "user",
+      "concept": "product",
+      "field": "*",
+      "access": "write"
+    }
+  ],
+  "rules_level_3": [
+    {
+      "role": "user",
+      "concept": "product",
+      "field": "admin_*",
+      "access": "read"
+    }
+  ]
 }

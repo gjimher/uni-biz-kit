@@ -46,30 +46,33 @@
       "description": "General security rules for role-based access control. Lower priority.",
       "items": { "$ref": "#/$defs/rule" },
       "default": [
-        {"role": "admin", "concept": "*", "access": "write"},
-        {"role": "user", "concept": "*", "access": "read"}
+        {"concept": "*", "role": "admin", "access": "write", "field": "*"},
+        {"concept": "*", "role": "user", "access": "read", "field": "*"}
       ]
     },
     "rules_level_2": {
       "type": "array",
       "description": "Specific security rules for role-based access control. Medium priority.",
-      "items": { "$ref": "#/$defs/rule" }
+      "items": { "$ref": "#/$defs/rule" },
+      "default": []
     },
     "rules_level_3": {
       "type": "array",
       "description": "Exception security rules for role-based access control. High priority.",
-      "items": { "$ref": "#/$defs/rule" }
+      "items": { "$ref": "#/$defs/rule" },
+      "default": []
     }
   },
   "$defs": {
     "rule": {
       "type": "object",
       "properties": {
-        "role": { "type": "string", "description": "Role name (e.g., 'admin', 'user')" },
         "concept": { "type": "string", "description": "Concept name or '*' for all" },
-        "access": { "enum": ["read", "write"], "description": "Access level" }
+        "role": { "type": "string", "description": "Role name (e.g., 'admin', 'user')" },
+        "access": { "enum": ["read", "write"], "description": "Access level" },
+        "field": { "type": "string", "description": "Field name or '*' for all fields", "default": "*" }
       },
-      "required": ["role", "concept", "access"]
+      "required": ["concept", "role", "access"]
     }
   },
   "required": ["authentication_required"],

@@ -77,7 +77,9 @@ $$ LANGUAGE plpgsql;
         """
         policies = []
         
-        tables_to_secure = [c["name"] for c in self.concepts]
+        _acl = self.schema_loader.security_config["_acl"]
+        roles = self.schema_loader.security_config["roles"]
+        all_role_names = set(r["name"] for r in roles)
         
         # Calculate join table names cleanly.
         join_tables = []
@@ -100,18 +102,15 @@ $$ LANGUAGE plpgsql;
                         if jt not in join_tables:
                             join_tables.append(jt)
         
-        all_tables = tables_to_secure + join_tables
-        
-        rules = self.schema_loader.security_config["rules"]
+        all_tables = [c["name"] for c in self.concepts] + join_tables
         
         for table in all_tables:
             policies.append(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY;')
             
-            # Find rules applicable to this table
-            table_rules = [r for r in rules if r["concept"] == table or r["concept"] == "*"]
+            concept_acl = _acl.get(table)
             
-            if not table_rules:
-                # Fallback: if no rules, allow all
+            if not concept_acl:
+                # Fallback: if no rules for this concept (or if it's a join table), allow all authenticated
                 policies.append(f"""
 CREATE POLICY "allow_all_authenticated_{table}" ON "{table}"
 FOR ALL
@@ -121,12 +120,73 @@ WITH CHECK (true);
 """)
                 continue
 
-            for rule in table_rules:
-                role = rule["role"]
-                access = rule["access"]
+            # Field-level write restrictions (trigger based)
+            concept = self.concept_map.get(table)
+            main_rules = concept_acl["_main"]
+            if concept:
+                trigger_checks = []
+                for field in concept["fields"]:
+                    field_name = field["name"]
+                    field_rules = concept_acl["_fields"].get(field_name, {})
+                    
+                    allowed_roles = []
+                    for role in all_role_names:
+                        access = field_rules.get(role, main_rules.get(role, "none"))
+                        if access == "write":
+                            allowed_roles.append(role)
+                    
+                    # If this field has limited writers
+                    if allowed_roles and set(allowed_roles) != all_role_names:
+                        roles_json_array = ", ".join(f"'{r}'" for r in allowed_roles)
+                        check = f"""
+    -- Check field '{field_name}'
+    IF (TG_OP = 'UPDATE' AND NEW."{field_name}" IS DISTINCT FROM OLD."{field_name}") OR (TG_OP = 'INSERT' AND NEW."{field_name}" IS NOT NULL) THEN
+        IF NOT (user_roles ?| array[{roles_json_array}]) THEN
+            RAISE EXCEPTION 'Permission denied for field {field_name}';
+        END IF;
+    END IF;"""
+                        trigger_checks.append(check)
                 
-                # Check JWT app_metadata -> roles array for the specific role
-                # auth.jwt() -> 'app_metadata' -> 'roles' ?| array['{role}']
+                if trigger_checks:
+                    trigger_name = f"{table}_field_security"
+                    trigger_func = f"""
+CREATE OR REPLACE FUNCTION "{trigger_name}_func"()
+RETURNS TRIGGER AS $$
+DECLARE
+    user_roles jsonb := coalesce(auth.jwt() -> 'app_metadata' -> 'roles', '[]'::jsonb);
+BEGIN
+    -- Bypass trigger for system operations (like seeding data directly)
+    IF current_setting('request.jwt.claims', true) IS NULL OR current_setting('request.jwt.claims', true) = '' THEN
+        RETURN NEW;
+    END IF;
+{''.join(trigger_checks)}
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS "{trigger_name}" ON "{table}";
+CREATE TRIGGER "{trigger_name}"
+BEFORE INSERT OR UPDATE ON "{table}"
+FOR EACH ROW
+EXECUTE FUNCTION "{trigger_name}_func"();
+"""
+                    policies.append(trigger_func)
+
+            # Generate table-level RLS policies
+            # Determine max access for each role on this table
+            role_table_access = {} # role -> max_access
+            for role in all_role_names:
+                role_table_access[role] = main_rules.get(role, "none")
+                
+            for field_name, field_rules in concept_acl["_fields"].items():
+                for role, access in field_rules.items():
+                    current = role_table_access.get(role, "none")
+                    if access == "write" or current == "write":
+                        role_table_access[role] = "write"
+                    elif access == "read" and current == "none":
+                        role_table_access[role] = "read"
+
+            for role, access in role_table_access.items():
                 condition = f"auth.jwt() -> 'app_metadata' -> 'roles' ? '{role}'"
                 
                 if access == "read":
@@ -137,7 +197,6 @@ TO authenticated
 USING ({condition});
 """)
                 elif access == "write":
-                    # Write means full access (select, insert, update, delete)
                     policies.append(f"""
 CREATE POLICY "{role}_all_{table}" ON "{table}"
 FOR ALL
@@ -145,6 +204,8 @@ TO authenticated
 USING ({condition})
 WITH CHECK ({condition});
 """)
+
+        return policies
 
         return policies
     
@@ -408,7 +469,7 @@ ALTER TABLE "{table_name}"
                 field_type = field["type"]
                 
                 # Skip calculated fields or SERIAL fields as they are handled by the DB
-                if 'calculated' in field or field.get("_be_sql_type") == "SERIAL":
+                if 'calculated' in field or field["_be_sql_type"] == "SERIAL":
                     continue
                 
                 # Generate sample value based on type

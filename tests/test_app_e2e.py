@@ -85,15 +85,43 @@ def test_auth_api_login():
                 
                 try:
                     with urllib.request.urlopen(insert_req) as insert_response:
+                        print(f"  Insert successful for {email} (role: {role})")
+                except urllib.error.HTTPError as e:
+                    pytest.fail(f"User {email} (role: {role}) failed to insert into product table: {e.code} {e.read().decode('utf-8')}")
+
+                # Test Field-Level Security: Admin field
+                admin_field_data = json.dumps({
+                    "name": f"Test product admin field by {email}",
+                    "price": 15.00,
+                    "stock_quantity": 5,
+                    "sku": f"TEST-SKU-ADMIN-{email.split('@')[0]}-{int(time.time())}",
+                    "status": "draft",
+                    "admin_field": "secret"
+                }).encode('utf-8')                
+                
+                admin_field_req = urllib.request.Request(
+                    insert_url,
+                    data=admin_field_data,
+                    headers={
+                        'apikey': anon_key,
+                        'Authorization': f'Bearer {access_token}',
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    method='POST'
+                )
+                
+                try:
+                    with urllib.request.urlopen(admin_field_req) as insert_response:
                         if role == "user":
-                            pytest.fail(f"User {email} (role: {role}) was able to insert into product table but should not be allowed.")
+                            pytest.fail(f"User {email} (role: {role}) was able to insert admin_field but should not be allowed.")
                         else:
-                            print(f"  Insert successful for {email} (role: {role})")
+                            print(f"  Admin field insert successful for {email} (role: {role})")
                 except urllib.error.HTTPError as e:
                     if role == "admin":
-                        pytest.fail(f"Admin {email} failed to insert into product table: {e.code} {e.read().decode('utf-8')}")
+                        pytest.fail(f"Admin {email} failed to insert admin_field: {e.code} {e.read().decode('utf-8')}")
                     else:
-                        print(f"  Insert correctly blocked for {email} (role: {role}): {e.code}")
+                        print(f"  Admin field insert correctly blocked for {email} (role: {role}): {e.code}")
 
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8')

@@ -49,6 +49,13 @@
           "description": "Available stock quantity"
         },
         {
+          "name": "admin_field",
+          "type": "string",
+          "required": false,
+          "size": "s",
+          "description": "A field only admins can edit"
+        },
+        {
           "name": "sku",
           "type": "string",
           "required": true,

@@ -4,8 +4,8 @@ from unibizkit.schema_processor import SchemaProcessor
 def test_security_rules_merging():
     schema = {
         "concepts": [
-            {"name": "product", "plural_name": "products", "fields": [], "id_presentation": {"fields": []}},
-            {"name": "order", "plural_name": "orders", "fields": [], "id_presentation": {"fields": []}}
+            {"name": "product", "plural_name": "products", "fields": [{"name": "f1", "type": "string", "size": "s", "required": False}], "id_presentation": {"fields": []}},
+            {"name": "order", "plural_name": "orders", "fields": [{"name": "f1", "type": "string", "size": "s", "required": False}], "id_presentation": {"fields": []}}
         ]
     }
     
@@ -19,21 +19,22 @@ def test_security_rules_merging():
             {"role": "user", "concept": "product", "access": "write"}
         ],
         "rules_level_3": [
-            {"role": "user", "concept": "product", "access": "read"}
+            {"role": "user", "concept": "product", "field": "f1", "access": "read"}
         ]
     }
     
     processor = SchemaProcessor(schema, security_config=security_config)
     processed = processor.process()
     
-    rules = processor.security_extended["rules"]
+    _acl = processor.security_extended["_acl"]
     
-    # Helper to find a rule
-    def find_rule(role, concept):
-        for r in rules:
-            if r["role"] == role and r["concept"] == concept:
-                return r["access"]
-        return None
+    # Helper to find a rule: concept -> field -> role -> access
+    def find_rule(role, concept, field="f1"):
+        concept_acl = _acl.get(concept, {})
+        field_rule = concept_acl["_fields"].get(field, {}).get(role)
+        if field_rule:
+            return field_rule
+        return concept_acl["_main"].get(role)
 
     # User rules:
     # Level 1: user product read, user order read
@@ -47,14 +48,14 @@ def test_security_rules_merging():
     assert find_rule("admin", "product") == "write"
     assert find_rule("admin", "order") == "write"
 
-    # Final cleanup check
+    # Final cleanup check: should NOT be removed anymore
     for level in ["rules_level_1", "rules_level_2", "rules_level_3"]:
-        assert level not in processor.security_extended, f"{level} should be removed from processed security"
+        assert level in processor.security_extended, f"{level} should be preserved in processed security"
 
 def test_security_rules_default_level_1():
     schema = {
         "concepts": [
-            {"name": "product", "plural_name": "products", "fields": [], "id_presentation": {"fields": []}}
+            {"name": "product", "plural_name": "products", "fields": [{"name": "f1", "type": "string", "size": "s", "required": False}], "id_presentation": {"fields": []}}
         ]
     }
     
@@ -66,13 +67,14 @@ def test_security_rules_default_level_1():
     processor = SchemaProcessor(schema, security_config=security_config)
     processor.process()
     
-    rules = processor.security_extended["rules"]
+    _acl = processor.security_extended["_acl"]
     
-    def find_rule(role, concept):
-        for r in rules:
-            if r["role"] == role and r["concept"] == concept:
-                return r["access"]
-        return None
+    def find_rule(role, concept, field="f1"):
+        concept_acl = _acl.get(concept, {})
+        field_rule = concept_acl["_fields"].get(field, {}).get(role)
+        if field_rule:
+            return field_rule
+        return concept_acl["_main"].get(role)
 
     # Should use default: admin write, user read
     assert find_rule("admin", "product") == "write"
@@ -80,13 +82,13 @@ def test_security_rules_default_level_1():
 
     # Final cleanup check
     for level in ["rules_level_1", "rules_level_2", "rules_level_3"]:
-        assert level not in processor.security_extended, f"{level} should be removed from processed security"
+        assert level in processor.security_extended, f"{level} should be preserved in processed security"
 
 def test_security_rules_complex_override():
     schema = {
         "concepts": [
-            {"name": "product", "plural_name": "products", "fields": [], "id_presentation": {"fields": []}},
-            {"name": "order", "plural_name": "orders", "fields": [], "id_presentation": {"fields": []}}
+            {"name": "product", "plural_name": "products", "fields": [{"name": "f1", "type": "string", "size": "s", "required": False}], "id_presentation": {"fields": []}},
+            {"name": "order", "plural_name": "orders", "fields": [{"name": "f1", "type": "string", "size": "s", "required": False}], "id_presentation": {"fields": []}}
         ]
     }
     
@@ -106,17 +108,43 @@ def test_security_rules_complex_override():
     processor = SchemaProcessor(schema, security_config=security_config)
     processor.process()
     
-    rules = processor.security_extended["rules"]
+    _acl = processor.security_extended["_acl"]
     
-    def find_rule(role, concept):
-        for r in rules:
-            if r["role"] == role and r["concept"] == concept:
-                return r["access"]
-        return None
+    def find_rule(role, concept, field="f1"):
+        concept_acl = _acl.get(concept, {})
+        field_rule = concept_acl["_fields"].get(field, {}).get(role)
+        if field_rule:
+            return field_rule
+        return concept_acl["_main"].get(role)
 
     assert find_rule("user", "product") == "write"
     assert find_rule("user", "order") == "read"
 
     # Final cleanup check
     for level in ["rules_level_1", "rules_level_2", "rules_level_3"]:
-        assert level not in processor.security_extended, f"{level} should be removed from processed security"
+        assert level in processor.security_extended, f"{level} should be preserved in processed security"
+
+def test_security_extended_file_validation():
+    import json
+    import jsonschema
+    from pathlib import Path
+    
+    # Rutas a los archivos generados en test-app
+    schema_path = Path("test-app/security_extended_schema.json")
+    data_path = Path("test-app/security_extended.json")
+    
+    # Comprobar que los archivos existen para evitar fallos si no se ha ejecutado el generador
+    if not schema_path.exists() or not data_path.exists():
+        pytest.skip("Archivos test-app/security_extended*.json no encontrados. Ejecute el CLI primero.")
+
+    with open(schema_path, "r", encoding="utf-8") as f:
+        schema = json.load(f)
+        
+    with open(data_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        
+    try:
+        jsonschema.validate(instance=data, schema=schema)
+    except jsonschema.ValidationError as e:
+        pytest.fail(f"La validación del archivo falló: {e.message}")
+

@@ -650,7 +650,7 @@ root.render(
     def _generate_auth_provider(self):
         """Generate auth provider using explicit Supabase implementation."""
         import json
-        rules_json = json.dumps(self.schema_loader.security_config.get("rules", []), indent=4)
+        rules_json = json.dumps(self.schema_loader.security_config["_acl"], indent=4)
         auth_provider_content = f"""import {{ createClient }} from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -707,10 +707,32 @@ export const authProvider = {{
         const roles = session.user?.app_metadata?.roles || [];
         const permissions = {{}};
         
-        for (const rule of RULES) {{
-            if (roles.includes(rule.role)) {{
-                if (!permissions[rule.concept]) permissions[rule.concept] = [];
-                permissions[rule.concept].push(rule.access);
+        // RULES structure: concept -> {{ _main: {{ role: access }}, _fields: {{ field: {{ role: access }} }} }}
+        for (const [concept, acl] of Object.entries(RULES)) {{
+            const mainRules = acl._main || {{}};
+            const fieldRules = acl._fields || {{}};
+            
+            for (const role of roles) {{
+                // Concept level access
+                const mainAccess = mainRules[role];
+                if (mainAccess) {{
+                    if (!permissions[concept]) permissions[concept] = [];
+                    if (!permissions[concept].includes(mainAccess)) {{
+                        permissions[concept].push(mainAccess);
+                    }}
+                }}
+                
+                // Field level access
+                for (const [field, fRules] of Object.entries(fieldRules)) {{
+                    const fieldAccess = fRules[role] || mainAccess; // Fallback to main if not explicitly set (though backend should pre-fill it)
+                    if (fieldAccess) {{
+                        const fieldKey = `${{concept}}.${{field}}`;
+                        if (!permissions[fieldKey]) permissions[fieldKey] = [];
+                        if (!permissions[fieldKey].includes(fieldAccess)) {{
+                            permissions[fieldKey].push(fieldAccess);
+                        }}
+                    }}
+                }}
             }}
         }}
         return Promise.resolve(permissions);
@@ -1010,15 +1032,18 @@ export const {resource_name.upper()}_LIST = (props) => {{
   );
 }};
 
-export const {resource_name.upper()}_CREATE = (props) => (
-  <Create {{...props}}>
-    <SimpleForm>
-      <Grid container rowSpacing={{0}} columnSpacing={{2}}>
-        {field_components["create_fields"]}
-      </Grid>
-    </SimpleForm>
-  </Create>
-);
+export const {resource_name.upper()}_CREATE = (props) => {{
+  const {{ permissions }} = usePermissions();
+  return (
+    <Create {{...props}}>
+      <SimpleForm>
+        <Grid container rowSpacing={{0}} columnSpacing={{2}}>
+          {field_components["create_fields"]}
+        </Grid>
+      </SimpleForm>
+    </Create>
+  );
+}};
 
 export const {resource_name.upper()}_EDIT = (props) => {{
   const {{ permissions }} = usePermissions();
@@ -1453,7 +1478,7 @@ const {edit_comp_name} = () => {{
                 child_columns = []
                 child_columns.append(f'<TextField source="id_presentation" label="Id" />')
                 
-                relevant_fields = [f for f in child_concept["fields"] if f["name"] != fk_field_name and f.get("_fe_visibility") != "internal"]
+                relevant_fields = [f for f in child_concept["fields"] if f["name"] != fk_field_name and f["_fe_visibility"] != "internal"]
                 count = 0
                 for field in relevant_fields:
                     if count > 4: break
@@ -1524,6 +1549,12 @@ const {edit_comp_name} = () => {{
             full_width = ' fullWidth'
             margin = ' margin="none" size="small"'
             
+            disabled_prop = ""
+            if visibility == "read_only":
+                disabled_prop = " disabled"
+            elif self.schema_loader.security_config.get("authentication_required"):
+                disabled_prop = f" disabled={{!permissions?.['{concept['name']}.{field_name}']?.includes('write')}}"
+            
             # Construct Input Component (Create/Edit)
             input_html = ""
             
@@ -1532,7 +1563,7 @@ const {edit_comp_name} = () => {{
                 target = field["target"]
                 
                 # Check for recursive relation
-                if concept.get("_type") == "recursive_part_of" and field.get("subtype") == "part_of":
+                if concept["_type"] == "recursive_part_of" and field.get("subtype") == "part_of":
                     # Recursive relation: Use RecursiveParentSelector
                     presentation = concept["id_presentation"]
                     separator = presentation["separator"]
@@ -1541,7 +1572,7 @@ const {edit_comp_name} = () => {{
                     pres_fields = presentation["fields"]
                     display_field = pres_fields[-1]
 
-                    input_html = f'          <RecursiveParentSelector source="{field_name}" reference="{target}" label="{field_name}" separator="{separator}" displayField="{display_field}" />'
+                    input_html = f'          <RecursiveParentSelector source="{field_name}" reference="{target}" label="{field_name}" separator="{separator}" displayField="{display_field}"{disabled_prop} />'
                     width_units = 6 # Force width 6 for recursive selector
                     grid_props = f"xs={{12}} sm={{{width_units}}}"
                     
@@ -1557,14 +1588,14 @@ const {edit_comp_name} = () => {{
                     # Check specific input type from schema
                     input_inner = ""
                     if comp_type == "AutocompleteInput":
-                         input_inner = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}}{full_width}{validation}{margin} />'
+                         input_inner = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}}{full_width}{validation}{margin}{disabled_prop} />'
                     else:
-                         input_inner = f'<SelectInput optionText="id_presentation"{full_width}{validation}{margin} />'
+                         input_inner = f'<SelectInput optionText="id_presentation"{full_width}{validation}{margin}{disabled_prop} />'
                     
                     input_html = f'          <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{input_inner}</ReferenceInput>'
                     
                     # Filter field
-                    filter_inner = input_inner.replace(f'{{validation}}{{margin}}', '')
+                    filter_inner = input_inner.replace(f'{validation}{margin}{disabled_prop}', '')
                     filter_fields.append(f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>')
 
             elif field["type"] == "relation_to_many":
@@ -1589,7 +1620,7 @@ const {edit_comp_name} = () => {{
                 enum_values = field["enum_values"]
                 choices_str = ', '.join([f"{{ id: '{val}', name: '{val}' }}" for val in enum_values])
                 choices_array = f"[{choices_str}]"
-                input_html = f'          <SelectInput source="{field_name}" choices={{{choices_array}}}{full_width}{validation}{margin} />'
+                input_html = f'          <SelectInput source="{field_name}" choices={{{choices_array}}}{full_width}{validation}{margin}{disabled_prop} />'
                 filter_fields.append(f'  <SelectInput source="{field_name}" choices={{{choices_array}}} />')
 
 
@@ -1602,7 +1633,7 @@ const {edit_comp_name} = () => {{
                      # formatting?
                      pass
                 
-                input_html = f'          <{comp_type} source="{field_name}"{extra_props}{full_width}{validation}{margin} />'
+                input_html = f'          <{comp_type} source="{field_name}"{extra_props}{full_width}{validation}{margin}{disabled_prop} />'
                 
                 # Add filter for standard fields
                 # We skip long text fields ('l') as filters
@@ -1648,7 +1679,7 @@ const {edit_comp_name} = () => {{
                         create_fields.append(f"        </Grid>")
                         
                         # Force new line for recursive parent selector
-                        if concept.get("_type") == "recursive_part_of" and field.get("subtype") == "part_of":
+                        if concept["_type"] == "recursive_part_of" and field.get("subtype") == "part_of":
                              remaining = 12 - (create_grid_pos % 12)
                              if remaining < 12 and remaining > 0:
                                  create_fields.append(f'        <Grid item xs={{12}} sm={{{remaining}}} />')
@@ -1657,15 +1688,11 @@ const {edit_comp_name} = () => {{
                     # EDIT
                     edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
                     edit_fields.append(f"        <Grid item {grid_props}>")
-                    if visibility == "read_only":
-                        input_html_disabled = input_html.replace('source=', 'disabled source=')
-                        edit_fields.append(input_html_disabled)
-                    else:
-                        edit_fields.append(input_html)
+                    edit_fields.append(input_html)
                     edit_fields.append(f"        </Grid>")
                     
                     # Force new line for recursive parent selector
-                    if concept.get("_type") == "recursive_part_of" and field.get("subtype") == "part_of":
+                    if concept["_type"] == "recursive_part_of" and field.get("subtype") == "part_of":
                          remaining = 12 - (edit_grid_pos % 12)
                          if remaining < 12 and remaining > 0:
                              edit_fields.append(f'        <Grid item xs={{12}} sm={{{remaining}}} />')

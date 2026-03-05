@@ -1,0 +1,35 @@
+{
+  "properties": {
+    "_acl": {
+      "type": "object",
+      "description": "Calculated security rules organized for easy lookup",
+      "additionalProperties": {
+        "type": "object",
+        "description": "Concept level security rules",
+        "properties": {
+          "_main": {
+            "type": "object",
+            "description": "Concept-level access per role",
+            "additionalProperties": {
+              "type": "string",
+              "enum": ["read", "write"]
+            }
+          },
+          "_fields": {
+            "type": "object",
+            "description": "Field-level access overrides per role",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "enum": ["read", "write"]
+              }
+            }
+          }
+        },
+        "required": ["_main", "_fields"]
+      }
+    }
+  },
+  "required": ["_acl", "roles", "users"]
+}

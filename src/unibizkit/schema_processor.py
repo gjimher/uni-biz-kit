@@ -68,57 +68,124 @@ class SchemaProcessor:
 
     def _enrich_security(self):
         """Inject default roles and users if missing, and expand rule wildcards."""
-        self.security_extended.setdefault("rules", [])
-        if self.security_extended["authentication_required"]:
-            if "roles" not in self.security_extended or not self.security_extended["roles"]:
-                self.security_extended["roles"] = [
-                    {"name": "admin", "description": "System Administrator"},
-                    {"name": "user", "description": "Standard User"}
-                ]
-            
-            if "users" not in self.security_extended or not self.security_extended["users"]:
-                self.security_extended["users"] = [
-                    {"email": "admin@test.com", "password": "adminadmin", "roles": ["admin"]},
-                    {"email": "user@test.com", "password": "useruser", "roles": ["user"]}
-                ]
-
-            # Handle defaults for rules_level_1
-            if "rules_level_1" not in self.security_extended or not self.security_extended["rules_level_1"]:
-                self.security_extended["rules_level_1"] = [
-                    {"role": "admin", "concept": "*", "access": "write"},
-                    {"role": "user", "concept": "*", "access": "read"}
-                ]
-
-            def expand_rules(rules):
-                expanded = []
-                for rule in rules:
-                    if rule["concept"] == "*":
-                        for concept in self.concepts:
-                            expanded.append({
-                                "role": rule["role"],
-                                "concept": concept["name"],
-                                "access": rule["access"]
-                            })
-                    else:
-                        expanded.append(rule)
-                return expanded
-
-            # Merge rules: higher levels override lower levels
-            rules_map = {} # (role, concept) -> access
-            for level_key in ["rules_level_1", "rules_level_2", "rules_level_3"]:
-                level_rules = self.security_extended.get(level_key, [])
-                for rule in expand_rules(level_rules):
-                    rules_map[(rule["role"], rule["concept"])] = rule["access"]
-            
-            # Reconstruct final rules list
-            self.security_extended["rules"] = [
-                {"role": r, "concept": c, "access": a}
-                for (r, c), a in rules_map.items()
+        # Ensure basic structures are always present for schema validation
+        if "roles" not in self.security_extended or not self.security_extended["roles"]:
+            self.security_extended["roles"] = [
+                {"name": "admin", "description": "System Administrator"},
+                {"name": "user", "description": "Standard User"}
+            ]
+        
+        if "users" not in self.security_extended or not self.security_extended["users"]:
+            self.security_extended["users"] = [
+                {"email": "admin@test.com", "password": "adminadmin", "roles": ["admin"]},
+                {"email": "user@test.com", "password": "useruser", "roles": ["user"]}
             ]
 
-        # Clean up levels (always, even if auth is disabled)
+        if not self.security_extended.get("authentication_required"):
+            # Set default empty _acl even if auth is disabled for schema consistency
+            self.security_extended["_acl"] = {}
+            # Ensure rules_level fields are also present
+            for level in ["rules_level_1", "rules_level_2", "rules_level_3"]:
+                if level not in self.security_extended:
+                    self.security_extended[level] = []
+            return
+
+        # Handle defaults for rules_level_1, 2, 3
+        if "rules_level_1" not in self.security_extended or not self.security_extended["rules_level_1"]:
+            self.security_extended["rules_level_1"] = [
+                {"concept": "*", "role": "admin", "access": "write", "field": "*"},
+                {"concept": "*", "role": "user", "access": "read", "field": "*"}
+            ]
+        
+        if "rules_level_2" not in self.security_extended:
+            self.security_extended["rules_level_2"] = []
+        if "rules_level_3" not in self.security_extended:
+            self.security_extended["rules_level_3"] = []
+
+        def expand_rules(rules):
+            import fnmatch
+            expanded = []
+            for rule in rules:
+                field_val = rule.get("field", "*")
+                
+                concepts_to_apply = []
+                if rule["concept"] == "*":
+                    concepts_to_apply = [c["name"] for c in self.concepts]
+                else:
+                    concepts_to_apply = [rule["concept"]]
+                    
+                for c_name in concepts_to_apply:
+                    if field_val == "*":
+                        expanded.append({
+                            "role": rule["role"],
+                            "concept": c_name,
+                            "field": "*",
+                            "access": rule["access"]
+                        })
+                    elif "*" in field_val:
+                        concept = self.concept_map.get(c_name)
+                        if concept:
+                            for field in concept["fields"]:
+                                if fnmatch.fnmatch(field["name"], field_val):
+                                    expanded.append({
+                                        "role": rule["role"],
+                                        "concept": c_name,
+                                        "field": field["name"],
+                                        "access": rule["access"]
+                                    })
+                    else:
+                        expanded.append({
+                            "role": rule["role"],
+                            "concept": c_name,
+                            "field": field_val,
+                            "access": rule["access"]
+                        })
+            return expanded
+
+        # Merge rules: higher levels override lower levels
+        rules_map = {} # (concept, field, role) -> access
         for level_key in ["rules_level_1", "rules_level_2", "rules_level_3"]:
-            self.security_extended.pop(level_key, None)
+            level_rules = self.security_extended.get(level_key, [])
+            for rule in expand_rules(level_rules):
+                rules_map[(rule["concept"], rule["field"], rule["role"])] = rule["access"]
+        
+        # Build _acl structure: concept -> { _main: {role: access}, _fields: {field: {role: access}} }
+        _acl = {}
+        role_names = [r["name"] for r in self.security_extended["roles"]]
+        
+        for concept in self.concepts:
+            concept_name = concept["name"]
+            concept_acl = {"_main": {}, "_fields": {}}
+            
+            # 1. Main access (concept-level)
+            for role_name in role_names:
+                access = rules_map.get((concept_name, "*", role_name))
+                if access:
+                    concept_acl["_main"][role_name] = access
+            
+            # 2. Field-level access (explicit for all fields)
+            for field in concept["fields"]:
+                field_name = field["name"]
+                field_rules = {}
+                
+                # Check each role for this field
+                for role_name in role_names:
+                    # Specific field rule overrides concept rule
+                    access = rules_map.get((concept_name, field_name, role_name))
+                    if not access:
+                        # Fallback to main rule
+                        access = concept_acl["_main"].get(role_name)
+                        
+                    if access:
+                        field_rules[role_name] = access
+                
+                if field_rules:
+                    concept_acl["_fields"][field_name] = field_rules
+            
+            if concept_acl["_main"] or concept_acl["_fields"]:
+                _acl[concept_name] = concept_acl
+                
+        self.security_extended["_acl"] = _acl
 
     def _process_concept_basics(self, concept: Dict[str, Any]) -> Dict[str, Any]:
         """

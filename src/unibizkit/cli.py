@@ -9,6 +9,7 @@ import logging
 import sys
 import os
 import json
+import copy
 from typing import Dict, Any
 from pathlib import Path
 from .schema_loader import SchemaLoader, SchemaValidationError
@@ -223,39 +224,30 @@ Examples:
 
     def _generate_security_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
         """
-        Dynamically generate the full extended security schema definition from security_schema.json.
+        Dynamically generate the full extended security schema definition by merging
+        security_schema.json and security_extended_required_additions.json.
         """
         schemas_dir = Path(__file__).parent.parent.parent / "schemas"
         base_schema_path = schemas_dir / "security_schema.json"
+        additions_path = schemas_dir / "security_extended_required_additions.json"
         
         with open(base_schema_path, 'r', encoding='utf-8') as f:
             base_schema = json.load(f)
             
-        # Extract rule definition from $defs
-        rule_def = base_schema["$defs"]["rule"]
-        
-        # Add "rules" property
-        base_schema["properties"]["rules"] = {
-            "type": "array",
-            "description": "Merged and expanded security rules (Calculated).",
-            "items": rule_def
-        }
-        
-        # Remove input-only levels from the extended schema
-        for level in ["rules_level_1", "rules_level_2", "rules_level_3"]:
-            if level in base_schema["properties"]:
-                del base_schema["properties"][level]
+        with open(additions_path, 'r', encoding='utf-8') as f:
+            additions = json.load(f)
+            
+        # Merge Properties
+        if "properties" in additions:
+            base_schema["properties"].update(additions["properties"])
+            
+        # Merge Required
+        if "required" in additions:
+            if "required" not in base_schema:
+                base_schema["required"] = []
+            base_schema["required"].extend(additions["required"])
+            base_schema["required"] = list(set(base_schema["required"]))
 
-        # Remove definitions no longer needed in extended schema
-        if "$defs" in base_schema:
-            del base_schema["$defs"]
-
-        # Add 'rules' to required
-        if "required" not in base_schema:
-            base_schema["required"] = []
-        if "rules" not in base_schema["required"]:
-            base_schema["required"].append("rules")
-        
         # Update metadata
         base_schema["title"] = "Extended Security Schema"
         base_schema["description"] = "Dynamically generated extended security schema."
