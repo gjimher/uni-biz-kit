@@ -130,7 +130,7 @@ Examples:
             
         return schema_path, output_dir
 
-    def _generate_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
+    def _generate_concepts_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
         """
         Dynamically generate the full extended schema definition by merging
         concepts_schema.json and concepts_extended_required_additions.json.
@@ -200,28 +200,73 @@ Examples:
             
         return base_schema
 
-    def _validate_extended_schema(self, extended_schema: Dict[str, Any], output_dir: Path):
-        """Validate the enriched schema against dynamically generated schema."""
+    def _validate_extended_schema(self, data: Dict[str, Any], schema_def: Dict[str, Any], label: str):
+        """Validate enriched data against a dynamically generated extended schema."""
         import jsonschema
         from jsonschema.validators import validator_for
         
         try:
-            extended_schema_def = self._generate_extended_schema_def(output_dir)
-            
             # Validate
-            ValidatorClass = validator_for(extended_schema_def)
-            validator = ValidatorClass(extended_schema_def)
-            validator.validate(extended_schema)
+            ValidatorClass = validator_for(schema_def)
+            validator = ValidatorClass(schema_def)
+            validator.validate(data)
             
-            logger.info("Enriched schema validation successful")
+            logger.info(f"Enriched {label} validation successful")
         except jsonschema.ValidationError as e:
-            error_msg = f"Enriched schema validation failed: {e.message}"
+            error_msg = f"Enriched {label} validation failed: {e.message}"
             logger.error(error_msg)
             raise SchemaValidationError(error_msg)
         except Exception as e:
-            error_msg = f"Error during extended schema validation: {e}"
+            error_msg = f"Error during extended {label} validation: {e}"
             logger.error(error_msg)
             raise SchemaValidationError(error_msg)
+
+    def _generate_security_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
+        """
+        Dynamically generate the full extended security schema definition from security_schema.json.
+        """
+        schemas_dir = Path(__file__).parent.parent.parent / "schemas"
+        base_schema_path = schemas_dir / "security_schema.json"
+        
+        with open(base_schema_path, 'r', encoding='utf-8') as f:
+            base_schema = json.load(f)
+            
+        # Extract rule definition from $defs
+        rule_def = base_schema["$defs"]["rule"]
+        
+        # Add "rules" property
+        base_schema["properties"]["rules"] = {
+            "type": "array",
+            "description": "Merged and expanded security rules (Calculated).",
+            "items": rule_def
+        }
+        
+        # Remove input-only levels from the extended schema
+        for level in ["rules_level_1", "rules_level_2", "rules_level_3"]:
+            if level in base_schema["properties"]:
+                del base_schema["properties"][level]
+
+        # Remove definitions no longer needed in extended schema
+        if "$defs" in base_schema:
+            del base_schema["$defs"]
+
+        # Add 'rules' to required
+        if "required" not in base_schema:
+            base_schema["required"] = []
+        if "rules" not in base_schema["required"]:
+            base_schema["required"].append("rules")
+        
+        # Update metadata
+        base_schema["title"] = "Extended Security Schema"
+        base_schema["description"] = "Dynamically generated extended security schema."
+        
+        # Save to output dir for reference/debug
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / "security_extended_schema.json"
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(base_schema, f, indent=2)
+            
+        return base_schema
 
     def _handle_generate_command(self, args):
         """Handle the generate command."""
@@ -248,7 +293,8 @@ Examples:
         extended_schema = processor.process()
 
         # Validate Extended Schema
-        self._validate_extended_schema(extended_schema, output_dir)
+        extended_concepts_schema_def = self._generate_concepts_extended_schema_def(output_dir)
+        self._validate_extended_schema(extended_schema, extended_concepts_schema_def, "concepts")
         
         # Save Extended Schema (for debugging/verification)
         output_dir.mkdir(exist_ok=True)
@@ -298,15 +344,13 @@ Examples:
             del sec_config_copy["$schema"]
         new_sec_config.update(sec_config_copy)
 
+        # Validate Security Extended (this also generates the extended schema file)
+        extended_security_schema_def = self._generate_security_extended_schema_def(output_dir)
+        self._validate_extended_schema(new_sec_config, extended_security_schema_def, "security")
+
         with open(sec_dump_path, 'w', encoding='utf-8') as f:
             json.dump(new_sec_config, f, indent=2)
         logger.info(f"Security extended saved to: {sec_dump_path}")
-
-        # Save Security Extended Schema (copy of the original)
-        sec_schema_dump_path = output_dir / "security_extended_schema.json"
-        with open(sec_schema_dump_path, 'w', encoding='utf-8') as f:
-            json.dump(schema_loader.security_validation_schema, f, indent=2)
-        logger.info(f"Security extended schema saved to: {sec_schema_dump_path}")
 
         # Pass the EXTENDED schema to generators
         schema_loader.business_schema = extended_schema
@@ -371,7 +415,8 @@ Examples:
         extended_schema = processor.process()
         
         # Validate against Extended Schema Definition
-        self._validate_extended_schema(extended_schema, output_dir)
+        extended_concepts_schema_def = self._generate_concepts_extended_schema_def(output_dir)
+        self._validate_extended_schema(extended_schema, extended_concepts_schema_def, "concepts")
 
         # Dump extended schema to Output Directory
         # Ensure output directory exists (it might not if we are just validating)
@@ -423,15 +468,13 @@ Examples:
             del sec_config_copy["$schema"]
         new_sec_config.update(sec_config_copy)
 
+        # Validate Security Extended (this also generates the extended schema file)
+        extended_security_schema_def = self._generate_security_extended_schema_def(output_dir)
+        self._validate_extended_schema(new_sec_config, extended_security_schema_def, "security")
+
         with open(sec_dump_path, 'w', encoding='utf-8') as f:
             json.dump(new_sec_config, f, indent=2)
         logger.info(f"Security extended saved to: {sec_dump_path}")
-
-        # Save Security Extended Schema (copy of the original)
-        sec_schema_dump_path = output_dir / "security_extended_schema.json"
-        with open(sec_schema_dump_path, 'w', encoding='utf-8') as f:
-            json.dump(schema_loader.security_validation_schema, f, indent=2)
-        logger.info(f"Security extended schema saved to: {sec_schema_dump_path}")
         
         logger.info(f"Version: {business_schema["version"]}")
         logger.info(f"Number of concepts: {len(business_schema["concepts"])}")

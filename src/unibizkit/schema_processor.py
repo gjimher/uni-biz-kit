@@ -68,6 +68,7 @@ class SchemaProcessor:
 
     def _enrich_security(self):
         """Inject default roles and users if missing, and expand rule wildcards."""
+        self.security_extended.setdefault("rules", [])
         if self.security_extended["authentication_required"]:
             if "roles" not in self.security_extended or not self.security_extended["roles"]:
                 self.security_extended["roles"] = [
@@ -81,25 +82,43 @@ class SchemaProcessor:
                     {"email": "user@test.com", "password": "useruser", "roles": ["user"]}
                 ]
 
-            if "rules" not in self.security_extended or not self.security_extended["rules"]:
-                self.security_extended["rules"] = [
+            # Handle defaults for rules_level_1
+            if "rules_level_1" not in self.security_extended or not self.security_extended["rules_level_1"]:
+                self.security_extended["rules_level_1"] = [
                     {"role": "admin", "concept": "*", "access": "write"},
                     {"role": "user", "concept": "*", "access": "read"}
                 ]
 
-            expanded_rules = []
-            for rule in self.security_extended["rules"]:
-                if rule["concept"] == "*":
-                    for concept in self.concepts:
-                        expanded_rules.append({
-                            "role": rule["role"],
-                            "concept": concept["name"],
-                            "access": rule["access"]
-                        })
-                else:
-                    expanded_rules.append(rule)
+            def expand_rules(rules):
+                expanded = []
+                for rule in rules:
+                    if rule["concept"] == "*":
+                        for concept in self.concepts:
+                            expanded.append({
+                                "role": rule["role"],
+                                "concept": concept["name"],
+                                "access": rule["access"]
+                            })
+                    else:
+                        expanded.append(rule)
+                return expanded
+
+            # Merge rules: higher levels override lower levels
+            rules_map = {} # (role, concept) -> access
+            for level_key in ["rules_level_1", "rules_level_2", "rules_level_3"]:
+                level_rules = self.security_extended.get(level_key, [])
+                for rule in expand_rules(level_rules):
+                    rules_map[(rule["role"], rule["concept"])] = rule["access"]
             
-            self.security_extended["rules"] = expanded_rules
+            # Reconstruct final rules list
+            self.security_extended["rules"] = [
+                {"role": r, "concept": c, "access": a}
+                for (r, c), a in rules_map.items()
+            ]
+
+        # Clean up levels (always, even if auth is disabled)
+        for level_key in ["rules_level_1", "rules_level_2", "rules_level_3"]:
+            self.security_extended.pop(level_key, None)
 
     def _process_concept_basics(self, concept: Dict[str, Any]) -> Dict[str, Any]:
         """
