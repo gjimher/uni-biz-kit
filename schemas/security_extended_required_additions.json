@@ -12,7 +12,7 @@
             "description": "Concept-level access per role",
             "additionalProperties": {
               "type": "string",
-              "enum": ["read", "write"]
+              "enum": ["read", "write", "owner_write"]
             }
           },
           "_fields": {
@@ -22,7 +22,7 @@
               "type": "object",
               "additionalProperties": {
                 "type": "string",
-                "enum": ["read", "write"]
+                "enum": ["read", "write", "owner_write"]
               }
             }
           }

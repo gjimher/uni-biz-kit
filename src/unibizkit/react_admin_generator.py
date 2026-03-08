@@ -720,6 +720,9 @@ export const authProvider = {{
                     if (!permissions[concept].includes(mainAccess)) {{
                         permissions[concept].push(mainAccess);
                     }}
+                    if (mainAccess === 'owner_write' && !permissions[concept].includes('write')) {{
+                        permissions[concept].push('write');
+                    }}
                 }}
                 
                 // Field level access
@@ -730,6 +733,9 @@ export const authProvider = {{
                         if (!permissions[fieldKey]) permissions[fieldKey] = [];
                         if (!permissions[fieldKey].includes(fieldAccess)) {{
                             permissions[fieldKey].push(fieldAccess);
+                        }}
+                        if (fieldAccess === 'owner_write' && !permissions[fieldKey].includes('write')) {{
+                            permissions[fieldKey].push('write');
                         }}
                     }}
                 }}

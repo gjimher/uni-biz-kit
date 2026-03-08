@@ -44,9 +44,33 @@ class SchemaProcessor:
         # 0. Enrich Security
         self._enrich_security()
 
+        # Determine which concepts have owner_write
+        owner_write_concepts = set()
+        _acl = self.security_extended.get("_acl", {})
+        for concept_name, concept_acl in _acl.items():
+            for role, access in concept_acl.get("_main", {}).items():
+                if access == "owner_write":
+                    owner_write_concepts.add(concept_name)
+            for field_rules in concept_acl.get("_fields", {}).values():
+                for role, access in field_rules.items():
+                    if access == "owner_write":
+                        owner_write_concepts.add(concept_name)
+
         # 1. Pass 1: Local Concept Processing (Fields, Basic Metadata)
         # We need to iterate by index to modify the list in place with a reordered dict
         for idx, concept in enumerate(self.concepts):
+            if concept["name"] in owner_write_concepts:
+                if not any(f["name"] == "security_owner_id" for f in concept["fields"]):
+                    concept["fields"].append({
+                        "name": "security_owner_id",
+                        "type": "string",
+                        "size": "l",
+                        "description": "ID of the user who owns this record",
+                        "required": False,
+                        "unique": False,
+                        "default": "auth.uid()::text"
+                    })
+
             # Process basics returns a NEW dict with reordered keys
             new_concept = self._process_concept_basics(concept)
             

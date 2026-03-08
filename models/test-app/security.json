@@ -1,12 +1,35 @@
 {
   "$schema": "../../schemas/security_schema.json",
   "authentication_required": true,
+  "users": [
+    {
+      "email": "admin@test.com",
+      "password": "adminadmin",
+      "roles": ["admin"]
+    },
+    {
+      "email": "user1@test.com",
+      "password": "useruser",
+      "roles": ["user"]
+    },
+    {
+      "email": "user2@test.com",
+      "password": "useruser",
+      "roles": ["user"]
+    }
+  ],
   "rules_level_2": [
     {
       "role": "user",
       "concept": "product",
       "field": "*",
       "access": "write"
+    },
+    {
+      "role": "user",
+      "concept": "order",
+      "field": "*",
+      "access": "owner_write"
     }
   ],
   "rules_level_3": [

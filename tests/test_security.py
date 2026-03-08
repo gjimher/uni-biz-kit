@@ -1,5 +1,8 @@
 import pytest
 from unibizkit.schema_processor import SchemaProcessor
+import os
+import psycopg2
+from dotenv import load_dotenv
 
 def test_security_rules_merging():
     schema = {
@@ -148,3 +151,65 @@ def test_security_extended_file_validation():
     except jsonschema.ValidationError as e:
         pytest.fail(f"La validación del archivo falló: {e.message}")
 
+@pytest.mark.integration
+def test_owner_write_rls():
+    """Test RLS owner_write capabilities."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+        
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    
+    with conn.cursor() as cur:
+        # Get users from auth.users
+        cur.execute("SELECT id, email FROM auth.users")
+        users = cur.fetchall()
+        user_ids = {email: uid for uid, email in users}
+        
+        user1_id = user_ids.get("user1@test.com")
+        user2_id = user_ids.get("user2@test.com")
+        admin_id = user_ids.get("admin@test.com")
+        
+        if not all([user1_id, user2_id, admin_id]):
+            pytest.skip(f"Required users not found in DB. Found: {user_ids}")
+            
+        try:
+            # We must use transaction to set local config safely
+            # Note: psycopg2 autocommit is True, so we must manually manage the transaction for SET LOCAL
+            cur.execute("BEGIN;")
+            
+            # --- Test as user1 ---
+            cur.execute("SET LOCAL ROLE authenticated;")
+            # Simulating user1
+            cur.execute(f"SELECT set_config('request.jwt.claims', '{{\"sub\": \"{user1_id}\", \"app_metadata\": {{\"roles\": [\"user\"]}}}}', true);")
+            
+            # Need a customer for the order (from sample data, customer 1 should exist, but let's safely select one)
+            cur.execute('SELECT id FROM "customer" LIMIT 1;')
+            customer_id = cur.fetchone()[0]
+            
+            # Create an order as user1
+            cur.execute(f"""
+                INSERT INTO "order" (customer, order_date, total_amount, status, shipping_address, security_owner_id)
+                VALUES ({customer_id}, CURRENT_TIMESTAMP, 100.00, 'pending', 'User 1 Address', '{user1_id}')
+                RETURNING id;
+            """)
+            order_id = cur.fetchone()[0]
+            
+            # Can user1 read it?
+            cur.execute(f'SELECT id FROM "order" WHERE id = {order_id}')
+            assert cur.fetchone() is not None, "user1 should be able to read their own order"
+            
+            # --- Switch to user2 ---
+            cur.execute(f"SELECT set_config('request.jwt.claims', '{{\"sub\": \"{user2_id}\", \"app_metadata\": {{\"roles\": [\"user\"]}}}}', true);")
+            cur.execute(f'SELECT id FROM "order" WHERE id = {order_id}')
+            assert cur.fetchone() is None, "user2 should NOT be able to read user1's order"
+            
+            # --- Switch to admin ---
+            cur.execute(f"SELECT set_config('request.jwt.claims', '{{\"sub\": \"{admin_id}\", \"app_metadata\": {{\"roles\": [\"admin\"]}}}}', true);")
+            cur.execute(f'SELECT id FROM "order" WHERE id = {order_id}')
+            assert cur.fetchone() is not None, "admin should be able to read all orders"
+            
+        finally:
+            cur.execute("ROLLBACK;")

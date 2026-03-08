@@ -16,11 +16,11 @@ For every concept, the `_acl` object contains two main sections:
 "_acl": {
   "ConceptName": {
     "_main": {
-      "role_name": "read|write"
+      "role_name": "read|write|owner_write"
     },
     "_fields": {
       "field_name": {
-        "role_name": "read|write"
+        "role_name": "read|write|owner_write"
       }
     }
   }
@@ -30,6 +30,7 @@ For every concept, the `_acl` object contains two main sections:
 ### Access Levels
 
 - **`write`**: Allows the user to create, edit, and delete records (or specific fields).
+- **`owner_write`**: Grants write access strictly to the owner of the record. When a concept uses `owner_write`, UniBizKit automatically injects a `security_owner_id` column (defaulting to the authenticated user ID) and generates corresponding Row Level Security (RLS) policies to ensure users can only modify their own data. Note: `owner_write` inherently grants read access as well.
 - **`read`**: Restricts the user to only viewing the records (or specific fields).
 
 ### How Concept-Level and Field-Level Access Interact

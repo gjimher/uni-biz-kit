@@ -132,7 +132,7 @@ WITH CHECK (true);
                     allowed_roles = []
                     for role in all_role_names:
                         access = field_rules.get(role, main_rules.get(role, "none"))
-                        if access == "write":
+                        if access in ("write", "owner_write"):
                             allowed_roles.append(role)
                     
                     # If this field has limited writers
@@ -183,6 +183,8 @@ EXECUTE FUNCTION "{trigger_name}_func"();
                     current = role_table_access.get(role, "none")
                     if access == "write" or current == "write":
                         role_table_access[role] = "write"
+                    elif access == "owner_write" and current not in ("write", "owner_write"):
+                        role_table_access[role] = "owner_write"
                     elif access == "read" and current == "none":
                         role_table_access[role] = "read"
 
@@ -203,6 +205,14 @@ FOR ALL
 TO authenticated
 USING ({condition})
 WITH CHECK ({condition});
+""")
+                elif access == "owner_write":
+                    policies.append(f"""
+CREATE POLICY "{role}_owner_all_{table}" ON "{table}"
+FOR ALL
+TO authenticated
+USING ({condition} AND "security_owner_id" = auth.uid()::text)
+WITH CHECK ({condition} AND "security_owner_id" = auth.uid()::text);
 """)
 
         return policies
@@ -311,7 +321,10 @@ EXECUTE FUNCTION update_updated_at_column();
         if 'default' in field:
             default_value = field["default"]
             if isinstance(default_value, str):
-                field_parts.append(f"DEFAULT '{default_value}'")
+                if default_value in ("auth.uid()", "auth.uid()::text"):
+                    field_parts.append(f"DEFAULT {default_value}")
+                else:
+                    field_parts.append(f"DEFAULT '{default_value}'")
             elif isinstance(default_value, (int, float)):
                 field_parts.append(f"DEFAULT {default_value}")
             elif isinstance(default_value, bool):
