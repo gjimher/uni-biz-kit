@@ -1613,7 +1613,7 @@ const {edit_comp_name} = () => {{
                     
                     if field["type"] == "relation_to_one":
                         target = field["target"]
-                        child_raw_columns.append((fname, f'<ReferenceField source="{fname}" reference="{target}"><TextField source="id_presentation" /></ReferenceField>'))
+                        child_raw_columns.append((fname, f'<ReferenceField source="{fname}" reference="{target}" link={{false}}><TextField source="id_presentation" /></ReferenceField>'))
                     elif field["type"] == "decimal" and field.get("subtype") == "money":
                          currency = self.presentation_config["currency"]
                          # Use specific currency locale, default is handled by schema validation
@@ -1770,9 +1770,11 @@ const {edit_comp_name} = () => {{
 
             # Construct List Component
             list_html = ""
+            show_html = ""
             if field["type"] == "relation_to_one":
                 target = field["target"]
-                list_html = f'      <ReferenceField source="{field_name}" reference="{target}"><TextField source="id_presentation" /></ReferenceField>'
+                list_html = f'      <ReferenceField source="{field_name}" reference="{target}" link={{false}}><TextField source="id_presentation" /></ReferenceField>'
+                show_html = f'      <ReferenceField source="{field_name}" reference="{target}"><TextField source="id_presentation" /></ReferenceField>'
             elif field["type"] == "relation_to_many":
                 pass # Not in list
             elif field["type"] == "decimal":
@@ -1784,15 +1786,18 @@ const {edit_comp_name} = () => {{
                      number_locale = self.presentation_config["number_locale"]
                      
                      list_html = f"""      <NumberField source="{field_name}" options={{{{ style: 'currency', currency: '{currency}' }}}} locales="{number_locale}" />"""
+                     show_html = list_html
                  else:
                      list_html = f'      <{list_comp} source="{field_name}" />'
+                     show_html = list_html
             else:
                 list_html = f'      <{list_comp} source="{field_name}" />'
+                show_html = list_html
 
             # Append to lists
             if list_html and visibility != "internal": list_fields.append((field_name, list_html))
             # Show uses same as list mostly
-            if list_html and visibility != "internal": show_fields.append(list_html)
+            if show_html and visibility != "internal": show_fields.append(show_html)
 
             # Add to Create/Edit
             # Check visibility
