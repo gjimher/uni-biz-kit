@@ -136,7 +136,9 @@ class SchemaLoader:
             presentation_config = json.load(f)
         
         # Validate and inject defaults
-        DefaultValidatingDraft7Validator(self.presentation_validation_schema).validate(presentation_config)
+        # We MUST use the custom validator that injects defaults
+        validator = extend_with_default(Draft7Validator)(self.presentation_validation_schema)
+        validator.validate(presentation_config)
         
         self.presentation_config = presentation_config
         logger.info(f"Successfully loaded and validated presentation settings: {presentation_path}")

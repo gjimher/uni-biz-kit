@@ -260,6 +260,45 @@ Examples:
             
         return base_schema
 
+    def _generate_presentation_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
+        """
+        Dynamically generate the full extended presentation schema definition by merging
+        presentation_schema.json and presentation_extended_required_additions.json.
+        """
+        schemas_dir = Path(__file__).parent.parent.parent / "schemas"
+        base_schema_path = schemas_dir / "presentation_schema.json"
+        additions_path = schemas_dir / "presentation_extended_required_additions.json"
+
+        with open(base_schema_path, 'r', encoding='utf-8') as f:
+            base_schema = json.load(f)
+
+        if additions_path.exists():
+            with open(additions_path, 'r', encoding='utf-8') as f:
+                additions = json.load(f)
+
+            # Merge Properties
+            if "properties" in additions:
+                base_schema["properties"].update(additions["properties"])
+
+            # Merge Required
+            if "required" in additions:
+                if "required" not in base_schema:
+                    base_schema["required"] = []
+                base_schema["required"].extend(additions["required"])
+                base_schema["required"] = list(set(base_schema["required"]))
+
+        # Update metadata
+        base_schema["title"] = "Extended Presentation Schema"
+        base_schema["description"] = "Dynamically generated extended presentation schema."
+
+        # Save to output dir for reference/debug
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / "presentation_extended_schema.json"
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(base_schema, f, indent=2)
+
+        return base_schema
+
     def _handle_generate_command(self, args):
         """Handle the generate command."""
         
@@ -317,11 +356,9 @@ Examples:
             json.dump(new_pres_config, f, indent=2)
         logger.info(f"Presentation extended saved to: {pres_dump_path}")
 
-        # Save Presentation Extended Schema (copy of the original)
-        pres_schema_dump_path = output_dir / "presentation_extended_schema.json"
-        with open(pres_schema_dump_path, 'w', encoding='utf-8') as f:
-            json.dump(schema_loader.presentation_validation_schema, f, indent=2)
-        logger.info(f"Presentation extended schema saved to: {pres_schema_dump_path}")
+        # Validate Presentation Extended (this also generates the extended schema file)
+        extended_presentation_schema_def = self._generate_presentation_extended_schema_def(output_dir)
+        self._validate_extended_schema(new_pres_config, extended_presentation_schema_def, "presentation")
 
         # Update loader with enriched configs for generators
         schema_loader.presentation_config = processor.presentation_extended
@@ -441,11 +478,9 @@ Examples:
             json.dump(new_pres_config, f, indent=2)
         logger.info(f"Presentation extended saved to: {pres_dump_path}")
 
-        # Save Presentation Extended Schema (copy of the original)
-        pres_schema_dump_path = output_dir / "presentation_extended_schema.json"
-        with open(pres_schema_dump_path, 'w', encoding='utf-8') as f:
-            json.dump(schema_loader.presentation_validation_schema, f, indent=2)
-        logger.info(f"Presentation extended schema saved to: {pres_schema_dump_path}")
+        # Validate Presentation Extended (this also generates the extended schema file)
+        extended_presentation_schema_def = self._generate_presentation_extended_schema_def(output_dir)
+        self._validate_extended_schema(new_pres_config, extended_presentation_schema_def, "presentation")
 
         # Update loader with enriched configs for generators
         schema_loader.presentation_config = processor.presentation_extended

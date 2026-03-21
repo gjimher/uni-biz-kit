@@ -27,5 +27,11 @@
         }
       ]
     }
-  ]
+  ],
+  "list_field_rules_level_2": {
+    "product": "!>price",
+    "category": "!slug",
+    "order": "id_presentation[0], !>total_amount",
+    "customer": "!>email"
+  }
 }

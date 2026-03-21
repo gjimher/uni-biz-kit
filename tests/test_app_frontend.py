@@ -76,3 +76,48 @@ class TestAppFrontend:
             
         finally:
             os.chdir(original_cwd)
+
+    def test_filter_list_fields(self):
+        """Test the logic for filtering list fields based on string modifiers."""
+        from unibizkit.react_admin_generator import ReactAdminGenerator
+        
+        pool = ['id_presentation', 'a', 'b', 'c', 'd', 'e', '_private']
+        
+        # Test basic inclusion (puts at end)
+        assert ReactAdminGenerator.filter_list_fields(pool, [], 'a, c') == ['a', 'c']
+        
+        # Test all (*)
+        assert ReactAdminGenerator.filter_list_fields(pool, [], '*') == ['id_presentation', 'a', 'b', 'c', 'd', 'e', '_private']
+        
+        # Test default level 1 (exclude id_presentation and anything starting with _)
+        assert ReactAdminGenerator.filter_list_fields(pool, [], '*, !id_presentation, !_*') == ['a', 'b', 'c', 'd', 'e']
+        
+        # Test prefix matching (xxx*)
+        pool_extra = pool + ['ax', 'ay']
+        assert ReactAdminGenerator.filter_list_fields(pool_extra, [], 'a*') == ['a', 'ax', 'ay']
+        
+        # Test prefix exclusion (!xxx*)
+        assert ReactAdminGenerator.filter_list_fields(pool_extra, ['a', 'ax', 'ay', 'b'], '!a*') == ['b']
+        
+        # Test ordering [0] (move to front)
+        assert ReactAdminGenerator.filter_list_fields(pool, ['a', 'b'], 'c[0]') == ['c', 'a', 'b']
+        
+        # Test ordering [-1] (move to end)
+        assert ReactAdminGenerator.filter_list_fields(pool, ['a', 'b'], 'c[-1]') == ['a', 'b', 'c']
+        
+        # Test ordering [prev] (move after prev)
+        assert ReactAdminGenerator.filter_list_fields(pool, ['a', 'b', 'c'], 'd[a]') == ['a', 'd', 'b', 'c']
+        
+        # Test cumulative levels
+        # Level 1: Default general rules
+        l1 = ReactAdminGenerator.filter_list_fields(pool, [], '*, !id_presentation, !_*') # ['a', 'b', 'c', 'd', 'e']
+        assert l1 == ['a', 'b', 'c', 'd', 'e']
+        
+        # Level 2: App-wide override (e.g. move id_presentation to front)
+        l2 = ReactAdminGenerator.filter_list_fields(pool, l1, 'id_presentation[0]') 
+        assert l2 == ['id_presentation', 'a', 'b', 'c', 'd', 'e']
+        
+        # Level 3: Concept-specific override (e.g. remove c, move e to front)
+        l3 = ReactAdminGenerator.filter_list_fields(pool, l2, '!c, e[0]')
+        assert l3 == ['e', 'id_presentation', 'a', 'b', 'd']
+    

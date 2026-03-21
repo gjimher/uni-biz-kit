@@ -295,6 +295,12 @@
           "min": 0,
           "calculated": "quantity*unit_price",
           "description": "Total price for this order item"
+        },
+        {
+          "name": "_internal_note",
+          "type": "string",
+          "required": false,
+          "description": "Internal note not shown to users"
         }
       ]
     }

@@ -11,9 +11,123 @@ Naming Convention for Enriched Fields:
 """
 
 import copy
+import re
 from typing import Dict, Any, List, Optional
 
 class SchemaProcessor:
+    @staticmethod
+    def evaluate_list_fields(all_names: List[str], filter_str: str) -> List[str]:
+        result_names = []
+        if not filter_str.strip():
+            return result_names
+            
+        parts = [p.strip() for p in filter_str.split(',') if p.strip()]
+        for part in parts:
+            pos_match = re.match(r'^([^\[\]]+)\[([^\]]+)\]$', part)
+            if pos_match:
+                target = pos_match.group(1).strip()
+                pos = pos_match.group(2).strip()
+                
+                if target not in all_names:
+                    continue
+                    
+                if target in result_names:
+                    result_names.remove(target)
+                    
+                if pos == '0':
+                    result_names.insert(0, target)
+                elif pos == '-1':
+                    result_names.append(target)
+                else:
+                    if pos in result_names:
+                        idx = result_names.index(pos)
+                        result_names.insert(idx + 1, target)
+                    else:
+                        result_names.append(target)
+                continue
+
+            if part == '*':
+                for name in all_names:
+                    if name not in result_names:
+                        result_names.append(name)
+            elif part.startswith('!>='):
+                target = part[3:]
+                if target in all_names:
+                    idx = all_names.index(target)
+                    for name in all_names[idx:]:
+                        if name in result_names:
+                            result_names.remove(name)
+            elif part.startswith('!>'):
+                target = part[2:]
+                if target in all_names:
+                    idx = all_names.index(target)
+                    for name in all_names[idx+1:]:
+                        if name in result_names:
+                            result_names.remove(name)
+            elif part.startswith('!<='):
+                target = part[3:]
+                if target in all_names:
+                    idx = all_names.index(target)
+                    for name in all_names[:idx+1]:
+                        if name in result_names:
+                            result_names.remove(name)
+            elif part.startswith('!<'):
+                target = part[2:]
+                if target in all_names:
+                    idx = all_names.index(target)
+                    for name in all_names[:idx]:
+                        if name in result_names:
+                            result_names.remove(name)
+            elif part.startswith('>='):
+                target = part[2:]
+                if target in all_names:
+                    idx = all_names.index(target)
+                    for name in all_names[idx:]:
+                        if name not in result_names:
+                            result_names.append(name)
+            elif part.startswith('>'):
+                target = part[1:]
+                if target in all_names:
+                    idx = all_names.index(target)
+                    for name in all_names[idx+1:]:
+                        if name not in result_names:
+                            result_names.append(name)
+            elif part.startswith('<='):
+                target = part[2:]
+                if target in all_names:
+                    idx = all_names.index(target)
+                    for name in all_names[:idx+1]:
+                        if name not in result_names:
+                            result_names.append(name)
+            elif part.startswith('<'):
+                target = part[1:]
+                if target in all_names:
+                    idx = all_names.index(target)
+                    for name in all_names[:idx]:
+                        if name not in result_names:
+                            result_names.append(name)
+            elif part.startswith('!'):
+                target = part[1:]
+                if target.endswith('*'):
+                    prefix = target[:-1]
+                    for name in all_names:
+                        if name.startswith(prefix) and name in result_names:
+                            result_names.remove(name)
+                elif target in result_names:
+                    result_names.remove(target)
+            else:
+                target = part
+                if target.endswith('*'):
+                    prefix = target[:-1]
+                    for name in all_names:
+                        if name.startswith(prefix) and name not in result_names:
+                            result_names.append(name)
+                elif target in all_names:
+                    if target in result_names:
+                        result_names.remove(target)
+                    result_names.append(target)
+        return result_names
+
     def __init__(self, schema: Dict[str, Any], security_config: Optional[Dict[str, Any]] = None, presentation_config: Optional[Dict[str, Any]] = None):
         """
         Initialize the Schema Processor.
@@ -37,12 +151,55 @@ class SchemaProcessor:
     def process(self) -> Dict[str, Any]:
         """
         Enrich the schema and presentation with internal metadata.
-        
+
         Returns:
             The extended schema dictionary.
         """
         # 0. Enrich Security
         self._enrich_security()
+
+        # 0.5 Enrich Presentation
+        from .react_admin_generator import ReactAdminGenerator
+        
+        l1_rules = self.presentation_extended["list_field_rules_level_1"]
+        l2_rules = self.presentation_extended.get("list_field_rules_level_2", {})
+        l3_rules = self.presentation_extended.get("list_field_rules_level_3", {})
+        
+        self.presentation_extended["_list_fields"] = {}
+        
+        def get_matched_rule(c_name, rules):
+            if not rules:
+                return None
+            if c_name in rules:
+                return rules[c_name]
+            # Try patterns (e.g. customer*)
+            for pattern, rule in rules.items():
+                if pattern == "*":
+                    continue # Handle * last
+                if pattern.endswith("*") and c_name.startswith(pattern[:-1]):
+                    return rule
+            return rules.get("*")
+
+        for concept in self.concepts:
+            c_name = concept["name"]
+            # Pool includes id_presentation and all non-internal fields
+            pool = ["id_presentation"] + [f["name"] for f in concept["fields"] if f.get("_fe_visibility", "visible") != "internal"]
+            
+            # Level 1
+            rule1 = get_matched_rule(c_name, l1_rules) or "*"
+            resolved = ReactAdminGenerator.filter_list_fields(pool, [], rule1)
+            
+            # Level 2
+            rule2 = get_matched_rule(c_name, l2_rules)
+            if rule2:
+                resolved = ReactAdminGenerator.filter_list_fields(pool, resolved, rule2)
+            
+            # Level 3
+            rule3 = get_matched_rule(c_name, l3_rules)
+            if rule3:
+                resolved = ReactAdminGenerator.filter_list_fields(pool, resolved, rule3)
+            
+            self.presentation_extended["_list_fields"][c_name] = resolved
 
         # Determine which concepts have owner_write
         owner_write_concepts = set()

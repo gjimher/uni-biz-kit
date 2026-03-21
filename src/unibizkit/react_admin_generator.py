@@ -976,7 +976,6 @@ export const dataProvider = {{
         component_imports_str = "\n".join(component_imports)
 
         # Prepare ID fields for main resource
-        id_field_list = '<TextField source="id_presentation" label="Id" />'
         id_field_show = ""
         id_field_edit = ""
 
@@ -1031,7 +1030,6 @@ export const {resource_name.upper()}_LIST = (props) => {{
   return (
     <List {{...props}} filters={{{resource_name}_filters}}>
       <Datagrid rowClick="edit">
-        {id_field_list}
         {field_components["list_fields"]}
       </Datagrid>
     </List>
@@ -1439,6 +1437,125 @@ const {edit_comp_name} = () => {{
         
         return ', '.join(sorted(needed_components))
     
+    @staticmethod
+    def filter_list_fields(pool: List[str], current: List[str], rule_str: str) -> List[str]:
+        """
+        Filters and orders fields based on a rule string.
+        
+        Args:
+            pool: All available fields (the pool)
+            current: Currently selected fields from previous levels
+            rule_str: The comma-separated rule string (e.g. "*,!id_presentation,status[0]")
+            
+        Returns:
+            A new list of field names.
+        """
+        result = list(current)
+        parts = [p.strip() for p in rule_str.split(',') if p.strip()]
+        for part in parts:
+            if part == '*':
+                for name in pool:
+                    if name not in result:
+                        result.append(name)
+            elif part.startswith('!'):
+                pattern = part[1:]
+                
+                # Range operators
+                if pattern.startswith('>='):
+                    target = pattern[2:]
+                    if target in pool:
+                        idx = pool.index(target)
+                        for name in pool[idx:]:
+                            if name in result:
+                                result.remove(name)
+                elif pattern.startswith('>'):
+                    target = pattern[1:]
+                    if target in pool:
+                        idx = pool.index(target)
+                        for name in pool[idx+1:]:
+                            if name in result:
+                                result.remove(name)
+                elif pattern.startswith('<='):
+                    target = pattern[2:]
+                    if target in pool:
+                        idx = pool.index(target)
+                        for name in pool[:idx+1]:
+                            if name in result:
+                                result.remove(name)
+                elif pattern.startswith('<'):
+                    target = pattern[1:]
+                    if target in pool:
+                        idx = pool.index(target)
+                        for name in pool[:idx]:
+                            if name in result:
+                                result.remove(name)
+                elif pattern.endswith('*'):
+                    prefix = pattern[:-1]
+                    result = [name for name in result if not name.startswith(prefix)]
+                else:
+                    if pattern in result:
+                        result.remove(pattern)
+            elif part.startswith('>='):
+                target = part[2:]
+                if target in pool:
+                    idx = pool.index(target)
+                    for name in pool[idx:]:
+                        if name not in result:
+                            result.append(name)
+            elif part.startswith('>'):
+                target = part[1:]
+                if target in pool:
+                    idx = pool.index(target)
+                    for name in pool[idx+1:]:
+                        if name not in result:
+                            result.append(name)
+            elif part.startswith('<='):
+                target = part[2:]
+                if target in pool:
+                    idx = pool.index(target)
+                    for name in pool[:idx+1]:
+                        if name not in result:
+                            result.append(name)
+            elif part.startswith('<'):
+                target = part[1:]
+                if target in pool:
+                    idx = pool.index(target)
+                    for name in pool[:idx]:
+                        if name not in result:
+                            result.append(name)
+            elif '*' in part: # e.g. status*
+                prefix = part.split('*')[0]
+                for name in pool:
+                    if name.startswith(prefix) and name not in result:
+                        result.append(name)
+            elif '[' in part and part.endswith(']'):
+                # name[target]
+                name, target = part[:-1].split('[', 1)
+                if name not in pool:
+                    continue
+                
+                if name in result:
+                    result.remove(name)
+                
+                if target == '0':
+                    result.insert(0, name)
+                elif target == '-1':
+                    result.append(name)
+                elif target in result:
+                    idx = result.index(target)
+                    result.insert(idx + 1, name)
+                else:
+                    # target not in current list (yet) or target is invalid, put at the end
+                    result.append(name)
+            else:
+                # specific name, put at end
+                name = part
+                if name in pool:
+                    if name in result:
+                        result.remove(name)
+                    result.append(name)
+        return result
+
     def _generate_field_components(self, concept: Dict[str, Any], owned_children: List[Dict[str, Any]] = None, exclude_fields: List[str] = None, many_to_many_links: List[Dict[str, Any]] = None) -> Dict[str, str]:
         """
         Generate field components for a concept using enriched metadata.
@@ -1453,12 +1570,16 @@ const {edit_comp_name} = () => {{
         m2m_edit_fields = []
         
         exclude_fields = exclude_fields or []
-        
+
         # Grid State Tracking
         create_grid_pos = 0
         edit_grid_pos = 0
         m2m_grid_pos = 0
-        
+
+        # Add id_presentation as the first field
+        list_fields.append(("id_presentation", '<TextField source="id_presentation" label="Id" />'))
+        show_fields.append('<TextField source="id_presentation" label="Id" />')
+
         def update_grid(current_pos, width, fields_list):
             if width == 6:
                 if current_pos % 12 == 3:
@@ -1470,7 +1591,7 @@ const {edit_comp_name} = () => {{
             return current_pos
 
         # Add global search
-        filter_fields.append(f'  <TextInput label="Search" source="id_presentation@ilike" alwaysOn />')
+        filter_fields.append(("id_presentation", f'  <TextInput label="Search" source="id_presentation@ilike" alwaysOn />'))
         
         # Generate child tabs
         if owned_children:
@@ -1481,28 +1602,31 @@ const {edit_comp_name} = () => {{
                 child_plural = child_concept["plural_name"]
                 parent_name = concept["name"]
                 
-                child_columns = []
-                child_columns.append(f'<TextField source="id_presentation" label="Id" />')
+                child_raw_columns = []
+                child_raw_columns.append(("id_presentation", f'<TextField source="id_presentation" label="Id" />'))
                 
                 relevant_fields = [f for f in child_concept["fields"] if f["name"] != fk_field_name and f["_fe_visibility"] != "internal"]
-                count = 0
                 for field in relevant_fields:
-                    if count > 4: break
                     fname = field["name"]
                     # Use enriched list component
                     comp = field["_fe_list_component"]
                     
                     if field["type"] == "relation_to_one":
                         target = field["target"]
-                        child_columns.append(f'<ReferenceField source="{fname}" reference="{target}"><TextField source="id_presentation" /></ReferenceField>')
+                        child_raw_columns.append((fname, f'<ReferenceField source="{fname}" reference="{target}"><TextField source="id_presentation" /></ReferenceField>'))
                     elif field["type"] == "decimal" and field.get("subtype") == "money":
                          currency = self.presentation_config["currency"]
                          # Use specific currency locale, default is handled by schema validation
                          number_locale = self.presentation_config["number_locale"]
-                         child_columns.append(f'<NumberField source="{fname}" options={{{{ style: "currency", currency: "{currency}" }}}} locales="{number_locale}" />')
+                         child_raw_columns.append((fname, f'<NumberField source="{fname}" options={{{{ style: "currency", currency: "{currency}" }}}} locales="{number_locale}" />'))
                     else:
-                         child_columns.append(f'<{comp} source="{fname}" />')
-                    count += 1
+                         child_raw_columns.append((fname, f'<{comp} source="{fname}" />'))
+
+                child_all_names = [f[0] for f in child_raw_columns]
+                child_result_names = self.presentation_config.get("_list_fields", {}).get(child_name, child_all_names)
+                
+                child_html_map = {name: html for name, html in child_raw_columns}
+                child_columns = [child_html_map[name] for name in child_result_names if name in child_html_map]
                 
                 dialog_comp_name = f"CREATE_{child_name.upper()}_FOR_{parent_name.upper()}"
                 edit_dialog_comp_name = f"EDIT_{child_name.upper()}_FOR_{parent_name.upper()}"
@@ -1584,7 +1708,7 @@ const {edit_comp_name} = () => {{
                     
                     # Filter field - keep standard input for filters
                     filter_inner = f'<SelectInput optionText="id_presentation" />'
-                    filter_fields.append(f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>')
+                    filter_fields.append((field_name, f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>'))
                 else:
                     # Standard relation
                     # Determine input based on data_size (handled by schema processor now!)
@@ -1602,7 +1726,7 @@ const {edit_comp_name} = () => {{
                     
                     # Filter field
                     filter_inner = input_inner.replace(f'{validation}{margin}{disabled_prop}', '')
-                    filter_fields.append(f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>')
+                    filter_fields.append((field_name, f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>'))
 
             elif field["type"] == "relation_to_many":
                 # Similar logic as before for 1:N inverse vs M:N
@@ -1627,7 +1751,7 @@ const {edit_comp_name} = () => {{
                 choices_str = ', '.join([f"{{ id: '{val}', name: '{val}' }}" for val in enum_values])
                 choices_array = f"[{choices_str}]"
                 input_html = f'          <SelectInput source="{field_name}" choices={{{choices_array}}}{full_width}{validation}{margin}{disabled_prop} />'
-                filter_fields.append(f'  <SelectInput source="{field_name}" choices={{{choices_array}}} />')
+                filter_fields.append((field_name, f'  <SelectInput source="{field_name}" choices={{{choices_array}}} />'))
 
 
             else:
@@ -1642,9 +1766,7 @@ const {edit_comp_name} = () => {{
                 input_html = f'          <{comp_type} source="{field_name}"{extra_props}{full_width}{validation}{margin}{disabled_prop} />'
                 
                 # Add filter for standard fields
-                # We skip long text fields ('l') as filters
-                if field["size"] != "l":
-                    filter_fields.append(f'  <{comp_type} source="{field_name}" />')
+                filter_fields.append((field_name, f'  <{comp_type} source="{field_name}" />'))
 
             # Construct List Component
             list_html = ""
@@ -1668,7 +1790,7 @@ const {edit_comp_name} = () => {{
                 list_html = f'      <{list_comp} source="{field_name}" />'
 
             # Append to lists
-            if list_html and visibility != "internal": list_fields.append(list_html)
+            if list_html and visibility != "internal": list_fields.append((field_name, list_html))
             # Show uses same as list mostly
             if list_html and visibility != "internal": show_fields.append(list_html)
 
@@ -1759,18 +1881,29 @@ const {edit_comp_name} = () => {{
         </SingleFieldList>
       </ReferenceArrayField>"""
                 show_fields.append(show_block)
-        
+
+        # Apply list_fields filter from presentation config
+        concept_name = concept["name"]
+
+        all_names = [f[0] for f in list_fields]
+        result_names = self.presentation_config.get("_list_fields", {}).get(concept_name, all_names)
+
+        html_map = {name: html for name, html in list_fields}
+        final_list_fields = [html_map[name] for name in result_names if name in html_map]
+
+        filter_html_map = {name: html for name, html in filter_fields}
+        final_filter_fields = [filter_html_map[name] for name in result_names if name in filter_html_map]
+
         return {
             'imports': '\n'.join(imports),
-            'list_fields': '\n'.join(list_fields),
+            'list_fields': '\n'.join(final_list_fields),
             'create_fields': '\n'.join(create_fields),
             'edit_fields': '\n'.join(edit_fields),
             'm2m_edit_fields': '\n'.join(m2m_edit_fields),
-            'show_fields': '\n'.join(show_fields),
-            'child_tabs': '\n'.join(child_tabs),
-            'filter_fields': ',\n'.join(filter_fields)
-        }
-    
+                            'show_fields': '\n'.join(show_fields),
+                            'child_tabs': '\n'.join(child_tabs),
+                            'filter_fields': ',\n'.join(final_filter_fields)
+                        }    
     def _map_field_type_to_component(self, field_type: str) -> str:
         # Kept for child component generation legacy fallback
         type_mapping = {
