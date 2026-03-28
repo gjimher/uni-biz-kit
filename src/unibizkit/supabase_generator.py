@@ -103,7 +103,7 @@ $$ LANGUAGE plpgsql;
                             join_tables.append(jt)
         
         all_tables = [c["name"] for c in self.concepts] + join_tables
-        
+
         # Build a map of concept -> workflow rules
         concept_workflows = self.schema_loader.business_schema.get("_concept_workflow", {})
 
@@ -154,17 +154,37 @@ WITH CHECK (true);
         END IF;
     END IF;""")
 
-                # 2. Field-level write restrictions
+                # 2. Protect system timestamps
+                trigger_checks.append("""
+    -- System timestamps are immutable / system-controlled
+    IF (TG_OP = 'INSERT') THEN
+        NEW."_created_at" := CURRENT_TIMESTAMP;
+        NEW."_updated_at" := CURRENT_TIMESTAMP;
+    ELSIF (TG_OP = 'UPDATE' AND NEW."_created_at" IS DISTINCT FROM OLD."_created_at") THEN
+        RAISE EXCEPTION 'Permission denied: _created_at is immutable' USING ERRCODE = 'insufficient_privilege';
+    END IF;""")
+
+                # 3. Field-level write restrictions
+                has_security_owner_id = any(f["name"] == "security_owner_id" for f in concept["fields"])
+                if has_security_owner_id:
+                    trigger_checks.append("""
+    -- security_owner_id is immutable after insert
+    IF (TG_OP = 'UPDATE' AND NEW."security_owner_id" IS DISTINCT FROM OLD."security_owner_id") THEN
+        RAISE EXCEPTION 'Permission denied: security_owner_id is immutable' USING ERRCODE = 'insufficient_privilege';
+    END IF;""")
+
                 for field in concept["fields"]:
                     field_name = field["name"]
+                    if field_name == "security_owner_id":
+                        continue
                     field_rules = concept_acl["_fields"].get(field_name, {})
-                    
+
                     allowed_roles = []
                     for role in all_role_names:
                         access = field_rules.get(role, main_rules.get(role, "none"))
                         if access in ("write", "owner_write"):
                             allowed_roles.append(role)
-                    
+
                     # If this field has limited writers
                     if allowed_roles and set(allowed_roles) != all_role_names:
                         roles_json_array = ", ".join(f"'{r}'" for r in allowed_roles)
@@ -280,8 +300,6 @@ FOR DELETE
 TO authenticated
 USING ({role_condition} AND "security_owner_id" = auth.uid()::text);
 """)
-
-        return policies
 
         return policies
     
