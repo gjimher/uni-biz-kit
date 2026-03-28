@@ -159,11 +159,12 @@ class SchemaProcessor:
         self._enrich_security()
 
         # 0.5 Enrich Presentation
+        self._enrich_presentation()
         from .react_admin_generator import ReactAdminGenerator
         
         l1_rules = self.presentation_extended["list_field_rules_level_1"]
-        l2_rules = self.presentation_extended.get("list_field_rules_level_2", {})
-        l3_rules = self.presentation_extended.get("list_field_rules_level_3", {})
+        l2_rules = self.presentation_extended["list_field_rules_level_2"]
+        l3_rules = self.presentation_extended["list_field_rules_level_3"]
         
         self.presentation_extended["_list_fields"] = {}
         
@@ -246,6 +247,17 @@ class SchemaProcessor:
             self._process_relationships(concept)
 
         return self.extended_schema
+
+    def _enrich_presentation(self):
+        """Inject default values for presentation settings if missing."""
+        if "list_field_rules_level_1" not in self.presentation_extended:
+            self.presentation_extended["list_field_rules_level_1"] = {"*": "*,!id_presentation,!_*"}
+        
+        if "list_field_rules_level_2" not in self.presentation_extended:
+            self.presentation_extended["list_field_rules_level_2"] = {}
+            
+        if "list_field_rules_level_3" not in self.presentation_extended:
+            self.presentation_extended["list_field_rules_level_3"] = {}
 
     def _enrich_security(self):
         """Inject default roles and users if missing, and expand rule wildcards."""

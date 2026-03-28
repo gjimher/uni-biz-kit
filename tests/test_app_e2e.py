@@ -213,6 +213,6 @@ def test_create_product_as_user(page: Page, app_server):
 
     # 8. Verify Relations Tab
     # Open the product to check the Relations tab
-    product_cell.click()
+    page.get_by_role("row", name="_User Journey Product").click()
     page.get_by_role("tab", name="Relations").click()
     expect(page.get_by_label("Categories")).to_be_visible()
