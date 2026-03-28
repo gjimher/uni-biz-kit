@@ -104,10 +104,14 @@ $$ LANGUAGE plpgsql;
         
         all_tables = [c["name"] for c in self.concepts] + join_tables
         
+        # Build a map of concept -> workflow rules
+        concept_workflows = self.schema_loader.business_schema.get("_concept_workflow", {})
+
         for table in all_tables:
             policies.append(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY;')
             
             concept_acl = _acl.get(table)
+            workflow = concept_workflows.get(table)
             
             if not concept_acl:
                 # Fallback: if no rules for this concept (or if it's a join table), allow all authenticated
@@ -120,11 +124,37 @@ WITH CHECK (true);
 """)
                 continue
 
-            # Field-level write restrictions (trigger based)
+            # Field and Workflow security checks (trigger based)
             concept = self.concept_map.get(table)
             main_rules = concept_acl["_main"]
             if concept:
                 trigger_checks = []
+                
+                # 1. Workflow state validation
+                if workflow:
+                    # Determine which roles own which states
+                    for state in workflow["states"]:
+                        state_name = state["name"]
+                        owners = state["owners"]
+                        roles_json_array = ", ".join(f"'{r}'" for r in owners)
+                        
+                        # If row is currently in this state, check if user has permission to edit/delete
+                        trigger_checks.append(f"""
+    IF (TG_OP IN ('UPDATE', 'DELETE') AND OLD."state" = '{state_name}') THEN
+        IF NOT (user_roles ?| array[{roles_json_array}]) THEN
+            RAISE EXCEPTION 'Insufficient privilege for state {state_name}' USING ERRCODE = 'insufficient_privilege';
+        END IF;
+    END IF;""")
+                        
+                        # For inserts, check if user has permission for the initial state
+                        trigger_checks.append(f"""
+    IF (TG_OP = 'INSERT' AND NEW."state" = '{state_name}') THEN
+        IF NOT (user_roles ?| array[{roles_json_array}]) THEN
+            RAISE EXCEPTION 'Insufficient privilege for state {state_name}' USING ERRCODE = 'insufficient_privilege';
+        END IF;
+    END IF;""")
+
+                # 2. Field-level write restrictions
                 for field in concept["fields"]:
                     field_name = field["name"]
                     field_rules = concept_acl["_fields"].get(field_name, {})
@@ -142,13 +172,13 @@ WITH CHECK (true);
     -- Check field '{field_name}'
     IF (TG_OP = 'UPDATE' AND NEW."{field_name}" IS DISTINCT FROM OLD."{field_name}") OR (TG_OP = 'INSERT' AND NEW."{field_name}" IS NOT NULL) THEN
         IF NOT (user_roles ?| array[{roles_json_array}]) THEN
-            RAISE EXCEPTION 'Permission denied for field {field_name}';
+            RAISE EXCEPTION 'Permission denied for field {field_name}' USING ERRCODE = 'insufficient_privilege';
         END IF;
     END IF;"""
                         trigger_checks.append(check)
                 
                 if trigger_checks:
-                    trigger_name = f"{table}_field_security"
+                    trigger_name = f"{table}_security"
                     trigger_func = f"""
 CREATE OR REPLACE FUNCTION "{trigger_name}_func"()
 RETURNS TRIGGER AS $$
@@ -157,16 +187,16 @@ DECLARE
 BEGIN
     -- Bypass trigger for system operations (like seeding data directly)
     IF current_setting('request.jwt.claims', true) IS NULL OR current_setting('request.jwt.claims', true) = '' THEN
-        RETURN NEW;
+        IF (TG_OP = 'DELETE') THEN RETURN OLD; ELSE RETURN NEW; END IF;
     END IF;
 {''.join(trigger_checks)}
-    RETURN NEW;
+    IF (TG_OP = 'DELETE') THEN RETURN OLD; ELSE RETURN NEW; END IF;
 END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS "{trigger_name}" ON "{table}";
 CREATE TRIGGER "{trigger_name}"
-BEFORE INSERT OR UPDATE ON "{table}"
+BEFORE INSERT OR UPDATE OR DELETE ON "{table}"
 FOR EACH ROW
 EXECUTE FUNCTION "{trigger_name}_func"();
 """
@@ -189,30 +219,66 @@ EXECUTE FUNCTION "{trigger_name}_func"();
                         role_table_access[role] = "read"
 
             for role, access in role_table_access.items():
-                condition = f"auth.jwt() -> 'app_metadata' -> 'roles' ? '{role}'"
+                role_condition = f"auth.jwt() -> 'app_metadata' -> 'roles' ? '{role}'"
                 
                 if access == "read":
                     policies.append(f"""
 CREATE POLICY "{role}_read_{table}" ON "{table}"
 FOR SELECT
 TO authenticated
-USING ({condition});
+USING ({role_condition});
 """)
                 elif access == "write":
                     policies.append(f"""
-CREATE POLICY "{role}_all_{table}" ON "{table}"
-FOR ALL
+CREATE POLICY "{role}_select_{table}" ON "{table}"
+FOR SELECT
 TO authenticated
-USING ({condition})
-WITH CHECK ({condition});
+USING ({role_condition});
+""")
+                    policies.append(f"""
+CREATE POLICY "{role}_insert_{table}" ON "{table}"
+FOR INSERT
+TO authenticated
+WITH CHECK ({role_condition});
+""")
+                    policies.append(f"""
+CREATE POLICY "{role}_update_{table}" ON "{table}"
+FOR UPDATE
+TO authenticated
+USING ({role_condition})
+WITH CHECK ({role_condition});
+""")
+                    policies.append(f"""
+CREATE POLICY "{role}_delete_{table}" ON "{table}"
+FOR DELETE
+TO authenticated
+USING ({role_condition});
 """)
                 elif access == "owner_write":
                     policies.append(f"""
-CREATE POLICY "{role}_owner_all_{table}" ON "{table}"
-FOR ALL
+CREATE POLICY "{role}_owner_select_{table}" ON "{table}"
+FOR SELECT
 TO authenticated
-USING ({condition} AND "security_owner_id" = auth.uid()::text)
-WITH CHECK ({condition} AND "security_owner_id" = auth.uid()::text);
+USING ({role_condition} AND "security_owner_id" = auth.uid()::text);
+""")
+                    policies.append(f"""
+CREATE POLICY "{role}_owner_insert_{table}" ON "{table}"
+FOR INSERT
+TO authenticated
+WITH CHECK ({role_condition} AND "security_owner_id" = auth.uid()::text);
+""")
+                    policies.append(f"""
+CREATE POLICY "{role}_owner_update_{table}" ON "{table}"
+FOR UPDATE
+TO authenticated
+USING ({role_condition} AND "security_owner_id" = auth.uid()::text)
+WITH CHECK ({role_condition} AND "security_owner_id" = auth.uid()::text);
+""")
+                    policies.append(f"""
+CREATE POLICY "{role}_owner_delete_{table}" ON "{table}"
+FOR DELETE
+TO authenticated
+USING ({role_condition} AND "security_owner_id" = auth.uid()::text);
 """)
 
         return policies
@@ -485,10 +551,21 @@ ALTER TABLE "{table_name}"
                 if 'calculated' in field or field["_be_sql_type"] == "SERIAL":
                     continue
                 
+                # Skip state_info — let it default to NULL
+                if field["name"] == "state_info":
+                    continue
+
                 # Generate sample value based on type
                 if field_type == "string":
                     if field_name == "email":
                         value = f"'{table_name}_{field_name}_{i}@example.com'"
+                    elif field_name == "state":
+                        concept_workflow = self.schema_loader.business_schema.get("_concept_workflow", {}).get(table_name)
+                        if concept_workflow:
+                            states = concept_workflow["states"]
+                            value = f"'{states[(i - 1) % len(states)]['name']}'"
+                        else:
+                            value = f"'{table_name}_{field_name}_{i}'"
                     else:
                         value = f"'{table_name}_{field_name}_{i}'"
                 elif field_type == "integer":

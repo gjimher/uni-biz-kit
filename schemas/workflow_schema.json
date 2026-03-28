@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Workflow Schema",
+  "description": "Schema for defining business workflows",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "workflow_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "concepts": {
+            "type": "string",
+            "description": "Comma-separated list of concepts or '*' for all"
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "owners": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              },
+              "required": ["name", "owners"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["name", "concepts", "states"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["workflow_rules"],
+  "additionalProperties": false
+}

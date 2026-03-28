@@ -177,12 +177,19 @@ Examples:
                 continue
             base_concept_props[key] = value
 
+        # Add _concept_workflow to root
+        base_schema["properties"]["_concept_workflow"] = {
+            "type": "object",
+            "description": "Mapping of concept names to their workflow configurations"
+        }
+        
         # 2. Merge Concept Required (Auto-generate)
         if "required" not in base_concept_items:
              base_concept_items["required"] = []
         
         # Add all keys from extra properties (excluding fields as it is nested container) to required
-        keys_to_require = [k for k in extra_concept_props.keys() if k != "fields"]
+        # _workflow is optional and will be removed, so we exclude it from required
+        keys_to_require = [k for k in extra_concept_props.keys() if k not in ("fields", "_workflow")]
         base_concept_items["required"].extend(keys_to_require)
         base_concept_items["required"] = list(set(base_concept_items["required"]))
              
@@ -299,6 +306,28 @@ Examples:
 
         return base_schema
 
+    def _generate_workflow_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
+        """
+        Dynamically generate the full extended workflow schema definition.
+        """
+        schemas_dir = Path(__file__).parent.parent.parent / "schemas"
+        base_schema_path = schemas_dir / "workflow_schema.json"
+        
+        with open(base_schema_path, 'r', encoding='utf-8') as f:
+            base_schema = json.load(f)
+            
+        # Update metadata
+        base_schema["title"] = "Extended Workflow Schema"
+        base_schema["description"] = "Dynamically generated extended workflow schema."
+        
+        # Save to output dir for reference/debug
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / "workflow_extended_schema.json"
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(base_schema, f, indent=2)
+            
+        return base_schema
+
     def _handle_generate_command(self, args):
         """Handle the generate command."""
         
@@ -319,7 +348,8 @@ Examples:
         processor = SchemaProcessor(
             business_schema, 
             schema_loader.security_config,
-            schema_loader.presentation_config
+            schema_loader.presentation_config,
+            schema_loader.workflow_config
         )
         extended_schema = processor.process()
 
@@ -341,6 +371,25 @@ Examples:
         with open(dump_path, 'w', encoding='utf-8') as f:
             json.dump(new_schema, f, indent=2)
         logger.info(f"Extended schema saved to: {dump_path}")
+
+        # Save Workflow Extended
+        wf_dump_path = output_dir / "workflow_extended.json"
+        # Inject $schema for VSCode
+        new_wf_config = {"$schema": "./workflow_extended_schema.json"}
+        # Remove original $schema if present to avoid overwriting our new link
+        wf_config_copy = processor.workflow_extended.copy()
+        if "$schema" in wf_config_copy:
+            del wf_config_copy["$schema"]
+        # Maintain renamed 'workflow_rules'
+        new_wf_config.update(wf_config_copy)
+
+        with open(wf_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(new_wf_config, f, indent=2)
+        logger.info(f"Workflow extended saved to: {wf_dump_path}")
+
+        # Validate Workflow Extended (generates the extended schema file)
+        extended_workflow_schema_def = self._generate_workflow_extended_schema_def(output_dir)
+        self._validate_extended_schema(new_wf_config, extended_workflow_schema_def, "workflow")
 
         # Save Presentation Extended
         pres_dump_path = output_dir / "presentation_extended.json"
@@ -439,7 +488,8 @@ Examples:
         processor = SchemaProcessor(
             business_schema, 
             schema_loader.security_config,
-            schema_loader.presentation_config
+            schema_loader.presentation_config,
+            schema_loader.workflow_config
         )
         extended_schema = processor.process()
         
@@ -463,6 +513,25 @@ Examples:
             json.dump(new_schema, f, indent=2)
             
         logger.info(f"Extended schema dumped to: {dump_path}")
+
+        # Save Workflow Extended
+        wf_dump_path = output_dir / "workflow_extended.json"
+        # Inject $schema for VSCode
+        new_wf_config = {"$schema": "./workflow_extended_schema.json"}
+        # Remove original $schema if present to avoid overwriting our new link
+        wf_config_copy = processor.workflow_extended.copy()
+        if "$schema" in wf_config_copy:
+            del wf_config_copy["$schema"]
+        # Maintain renamed 'workflow_rules'
+        new_wf_config.update(wf_config_copy)
+
+        with open(wf_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(new_wf_config, f, indent=2)
+        logger.info(f"Workflow extended saved to: {wf_dump_path}")
+
+        # Validate Workflow Extended (generates the extended schema file)
+        extended_workflow_schema_def = self._generate_workflow_extended_schema_def(output_dir)
+        self._validate_extended_schema(new_wf_config, extended_workflow_schema_def, "workflow")
 
         # Save Presentation Extended
         pres_dump_path = output_dir / "presentation_extended.json"

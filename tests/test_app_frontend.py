@@ -63,14 +63,14 @@ class TestAppFrontend:
                 assert install_result.returncode == 0, f"npm install failed with {install_result=}"
             
             # Try to build the project
-            print("Checking generated js: executing 'npm run lint'")
+            print("Checking generated js: executing 'npm run lint -- --max-warnings 0'")
             build_result = subprocess.run(
-                ['npm', 'run', 'lint'], 
+                ['npm', 'run', 'lint', '--', '--max-warnings', '0'], 
                 stdout=sys.stdout, 
                 stderr=sys.stderr, 
                 timeout=600  # 10 minutes timeout
             )
-            assert build_result.returncode == 0, f"Build failed with {build_result=}"
+            assert build_result.returncode == 0, f"Lint failed or warnings found. {build_result=}"
                         
             print("✓ App frontend generated and compiled successfully!")
             

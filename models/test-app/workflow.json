@@ -1,0 +1,16 @@
+{
+  "$schema": "../../schemas/workflow_schema.json",
+  "workflow_rules": [
+    {
+      "name": "order_workflow",
+      "concepts": "order",
+      "states": [
+        { "name": "initial", "owners": ["user", "admin"] },
+        { "name": "ordered", "owners": ["admin"] },
+        { "name": "accepted", "owners": ["admin"] },
+        { "name": "sent", "owners": ["admin"] },
+        { "name": "delivered", "owners": ["admin"] }
+      ]
+    }
+  ]
+}

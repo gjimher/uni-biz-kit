@@ -219,14 +219,6 @@
           "description": "Total order amount"
         },
         {
-          "name": "status",
-          "type": "enum",
-          "required": true,
-          "enum_values": ["pending", "processing", "shipped", "delivered", "cancelled"],
-          "default": "pending",
-          "description": "Current order status"
-        },
-        {
           "name": "shipping_address",
           "type": "string",
           "required": true,

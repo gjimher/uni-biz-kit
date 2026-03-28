@@ -52,9 +52,11 @@ class SchemaLoader:
         self.business_schema = None
         self.presentation_config = None
         self.security_config = None
+        self.workflow_config = None
         self.validation_schema = self._load_validation_schema("concepts_schema.json")
         self.presentation_validation_schema = self._load_validation_schema("presentation_schema.json")
         self.security_validation_schema = self._load_validation_schema("security_schema.json")
+        self.workflow_validation_schema = self._load_validation_schema("workflow_schema.json")
     
     def _load_validation_schema(self, schema_name: str) -> Dict[str, Any]:
         """Load a validation schema from the schemas directory."""
@@ -101,6 +103,14 @@ class SchemaLoader:
                 raise FileNotFoundError(f"'security.json' is mandatory. Please provide it in {security_path.parent} (it can be an empty object '{{}}' if you want defaults).")
             
             self.load_security(str(security_path))
+
+            # Try to load workflow.json
+            workflow_path = Path(path).parent / "workflow.json"
+            if not workflow_path.exists():
+                # For backward compatibility and when no workflow is needed
+                self.workflow_config = {"workflow_rules": []}
+            else:
+                self.load_workflow(str(workflow_path))
 
             # Apply special defaults before main validation/default injection
             self._apply_special_defaults(business_schema)
@@ -155,6 +165,19 @@ class SchemaLoader:
         
         self.security_config = security_config
         logger.info(f"Successfully loaded and validated security settings: {security_path}")
+
+    def load_workflow(self, workflow_path: str):
+        """
+        Load and validate the workflow settings.
+        """
+        with open(workflow_path, 'r', encoding='utf-8') as f:
+            workflow_config = json.load(f)
+        
+        # Validate and inject defaults
+        DefaultValidatingDraft7Validator(self.workflow_validation_schema).validate(workflow_config)
+        
+        self.workflow_config = workflow_config
+        logger.info(f"Successfully loaded and validated workflow settings: {workflow_path}")
     
     def _apply_special_defaults(self, data: Dict[str, Any]):
         """

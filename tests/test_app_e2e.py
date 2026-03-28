@@ -143,7 +143,7 @@ def app_server(xprocess, request):
         frontend_dir = os.path.abspath("test-app/frontend")
         args = ["npm", "start", "--prefix", frontend_dir]
         cwd = frontend_dir
-        timeout = 15
+        timeout = 30
         print("starting web server in port 3005: npm start")
 
     xprocess.ensure("app_server_pure", Starter)

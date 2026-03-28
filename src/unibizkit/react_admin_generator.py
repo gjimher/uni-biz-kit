@@ -513,20 +513,176 @@ export const RecursiveParentSelector = ({ source, reference, label, separator, d
         custom_edit_toolbar_js = """import * as React from 'react';
 import { Toolbar, SaveButton, DeleteButton, usePermissions } from 'react-admin';
 
-export const CustomEditToolbar = ({ resource, ...props }) => {
+export const CustomEditToolbar = ({ resource, workflowCanEdit = true, ...props }) => {
     const { permissions } = usePermissions();
-    const canEdit = permissions?.[resource]?.includes('write') || permissions?.['*']?.includes('write');
-    
+    const roleCanEdit = permissions?.[resource]?.includes('write') || permissions?.['*']?.includes('write');
+    const canEdit = roleCanEdit && workflowCanEdit;
+
     return (
         <Toolbar {...props}>
             <SaveButton disabled={!canEdit} />
-            {canEdit && <DeleteButton mutationMode="pessimistic" />}
+            {roleCanEdit && <DeleteButton disabled={!workflowCanEdit} mutationMode="pessimistic" />}
         </Toolbar>
     );
 };
 """
         with open(self.output_dir / "src" / "components" / "custom_edit_toolbar.js", 'w', encoding='utf-8') as f:
             f.write(custom_edit_toolbar_js)
+
+        self._generate_workflow_selector()
+        
+    def _generate_workflow_selector(self):
+        """Generate the WorkflowSelector component."""
+        workflow_selector_js = """import * as React from 'react';
+import {
+    useRecordContext,
+    useNotify,
+    useRefresh,
+    useUpdate,
+    useGetIdentity
+} from 'react-admin';
+import {
+    Box,
+    Button,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    Radio,
+    RadioGroup,
+    FormControlLabel,
+    FormControl,
+    TextField,
+    Typography,
+    Tooltip
+} from '@mui/material';
+
+export const useWorkflowCanEdit = (workflow, record, identity, identityLoading) => {
+    if (identityLoading || !record) return true;
+    if (!workflow) return true;
+    const states = workflow.states;
+    const currentStateName = record.state || states[0].name;
+    const currentState = states.find(s => s.name === currentStateName);
+    const userRoles = identity?.roles || [];
+    return currentState?.owners.some(role => userRoles.includes(role)) ?? true;
+};
+
+export const WorkflowSelector = ({ workflow, resource, canEdit }) => {
+    const record = useRecordContext();
+    const { data: identity } = useGetIdentity();
+    const [update] = useUpdate();
+    const notify = useNotify();
+    const refresh = useRefresh();
+    const [pendingState, setPendingState] = React.useState(null);
+    const [transitionText, setTransitionText] = React.useState('');
+
+    // Build a map of state name -> last transition info for that state
+    const transitionByState = React.useMemo(() => {
+        const map = {};
+        if (!record || !record.state_info) return map;
+        let transitions;
+        try { transitions = typeof record.state_info === 'string' ? JSON.parse(record.state_info) : record.state_info; }
+        catch { return map; }
+        for (const t of transitions) {
+            const note = t.text ? `\n${t.text}` : '';
+            map[t.to] = `${t.user || 'Unknown'} · ${new Date(t.date).toLocaleString()}${note}`;
+        }
+        return map;
+    }, [record]);
+
+    if (!workflow) return null;
+
+    const states = workflow.states;
+    const currentStateName = record?.state || states[0].name;
+
+    const handleRadioClick = (stateName) => {
+        if (!canEdit || stateName === currentStateName) return;
+        setPendingState(stateName);
+    };
+
+    const handleCancel = () => {
+        setPendingState(null);
+        setTransitionText('');
+    };
+
+    const handleConfirm = async () => {
+        const now = new Date().toISOString();
+        const userName = identity?.fullName || 'Unknown';
+
+        let transitions;
+        try { transitions = record.state_info ? (typeof record.state_info === 'string' ? JSON.parse(record.state_info) : record.state_info) : []; }
+        catch { transitions = []; }
+        transitions.push({ from: currentStateName, to: pendingState, user: userName, date: now, text: transitionText });
+        const newStateInfo = JSON.stringify(transitions);
+
+        try {
+            await update(resource, {
+                id: record.id,
+                data: { state: pendingState, state_info: newStateInfo },
+                previousData: record
+            }, { mutationMode: 'pessimistic' });
+
+            notify('State updated', { type: 'info' });
+            handleCancel();
+            refresh();
+        } catch (error) {
+            notify('Error updating state: ' + error.message, { type: 'warning' });
+        }
+    };
+
+    return (
+        <Box sx={{ mb: 2, p: 2, border: '1px solid #ccc', borderRadius: 1, backgroundColor: '#f9f9f9' }}>
+            <Typography variant="subtitle2" gutterBottom>Workflow State</Typography>
+            <FormControl component="fieldset">
+                <RadioGroup row value={currentStateName} onChange={() => {}}>
+                    {states.map(s => (
+                        <Tooltip
+                            key={s.name}
+                            title={transitionByState[s.name] || ''}
+                            componentsProps={{ tooltip: { sx: { fontSize: '0.875rem', whiteSpace: 'pre-line' } } }}
+                        >
+                            <FormControlLabel
+                                value={s.name}
+                                control={<Radio size="small" />}
+                                label={s.name === currentStateName ? <strong>{s.name}</strong> : s.name}
+                                disabled={!canEdit}
+                                onClick={() => handleRadioClick(s.name)}
+                            />
+                        </Tooltip>
+                    ))}
+                </RadioGroup>
+            </FormControl>
+            {!canEdit && record && (
+                <Typography variant="caption" color="error">
+                    You do not have permission to edit in this state.
+                </Typography>
+            )}
+
+            <Dialog open={!!pendingState} onClose={handleCancel} maxWidth="sm" fullWidth>
+                <DialogTitle>Change state to "{pendingState}"?</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        autoFocus
+                        fullWidth
+                        multiline
+                        rows={5}
+                        label="Note (optional)"
+                        value={transitionText}
+                        onChange={(e) => setTransitionText(e.target.value)}
+                        sx={{ mt: 1 }}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCancel}>Cancel</Button>
+                    <Button onClick={handleConfirm} variant="contained">Confirm</Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
+    );
+};
+"""
+        with open(self.output_dir / "src" / "components" / "workflow_selector.js", 'w', encoding='utf-8') as f:
+            f.write(workflow_selector_js)
 
     def _create_directory_structure(self):
         """Create the directory structure for the React-Admin app."""
@@ -577,7 +733,7 @@ export const CustomEditToolbar = ({ resource, ...props }) => {
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "lint": "eslint src/",
+    "lint": "eslint src/ --max-warnings 0",
     "lint:fix": "eslint src/ --fix"
   },
   "eslintConfig": {
@@ -746,7 +902,11 @@ export const authProvider = {{
     getIdentity: async () => {{
         const {{ data: {{ user }} }} = await supabaseClient.auth.getUser();
         if (!user) return Promise.reject();
-        return Promise.resolve({{ id: user.id, fullName: user.email }});
+        return Promise.resolve({{ 
+            id: user.id, 
+            fullName: user.email,
+            roles: user.app_metadata?.roles || []
+        }});
     }}
 }};
 """
@@ -948,10 +1108,15 @@ export const dataProvider = {{
         # Get optimized imports based on actual field types used
         react_admin_imports = self._get_optimized_react_admin_imports(concept, owned_children, many_to_many_links)
         
+        # Pre-check workflow (needed for MUI imports)
+        concept_workflow = self.schema_loader.business_schema.get("_concept_workflow", {}).get(resource_name)
+
         # Determine MUI imports
         mui_imports = ["Grid"]
         if owned_children or many_to_many_links:
             mui_imports.extend(["Box", "Button", "Dialog", "DialogTitle", "DialogContent", "DialogActions"])
+        elif concept_workflow:
+            mui_imports.append("Box")
         mui_imports_str = ", ".join(mui_imports)
         
         # Generate Dialog Components for Children RECURSIVELY
@@ -964,11 +1129,23 @@ export const dataProvider = {{
         
         child_dialog_components = "\n".join(child_dialog_components_list)
 
+        # Prepare workflow import and create-form UI
+        workflow_import = ""
+        create_workflow_ui = ""
+        if concept_workflow:
+            import json
+            wf_json_early = json.dumps(concept_workflow)
+            workflow_import = "import { WorkflowSelector, useWorkflowCanEdit } from '../../components/workflow_selector';"
+            create_workflow_ui = f'<WorkflowSelector workflow={{{wf_json_early}}} resource="{resource_name}" canEdit={{false}} />'
+
         # Re-evaluating: I'll import them separately to be safe.
         component_imports = [
             f"import {{ Title }} from '../../components/title';",
             f"import {{ CustomEditToolbar }} from '../../components/custom_edit_toolbar';"
         ]
+        if workflow_import:
+            component_imports.append(workflow_import)
+            
         if "ReorderableDatagrid" in field_components["child_tabs"] or "ReorderableDatagrid" in child_dialog_components:
              component_imports.append(f"import {{ ReorderableDatagrid }} from '../../components/reorderable_datagrid';")
         if "RecursiveParentSelector" in field_components["create_fields"] or "RecursiveParentSelector" in field_components["edit_fields"]:
@@ -989,7 +1166,47 @@ export const dataProvider = {{
         </Grid>
       </FormTab>"""
 
-        if owned_children or many_to_many_links:
+        edit_inner_component = ""
+        if concept_workflow:
+            import json
+            wf_json = json.dumps(concept_workflow)
+            inner_comp_name = f"{resource_name.upper()}_EDIT_FORM"
+            if owned_children or many_to_many_links:
+                form_content = f"""<TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} />}}>
+      <FormTab label="Summary">
+        <WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" canEdit={{canEdit}} />
+        <Box sx={{{{ pointerEvents: canEdit ? 'auto' : 'none', opacity: canEdit ? 1 : 0.6 }}}}>
+          <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
+            {field_components["edit_fields"]}
+          </Grid>
+        </Box>
+      </FormTab>
+      {field_components["child_tabs"]}
+      {relations_tab}
+    </TabbedForm>"""
+            else:
+                form_content = f"""<SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} />}}>
+      <WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" canEdit={{canEdit}} />
+      <Box sx={{{{ pointerEvents: canEdit ? 'auto' : 'none', opacity: canEdit ? 1 : 0.6 }}}}>
+        <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
+          {field_components["edit_fields"]}
+        </Grid>
+      </Box>
+    </SimpleForm>"""
+            edit_inner_component = f"""
+const {inner_comp_name} = () => {{
+    const record = useRecordContext();
+    const {{ permissions }} = usePermissions();
+    const {{ data: identity, isLoading: identityLoading }} = useGetIdentity();
+    const canEdit = useWorkflowCanEdit({wf_json}, record, identity, identityLoading);
+    return (
+        {form_content}
+    );
+}};"""
+            edit_component = f"""<Edit title={{<Title name="{resource_name}" />}} {{...props}}>
+    <{inner_comp_name} />
+  </Edit>"""
+        elif owned_children or many_to_many_links:
             edit_component = f"""<Edit title={{<Title name="{resource_name}" />}} {{...props}}>
     <TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" />}}>
       <FormTab label="Summary">
@@ -1020,6 +1237,7 @@ import {{ {mui_imports_str} }} from '@mui/material';
 {field_components["imports"]}
 
 {child_dialog_components}
+{edit_inner_component}
 
 const {resource_name}_filters = [
 {field_components["filter_fields"]}
@@ -1041,6 +1259,7 @@ export const {resource_name.upper()}_CREATE = (props) => {{
   return (
     <Create {{...props}}>
       <SimpleForm>
+        {create_workflow_ui}
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>
           {field_components["create_fields"]}
         </Grid>
@@ -1124,6 +1343,14 @@ export const {resource_name.upper()}_SHOW = (props) => (
         edit_fields = fields_res["edit_fields"]
         child_tabs = fields_res["child_tabs"]
         
+        # Prepare workflow components
+        workflow_ui = ""
+        concept_workflow = self.schema_loader.business_schema.get("_concept_workflow", {}).get(resource_name)
+        if concept_workflow:
+            import json
+            wf_json = json.dumps(concept_workflow)
+            workflow_ui = f'<WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" />'
+
         # Component Names
         create_comp_name = f"CREATE_{resource_name.upper()}_FOR_{parent_name.upper()}"
         edit_comp_name = f"EDIT_{resource_name.upper()}_FOR_{parent_name.upper()}"
@@ -1166,7 +1393,7 @@ const {create_comp_name} = () => {{
       </Dialog>
     </>
   );
-}};
+}} ;
 """
         components.append(create_comp)
 
@@ -1176,6 +1403,7 @@ const {create_comp_name} = () => {{
         if my_children:
              form_content = f"""<TabbedForm record={{record}} onSubmit={{onSubmit}} syncWithLocation={{false}} toolbar={{<EditToolbar />}}>
               <FormTab label="Summary">
+                {workflow_ui}
                 <Grid container rowSpacing={{0}} columnSpacing={{2}}>
 {edit_fields}
                 </Grid>
@@ -1184,6 +1412,7 @@ const {create_comp_name} = () => {{
             </TabbedForm>"""
         else:
              form_content = f"""<SimpleForm record={{record}} onSubmit={{onSubmit}} toolbar={{<EditToolbar />}}>
+              {workflow_ui}
               <Grid container rowSpacing={{0}} columnSpacing={{2}}>
 {edit_fields}
               </Grid>
@@ -1364,7 +1593,8 @@ const {edit_comp_name} = () => {{
         needed_components = {
             'List', 'Create', 'Edit', 'Show',
             'SimpleShowLayout', 'SimpleForm', 'Datagrid',
-            'TextField', 'TextInput', 'required', 'useRecordContext', 'usePermissions'
+            'TextField', 'TextInput', 'required', 'useRecordContext', 'usePermissions',
+            'useGetIdentity'
         }
         
         # Collect all recursive descendants to ensure their field types are imported

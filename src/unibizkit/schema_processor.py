@@ -128,7 +128,7 @@ class SchemaProcessor:
                     result_names.append(target)
         return result_names
 
-    def __init__(self, schema: Dict[str, Any], security_config: Optional[Dict[str, Any]] = None, presentation_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, schema: Dict[str, Any], security_config: Optional[Dict[str, Any]] = None, presentation_config: Optional[Dict[str, Any]] = None, workflow_config: Optional[Dict[str, Any]] = None):
         """
         Initialize the Schema Processor.
         
@@ -136,11 +136,13 @@ class SchemaProcessor:
             schema: The raw loaded business schema.
             security_config: The loaded security configuration.
             presentation_config: The loaded presentation configuration.
+            workflow_config: The loaded workflow configuration.
         """
         self.raw_schema = schema
         self.security_config = security_config or {"authentication_required": False}
         self.security_extended = copy.deepcopy(self.security_config)
         self.presentation_extended = copy.deepcopy(presentation_config or {})
+        self.workflow_extended = copy.deepcopy(workflow_config or {"workflow_rules": []})
         
         # We work on a deep copy to avoid mutating the original
         self.extended_schema = copy.deepcopy(schema)
@@ -155,6 +157,9 @@ class SchemaProcessor:
         Returns:
             The extended schema dictionary.
         """
+        # 0. Enrich Workflow
+        self._enrich_workflow()
+
         # 0. Enrich Security
         self._enrich_security()
 
@@ -247,6 +252,73 @@ class SchemaProcessor:
             self._process_relationships(concept)
 
         return self.extended_schema
+
+    def _enrich_workflow(self):
+        """
+        Map workflows to concepts and inject necessary fields.
+        """
+        # Create a concept-to-workflow map for easy lookup
+        concept_to_workflow = {}
+        # Support renaming from 'workflows' to 'workflow_rules'
+        workflow_rules = self.workflow_extended.get("workflow_rules", self.workflow_extended.get("workflows", []))
+        
+        # Collect and expand wildcard concept rules
+        import fnmatch
+        for rule in workflow_rules:
+            # Concepts can be comma-separated string
+            concepts_str = rule.get("concepts", "")
+            if isinstance(concepts_str, list):
+                # Backwards compat if needed, but schema changed to string
+                concepts_parts = concepts_str
+            else:
+                concepts_parts = [p.strip() for p in concepts_str.split(',') if p.strip()]
+            
+            for part in concepts_parts:
+                matched_concepts = []
+                if part == "*":
+                    matched_concepts = [c["name"] for c in self.concepts]
+                elif "*" in part:
+                    matched_concepts = [c["name"] for c in self.concepts if fnmatch.fnmatch(c["name"], part)]
+                else:
+                    matched_concepts = [part]
+                
+                for c_name in matched_concepts:
+                    concept_to_workflow[c_name] = rule
+        
+        # Inject state and state_info fields to concepts with workflows
+        self.extended_schema["_concept_workflow"] = {}
+        for concept in self.concepts:
+            concept_name = concept["name"]
+            if concept_name in concept_to_workflow:
+                wf = concept_to_workflow[concept_name]
+                # Store in central map at extended_schema root
+                self.extended_schema["_concept_workflow"][concept_name] = wf
+                
+                # Check for existing state field, if not, add it
+                if not any(f["name"] == "state" for f in concept["fields"]):
+                    initial_state = wf["states"][0]["name"] if wf["states"] else "initial"
+                    concept["fields"].append({
+                        "name": "state",
+                        "type": "string",
+                        "default": initial_state,
+                        "description": "Workflow state",
+                        "required": True,
+                        "unique": False,
+                        "enum_values": [],
+                        "size": "s"
+                    })
+                
+                # Check for state_info field, if not, add it
+                if not any(f["name"] == "state_info" for f in concept["fields"]):
+                    concept["fields"].append({
+                        "name": "state_info",
+                        "type": "string", # Will be mapped to XML in _determine_sql_type
+                        "description": "Workflow history (XML)",
+                        "required": False,
+                        "unique": False,
+                        "enum_values": [],
+                        "size": "l"
+                    })
 
     def _enrich_presentation(self):
         """Inject default values for presentation settings if missing."""
@@ -525,6 +597,9 @@ class SchemaProcessor:
         if field_name == "part_of_order":
             return "SERIAL"
             
+        if field_name == "state_info":
+            return "JSONB"
+
         if field_type == "relation_to_many":
             return "" # Handled via join tables
             
@@ -562,9 +637,18 @@ class SchemaProcessor:
         if field["name"] == "id":
             return 'read_only' 
             
+        if field["name"] == "state":
+            return 'internal'
+
         if field["name"] == "part_of_order":
             return 'internal'
             
+        if field["name"] == "state_info":
+            return 'internal'
+
+        if field["name"] == "security_owner_id":
+            return 'internal'
+
         return 'editable'
 
     def _determine_ui_component(self, field: Dict[str, Any]) -> str:
