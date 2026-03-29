@@ -44,22 +44,24 @@ class ReactAdminGenerator:
         # Generate main app files
         self._generate_package_json()
         
-        # Generate Menu and Layout if configured
-        has_custom_menu = self._generate_menu_component()
-        if has_custom_menu:
-            self._generate_layout_component()
-            
-        self._generate_index_js()
-        
-        # Generate data provider
-        self._generate_data_provider()
-        
         # Generate auth provider
         has_auth_provider = False
         if self.schema_loader.security_config.get("authentication_required"):
              self._generate_auth_provider()
              self._generate_login_page()
+             self._generate_appbar_component()
+             self._generate_user_profile_dialog()
              has_auth_provider = True
+
+        # Generate Menu and Layout if configured
+        has_custom_menu = self._generate_menu_component()
+        if has_custom_menu:
+            self._generate_layout_component(has_auth_provider=has_auth_provider)
+
+        self._generate_index_js()
+
+        # Generate data provider
+        self._generate_data_provider()
 
         # Generate custom components
         self._generate_custom_components()
@@ -175,9 +177,18 @@ export const MyMenu = () => {{
             f.write(menu_js_content)
         return True
 
-    def _generate_layout_component(self):
+    def _generate_layout_component(self, has_auth_provider: bool = False):
         """Generate the custom Layout component."""
-        layout_js_content = """import * as React from 'react';
+        if has_auth_provider:
+            layout_js_content = """import * as React from 'react';
+import { Layout } from 'react-admin';
+import { MyMenu } from './MyMenu';
+import { MyAppBar } from './MyAppBar';
+
+export const MyLayout = (props) => <Layout {...props} menu={MyMenu} appBar={MyAppBar} />;
+"""
+        else:
+            layout_js_content = """import * as React from 'react';
 import { Layout } from 'react-admin';
 import { MyMenu } from './MyMenu';
 
@@ -185,7 +196,91 @@ export const MyLayout = (props) => <Layout {...props} menu={MyMenu} />;
 """
         with open(self.output_dir / "src" / "layout" / "MyLayout.js", 'w', encoding='utf-8') as f:
             f.write(layout_js_content)
-    
+
+    def _generate_appbar_component(self):
+        """Generate custom AppBar with user menu including Profile dialog."""
+        appbar_js_content = """import * as React from 'react';
+import { AppBar, Logout, UserMenu, useGetIdentity, useUserMenu } from 'react-admin';
+import { MenuItem, ListItemIcon, ListItemText } from '@mui/material';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import { UserProfileDialog } from './UserProfileDialog';
+
+const ProfileContext = React.createContext();
+
+const ProfileMenuItem = React.forwardRef((props, ref) => {
+    const { onClose: closeMenu } = useUserMenu();
+    const openProfile = React.useContext(ProfileContext);
+    const handleClick = () => {
+        closeMenu();
+        openProfile();
+    };
+    return (
+        <MenuItem ref={ref} onClick={handleClick} {...props}>
+            <ListItemIcon><AccountCircleIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Profile</ListItemText>
+        </MenuItem>
+    );
+});
+
+export const MyAppBar = () => {
+    const [profileOpen, setProfileOpen] = React.useState(false);
+    const { data: identity } = useGetIdentity();
+    return (
+        <ProfileContext.Provider value={() => setProfileOpen(true)}>
+            <AppBar userMenu={
+                <UserMenu>
+                    <ProfileMenuItem />
+                    <Logout />
+                </UserMenu>
+            } />
+            <UserProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} identity={identity} />
+        </ProfileContext.Provider>
+    );
+};
+"""
+        with open(self.output_dir / "src" / "layout" / "MyAppBar.js", 'w', encoding='utf-8') as f:
+            f.write(appbar_js_content)
+
+    def _generate_user_profile_dialog(self):
+        """Generate UserProfileDialog component that shows user roles."""
+        dialog_js_content = """import * as React from 'react';
+import {
+    Dialog, DialogTitle, DialogContent, DialogActions,
+    Button, Typography, Chip, Box
+} from '@mui/material';
+
+export const UserProfileDialog = ({ open, onClose, identity }) => {
+    if (!identity) return null;
+    const roles = identity.roles || [];
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+            <DialogTitle>User Profile</DialogTitle>
+            <DialogContent>
+                <Typography variant="body1" gutterBottom>
+                    <strong>Email:</strong> {identity.fullName}
+                </Typography>
+                <Typography variant="body1" component="div">
+                    <strong>Roles:</strong>
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
+                    {roles.length > 0
+                        ? roles.map((role) => (
+                            <Chip key={role} label={role} color="primary" variant="outlined" />
+                        ))
+                        : <Typography variant="body2" color="text.secondary">No roles assigned</Typography>
+                    }
+                </Box>
+            </DialogContent>
+            <DialogActions>
+                <Button onClick={onClose}>Close</Button>
+            </DialogActions>
+        </Dialog>
+    );
+};
+"""
+        with open(self.output_dir / "src" / "layout" / "UserProfileDialog.js", 'w', encoding='utf-8') as f:
+            f.write(dialog_js_content)
+
     def _generate_app_js(self, has_custom_layout: bool = False, has_auth_provider: bool = False):
         """Generate App.js file."""
         # Import statements for all resources
