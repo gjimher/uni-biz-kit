@@ -128,21 +128,23 @@ class SchemaProcessor:
                     result_names.append(target)
         return result_names
 
-    def __init__(self, schema: Dict[str, Any], security_config: Optional[Dict[str, Any]] = None, presentation_config: Optional[Dict[str, Any]] = None, workflow_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, schema: Dict[str, Any], security_config: Optional[Dict[str, Any]] = None, presentation_config: Optional[Dict[str, Any]] = None, workflow_config: Optional[Dict[str, Any]] = None, system_config: Optional[Dict[str, Any]] = None):
         """
         Initialize the Schema Processor.
-        
+
         Args:
             schema: The raw loaded business schema.
             security_config: The loaded security configuration.
             presentation_config: The loaded presentation configuration.
             workflow_config: The loaded workflow configuration.
+            system_config: The loaded system configuration (SMTP, base_url).
         """
         self.raw_schema = schema
         self.security_config = security_config or {"authentication_required": False}
         self.security_extended = copy.deepcopy(self.security_config)
         self.presentation_extended = copy.deepcopy(presentation_config or {})
         self.workflow_extended = copy.deepcopy(workflow_config or {"workflow_rules": []})
+        self.system_extended = copy.deepcopy(system_config or {})
         
         # We work on a deep copy to avoid mutating the original
         self.extended_schema = copy.deepcopy(schema)
@@ -346,7 +348,7 @@ class SchemaProcessor:
                 {"email": "user@test.com", "password": "useruser", "roles": ["user"]}
             ]
 
-        if not self.security_extended.get("authentication_required"):
+        if not self.security_extended["authentication_required"]:
             # Set default empty _acl even if auth is disabled for schema consistency
             self.security_extended["_acl"] = {}
             # Ensure rules_level fields are also present

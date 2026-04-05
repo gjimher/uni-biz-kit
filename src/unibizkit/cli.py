@@ -328,6 +328,41 @@ Examples:
             
         return base_schema
 
+    def _generate_system_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
+        """
+        Dynamically generate the full extended system schema definition by merging
+        system_schema.json and system_extended_required_additions.json.
+        """
+        schemas_dir = Path(__file__).parent.parent.parent / "schemas"
+        base_schema_path = schemas_dir / "system_schema.json"
+        additions_path = schemas_dir / "system_extended_required_additions.json"
+
+        with open(base_schema_path, 'r', encoding='utf-8') as f:
+            base_schema = json.load(f)
+
+        if additions_path.exists():
+            with open(additions_path, 'r', encoding='utf-8') as f:
+                additions = json.load(f)
+
+            if "properties" in additions:
+                base_schema["properties"].update(additions["properties"])
+
+            if "required" in additions:
+                if "required" not in base_schema:
+                    base_schema["required"] = []
+                base_schema["required"].extend(additions["required"])
+                base_schema["required"] = list(set(base_schema["required"]))
+
+        base_schema["title"] = "Extended System Schema"
+        base_schema["description"] = "Dynamically generated extended system schema."
+
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / "system_extended_schema.json"
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(base_schema, f, indent=2)
+
+        return base_schema
+
     def _handle_generate_command(self, args):
         """Handle the generate command."""
         
@@ -346,10 +381,11 @@ Examples:
         # Enrich Schema (Intermediate Representation)
         logger.info("Enriching schema with internal metadata...")
         processor = SchemaProcessor(
-            business_schema, 
+            business_schema,
             schema_loader.security_config,
             schema_loader.presentation_config,
-            schema_loader.workflow_config
+            schema_loader.workflow_config,
+            schema_loader.system_config
         )
         extended_schema = processor.process()
 
@@ -430,11 +466,28 @@ Examples:
             json.dump(new_sec_config, f, indent=2)
         logger.info(f"Security extended saved to: {sec_dump_path}")
 
+        # Save System Extended
+        sys_dump_path = output_dir / "system_extended.json"
+        new_sys_config = {"$schema": "./system_extended_schema.json"}
+        sys_config_copy = processor.system_extended.copy()
+        if "$schema" in sys_config_copy:
+            del sys_config_copy["$schema"]
+        new_sys_config.update(sys_config_copy)
+
+        # Validate System Extended (this also generates the extended schema file)
+        extended_system_schema_def = self._generate_system_extended_schema_def(output_dir)
+        self._validate_extended_schema(new_sys_config, extended_system_schema_def, "system")
+
+        with open(sys_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(new_sys_config, f, indent=2)
+        logger.info(f"System extended saved to: {sys_dump_path}")
+
         # Pass the EXTENDED schema to generators
         schema_loader.business_schema = extended_schema
         schema_loader.concepts = extended_schema["concepts"]
         schema_loader.security_config = processor.security_extended
-        
+        schema_loader.system_config = processor.system_extended
+
         # Generate Supabase schema
         if not args.skip_backend:
             logger.info("Generating Supabase database schema...")
@@ -486,10 +539,11 @@ Examples:
         # Enrich Schema to test processor
         logger.info("Enriching schema to verify processor logic...")
         processor = SchemaProcessor(
-            business_schema, 
+            business_schema,
             schema_loader.security_config,
             schema_loader.presentation_config,
-            schema_loader.workflow_config
+            schema_loader.workflow_config,
+            schema_loader.system_config
         )
         extended_schema = processor.process()
         
@@ -571,7 +625,22 @@ Examples:
         with open(sec_dump_path, 'w', encoding='utf-8') as f:
             json.dump(new_sec_config, f, indent=2)
         logger.info(f"Security extended saved to: {sec_dump_path}")
-        
+
+        # Save System Extended
+        sys_dump_path = output_dir / "system_extended.json"
+        new_sys_config = {"$schema": "./system_extended_schema.json"}
+        sys_config_copy = processor.system_extended.copy()
+        if "$schema" in sys_config_copy:
+            del sys_config_copy["$schema"]
+        new_sys_config.update(sys_config_copy)
+
+        extended_system_schema_def = self._generate_system_extended_schema_def(output_dir)
+        self._validate_extended_schema(new_sys_config, extended_system_schema_def, "system")
+
+        with open(sys_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(new_sys_config, f, indent=2)
+        logger.info(f"System extended saved to: {sys_dump_path}")
+
         logger.info(f"Version: {business_schema["version"]}")
         logger.info(f"Number of concepts: {len(business_schema["concepts"])}")
         

@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "System Schema",
+  "description": "Schema for system-level configuration such as SMTP settings and base URL",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path to the JSON schema"
+    },
+    "smtp": {
+      "type": "object",
+      "description": "SMTP server configuration for sending emails",
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "SMTP server hostname",
+          "default": "127.0.0.1"
+        },
+        "port": {
+          "type": "integer",
+          "description": "SMTP server port",
+          "default": 25
+        },
+        "from_email": {
+          "type": "string",
+          "description": "Sender email address",
+          "default": "noreply@localhost"
+        },
+        "user": {
+          "type": ["string", "null"],
+          "description": "SMTP authentication user (null if no auth)",
+          "default": null
+        },
+        "password": {
+          "type": ["string", "null"],
+          "description": "SMTP authentication password (null if no auth)",
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "default": {}
+    },
+    "base_url": {
+      "type": "string",
+      "description": "Base URL of the application (used in email links)",
+      "default": "http://localhost:3000"
+    }
+  },
+  "additionalProperties": false
+}

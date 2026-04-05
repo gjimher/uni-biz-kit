@@ -78,7 +78,84 @@ class TestAppBackend:
                 text = text.replace('project_id = "backend"', 'project_id = "ubk_test_app"')
                 text = re.sub(r"\b54(\d{3})\b", r"55\1", text)
                 config_path.write_text(text)
-                
+
+                # Configure SMTP and auth from system_extended.json
+                os.chdir(original_cwd)
+                system_extended_file = output_dir / "system_extended.json"
+                security_extended_file = output_dir / "security_extended.json"
+                if system_extended_file.exists() and security_extended_file.exists():
+                    with open(system_extended_file) as f:
+                        system_data = json.load(f)
+                    with open(security_extended_file) as f:
+                        security_data = json.load(f)
+
+                    smtp = system_data.get('smtp', {})
+                    smtp_host = smtp.get('host', '127.0.0.1')
+                    # Supabase runs in Docker; 127.0.0.1 refers to the container's loopback.
+                    # Remap localhost addresses to the Docker bridge gateway so the container
+                    # can reach services on the host (e.g. the dev SMTP mock).
+                    if smtp_host in ('127.0.0.1', 'localhost'):
+                        smtp_host = '172.17.0.1'
+                    smtp_port = smtp.get('port', 25)
+                    smtp_from = smtp.get('from_email', 'noreply@localhost')
+                    smtp_user = smtp.get('user') or ''
+                    smtp_pass = smtp.get('password') or ''
+                    base_url = system_data.get('base_url', 'http://localhost:3000')
+                    registration = security_data['registration']
+                    allow_reg = registration['allow']
+                    enable_signup_val = 'true' if allow_reg else 'false'
+
+                    print(f"Configuring Supabase SMTP: {smtp_host}:{smtp_port}, base_url={base_url}, registration.allow={allow_reg}")
+
+                    os.chdir(backend_dir)
+                    text = config_path.read_text()
+
+                    # Set site_url
+                    text = re.sub(r'(site_url\s*=\s*")[^"]*(")', rf'\g<1>{base_url}\g<2>', text)
+
+                    # Enable signup and email confirmations
+                    text = re.sub(r'(enable_signup\s*=\s*)(true|false)', rf'\g<1>{enable_signup_val}', text)
+                    text = re.sub(r'(enable_confirmations\s*=\s*)(true|false)', r'\g<1>true', text)
+                    # double_confirm_changes must be false for simple flow
+                    text = re.sub(r'(double_confirm_changes\s*=\s*)(true|false)', r'\g<1>false', text)
+
+                    # Configure SMTP via [auth.email.smtp] (Supabase v2 format)
+                    # Supabase requires non-empty user even for unauthenticated local SMTP
+                    effective_smtp_user = smtp_user or "mock"
+                    effective_smtp_pass = smtp_pass or "mock"
+                    smtp_block = (
+                        f'[auth.email.smtp]\n'
+                        f'enabled = true\n'
+                        f'host = "{smtp_host}"\n'
+                        f'port = {smtp_port}\n'
+                        f'admin_email = "{smtp_from}"\n'
+                        f'sender_name = "App"\n'
+                        f'user = "{effective_smtp_user}"\n'
+                        f'pass = "{effective_smtp_pass}"\n'
+                    )
+                    # Remove any commented-out [auth.email.smtp] block
+                    text = re.sub(r'(?m)^# \[auth\.email\.smtp\].*?(?=\n#\s*\n|\n\[|\Z)', '', text, flags=re.DOTALL)
+                    # Remove any existing [auth.email.smtp] block (uncommented)
+                    text = re.sub(r'\[auth\.email\.smtp\].*?(?=\n\[|\Z)', '', text, flags=re.DOTALL)
+                    # Append the configured block
+                    text = text.rstrip() + '\n\n' + smtp_block
+
+                    # Disable inbucket to force external SMTP usage
+                    if '[inbucket]' in text:
+                        text = re.sub(
+                            r'(\[inbucket\].*?enabled\s*=\s*)(true)',
+                            r'\g<1>false',
+                            text, flags=re.DOTALL
+                        )
+
+                    # Increase email rate limit for testing
+                    text = re.sub(r'(email_sent\s*=\s*)\d+', r'\g<1>100', text)
+
+                    config_path.write_text(text)
+                    print("SMTP configuration written to supabase/config.toml")
+                else:
+                    os.chdir(backend_dir)
+
                 # Start supabase
                 print("Starting Supabase...")
                 start_result = subprocess.run(

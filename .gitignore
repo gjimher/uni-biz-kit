@@ -2,6 +2,7 @@
 /test-app
 
 /tmp*/
+tmp-dev-smtp-mock.txt
 
 # Python
 __pycache__/

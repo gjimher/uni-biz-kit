@@ -14,3 +14,4 @@ dotenv
 psycopg2-binary
 pytest-playwright
 pytest-xprocess
+aiosmtpd

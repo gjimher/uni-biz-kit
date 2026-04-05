@@ -1,0 +1,27 @@
+#!/usr/bin/env python
+
+"""
+UniBizKit Dev SMTP Mock - Entry Point
+
+Starts the development SMTP mock server that captures outgoing emails
+and writes them to stdout and tmp-dev-smtp-mock.txt.
+
+Usage:
+    dev-smtp-mock           # Listen on default port 3010
+    dev-smtp-mock 3010      # Listen on port 3010
+"""
+
+import sys
+import os
+
+# Add the project root to the Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from dev_smtp_mock import main
+import asyncio
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nSMTP mock server stopped.")

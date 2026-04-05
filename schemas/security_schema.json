@@ -13,6 +13,26 @@
       "description": "Whether authentication is required to access the application",
       "default": true
     },
+    "registration": {
+      "type": "object",
+      "description": "Settings for user self-registration",
+      "properties": {
+        "allow": {
+          "type": "boolean",
+          "description": "Whether users can self-register via the login page (requires email confirmation)",
+          "default": false
+        },
+        "role": {
+          "type": "string",
+          "description": "The default role assigned to new registered users",
+          "default": "user"
+        }
+      },
+      "default": {
+        "allow": false,
+        "role": "user"
+      }
+    },
     "roles": {
       "type": "array",
       "description": "Initial roles to seed. If not provided and authentication is required, 'admin' and 'user' roles are created by default.",

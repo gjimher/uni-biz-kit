@@ -53,10 +53,12 @@ class SchemaLoader:
         self.presentation_config = None
         self.security_config = None
         self.workflow_config = None
+        self.system_config = None
         self.validation_schema = self._load_validation_schema("concepts_schema.json")
         self.presentation_validation_schema = self._load_validation_schema("presentation_schema.json")
         self.security_validation_schema = self._load_validation_schema("security_schema.json")
         self.workflow_validation_schema = self._load_validation_schema("workflow_schema.json")
+        self.system_validation_schema = self._load_validation_schema("system_schema.json")
     
     def _load_validation_schema(self, schema_name: str) -> Dict[str, Any]:
         """Load a validation schema from the schemas directory."""
@@ -111,6 +113,15 @@ class SchemaLoader:
                 self.workflow_config = {"workflow_rules": []}
             else:
                 self.load_workflow(str(workflow_path))
+
+            # Try to load system.json (optional)
+            system_path = Path(path).parent / "system.json"
+            if system_path.exists():
+                self.load_system(str(system_path))
+            else:
+                # Apply defaults from system schema
+                self.system_config = {}
+                DefaultValidatingDraft7Validator(self.system_validation_schema).validate(self.system_config)
 
             # Apply special defaults before main validation/default injection
             self._apply_special_defaults(business_schema)
@@ -172,12 +183,25 @@ class SchemaLoader:
         """
         with open(workflow_path, 'r', encoding='utf-8') as f:
             workflow_config = json.load(f)
-        
+
         # Validate and inject defaults
         DefaultValidatingDraft7Validator(self.workflow_validation_schema).validate(workflow_config)
-        
+
         self.workflow_config = workflow_config
         logger.info(f"Successfully loaded and validated workflow settings: {workflow_path}")
+
+    def load_system(self, system_path: str):
+        """
+        Load and validate the system settings.
+        """
+        with open(system_path, 'r', encoding='utf-8') as f:
+            system_config = json.load(f)
+
+        # Validate and inject defaults
+        DefaultValidatingDraft7Validator(self.system_validation_schema).validate(system_config)
+
+        self.system_config = system_config
+        logger.info(f"Successfully loaded and validated system settings: {system_path}")
     
     def _apply_special_defaults(self, data: Dict[str, Any]):
         """

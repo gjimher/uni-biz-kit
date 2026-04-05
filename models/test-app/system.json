@@ -1,0 +1,9 @@
+{
+  "$schema": "../../schemas/system_schema.json",
+  "smtp": {
+    "host": "127.0.0.1",
+    "port": 3010,
+    "from_email": "noreply@localhost"
+  },
+  "base_url": "http://localhost:3000"
+}

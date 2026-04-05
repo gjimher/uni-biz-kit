@@ -1,6 +1,10 @@
 {
   "$schema": "../../schemas/security_schema.json",
   "authentication_required": true,
+  "registration": {
+    "allow": true,
+    "role": "user"
+  },
   "users": [
     {
       "email": "admin@test.com",

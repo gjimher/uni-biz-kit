@@ -29,6 +29,7 @@ class ReactAdminGenerator:
         self.output_dir = Path(output_dir)
         self.concept_map = {concept["name"]: concept for concept in self.concepts}
         self.presentation_config = schema_loader.presentation_config
+        self.system_config = getattr(schema_loader, 'system_config', None) or {}
     
     def generate_frontend(self):
         """
@@ -46,9 +47,10 @@ class ReactAdminGenerator:
         
         # Generate auth provider
         has_auth_provider = False
-        if self.schema_loader.security_config.get("authentication_required"):
+        if self.schema_loader.security_config["authentication_required"]:
              self._generate_auth_provider()
              self._generate_login_page()
+             self._generate_reset_password_page()
              self._generate_appbar_component()
              self._generate_user_profile_dialog()
              has_auth_provider = True
@@ -59,6 +61,9 @@ class ReactAdminGenerator:
             self._generate_layout_component(has_auth_provider=has_auth_provider)
 
         self._generate_index_js()
+
+        if has_auth_provider:
+            self._generate_auth_error_page()
 
         # Generate data provider
         self._generate_data_provider()
@@ -308,21 +313,32 @@ export const UserProfileDialog = ({ open, onClose, identity }) => {
         auth_import = ""
         auth_prop = ""
         require_auth = ""
+        ra_extra_imports = "Admin, Resource"
+        extra_imports = ""
+        custom_routes_block = ""
         if has_auth_provider:
-             auth_import = "import { authProvider } from './authProvider';\nimport { MyLoginPage } from './layout/MyLoginPage';"
+             auth_import = "import { authProvider } from './authProvider';\nimport { MyLoginPage } from './layout/MyLoginPage';\nimport { AuthErrorPage } from './layout/AuthErrorPage';\nimport { ResetPasswordPage } from './layout/ResetPasswordPage';"
              auth_prop = " authProvider={authProvider} loginPage={MyLoginPage}"
              require_auth = " requireAuth"
-             
+             ra_extra_imports = "Admin, Resource, CustomRoutes"
+             extra_imports = "import { Route } from 'react-router-dom';"
+             custom_routes_block = """    <CustomRoutes noLayout>
+        <Route path="/_auth_error" element={<AuthErrorPage />} />
+        <Route path="/_reset_password" element={<ResetPasswordPage />} />
+    </CustomRoutes>
+"""
+
         app_js_content = f"""import * as React from 'react';
-import {{ Admin, Resource }} from 'react-admin';
+import {{ {ra_extra_imports} }} from 'react-admin';
 import {{ dataProvider }} from './dataProvider';
 {layout_import}
 {auth_import}
+{extra_imports}
 {chr(10).join(import_statements)}
 
 const App = () => (
   <Admin{require_auth} dataProvider={{dataProvider}}{layout_prop}{auth_prop} mutationMode="pessimistic">
-      {{permissions => (
+{custom_routes_block}      {{permissions => (
           <>
 {chr(10).join(resource_components)}
           </>
@@ -867,6 +883,19 @@ export const WorkflowSelector = ({ workflow, resource, canEdit }) => {
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
+// Supabase appends hash fragments to redirect_to on auth events.
+// React-Admin uses HashRouter, so these become unknown routes and render a blank page.
+// Intercept here and redirect to the appropriate route before React mounts.
+const _hash = window.location.hash.substring(1);
+if (_hash && !_hash.startsWith('/')) {
+    const _p = new URLSearchParams(_hash);
+    if (_p.get('error')) {
+        const _msg = _p.get('error_description') || _p.get('error_code') || _p.get('error');
+        window.location.replace('/#/_auth_error?' + new URLSearchParams({ message: _msg }).toString());
+    }
+    // Recovery is handled via onAuthStateChange in authProvider.js
+}
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
@@ -908,6 +937,13 @@ const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
 const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
+// Listen for auth events to handle recovery and other flows
+supabaseClient.auth.onAuthStateChange((event) => {{
+    if (event === 'PASSWORD_RECOVERY') {{
+        window.location.hash = '/_reset_password';
+    }}
+}});
+
 const RULES = {rules_json};
 
 export const authProvider = {{
@@ -926,6 +962,9 @@ export const authProvider = {{
         }});
 
         if (error) {{
+            if (error.message && error.message.toLowerCase().includes('email not confirmed')) {{
+                throw new Error('Your email address has not been confirmed. Please check your inbox and click the confirmation link.');
+            }}
             throw new Error(error.message);
         }}
 
@@ -1009,12 +1048,80 @@ export const authProvider = {{
             f.write(auth_provider_content)
 
     def _generate_login_page(self):
-        """Generate a custom login page to change labels."""
-        login_page_content = """import * as React from 'react';
-import { Login, LoginForm, TextInput } from 'react-admin';
+        """Generate a custom login page with optional registration form."""
+        registration = self.schema_loader.security_config["registration"]
+        allow_registration = registration["allow"]
+        base_url = self.system_config.get("base_url", "http://localhost:3000")
+
+        if not allow_registration:
+            login_page_content = f"""import * as React from 'react';
+import {{ useState }} from 'react';
+import {{ Login, LoginForm, TextInput }} from 'react-admin';
+import {{ createClient }} from '@supabase/supabase-js';
+import {{ Box, Button, TextField, CircularProgress, Alert }} from '@mui/material';
+
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
+const supabaseClient = createClient(supabaseUrl, supabaseKey);
+
+const BASE_URL = '{base_url}';
+
+const ForgotPasswordForm = ({{ onBack }}) => {{
+    const [email, setEmail] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [sent, setSent] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e) => {{
+        e.preventDefault();
+        setError('');
+        if (!email) {{ setError('Email is required'); return; }}
+        setLoading(true);
+        try {{
+            const {{ error: resetError }} = await supabaseClient.auth.resetPasswordForEmail(email, {{
+                redirectTo: BASE_URL,
+            }});
+            if (resetError) setError(resetError.message);
+            else setSent(true);
+        }} catch (err) {{
+            setError(err.message);
+        }} finally {{
+            setLoading(false);
+        }}
+    }};
+
+    if (sent) {{
+        return (
+            <Box sx={{{{ padding: 2 }}}}>
+                <Alert severity="success">Check your email for a link to reset your password.</Alert>
+                <Button fullWidth sx={{{{ mt: 2 }}}} onClick={{onBack}}>Back to Sign In</Button>
+            </Box>
+        );
+    }}
+
+    return (
+        <Box component="form" onSubmit={{handleSubmit}} sx={{{{ padding: 2 }}}}>
+            {{error && <Alert severity="error" sx={{{{ mb: 2 }}}}>{{error}}</Alert>}}
+            <TextField
+                label="Email"
+                type="email"
+                value={{email}}
+                onChange={{e => setEmail(e.target.value)}}
+                fullWidth
+                margin="normal"
+                required
+                autoFocus
+            />
+            <Button type="submit" variant="contained" fullWidth disabled={{loading}} sx={{{{ mt: 2 }}}}>
+                {{loading ? <CircularProgress size={{24}} /> : 'Send Reset Link'}}
+            </Button>
+            <Button fullWidth sx={{{{ mt: 1 }}}} onClick={{onBack}}>Back to Sign In</Button>
+        </Box>
+    );
+}};
 
 const MyLoginForm = props => (
-    <LoginForm {...props}>
+    <LoginForm {{...props}}>
         <TextInput
             source="username"
             label="Email"
@@ -1023,14 +1130,378 @@ const MyLoginForm = props => (
     </LoginForm>
 );
 
+const LoginOrReset = (props) => {{
+    const [showForgot, setShowForgot] = useState(false);
+    if (showForgot) return <ForgotPasswordForm onBack={{() => setShowForgot(false)}} />;
+    return (
+        <Box>
+            <MyLoginForm {{...props}} />
+            <Box sx={{{{ textAlign: 'center', pb: 2 }}}}>
+                <Button size="small" onClick={{() => setShowForgot(true)}}>Forgot your password?</Button>
+            </Box>
+        </Box>
+    );
+}};
+
 export const MyLoginPage = props => (
-    <Login {...props}>
-        <MyLoginForm />
+    <Login {{...props}}>
+        <LoginOrReset />
+    </Login>
+);
+"""
+        else:
+            login_page_content = f"""import * as React from 'react';
+import {{ useState }} from 'react';
+import {{ Login, LoginForm, TextInput, useNotify }} from 'react-admin';
+import {{ createClient }} from '@supabase/supabase-js';
+import {{ Box, Tab, Tabs, Button, TextField, CircularProgress, Alert }} from '@mui/material';
+
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
+const supabaseClient = createClient(supabaseUrl, supabaseKey);
+
+const BASE_URL = '{base_url}';
+
+const RegisterForm = () => {{
+    const notify = useNotify();
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [registered, setRegistered] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleRegister = async (e) => {{
+        e.preventDefault();
+        setError('');
+
+        if (!email) {{
+            setError('Email is required');
+            return;
+        }}
+        if (!password) {{
+            setError('Password is required');
+            return;
+        }}
+        if (password !== confirmPassword) {{
+            setError('Passwords do not match');
+            return;
+        }}
+        if (password.length < 6) {{
+            setError('Password must be at least 6 characters');
+            return;
+        }}
+
+        setLoading(true);
+        try {{
+            const {{ data, error: signUpError }} = await supabaseClient.auth.signUp({{
+                email,
+                password,
+                options: {{
+                    emailRedirectTo: BASE_URL,
+                }}
+            }});
+
+            if (signUpError) {{
+                setError(signUpError.message);
+            }} else {{
+                setRegistered(true);
+            }}
+        }} catch (err) {{
+            setError(err.message);
+        }} finally {{
+            setLoading(false);
+        }}
+    }};
+
+    if (registered) {{
+        return (
+            <Box sx={{{{ padding: 2 }}}}>
+                <Alert severity="success">
+                    Registration successful! Please check your email and click the confirmation link before logging in.
+                </Alert>
+            </Box>
+        );
+    }}
+
+    return (
+        <Box component="form" onSubmit={{handleRegister}} sx={{{{ padding: 2 }}}}>
+            {{error && <Alert severity="error" sx={{{{ mb: 2 }}}}>{{error}}</Alert>}}
+            <TextField
+                label="Email"
+                type="email"
+                value={{email}}
+                onChange={{e => setEmail(e.target.value)}}
+                fullWidth
+                margin="normal"
+                required
+                autoFocus
+            />
+            <TextField
+                label="Password"
+                type="password"
+                value={{password}}
+                onChange={{e => setPassword(e.target.value)}}
+                fullWidth
+                margin="normal"
+                required
+                inputProps={{{{ minLength: 6 }}}}
+            />
+            <TextField
+                label="Confirm Password"
+                type="password"
+                value={{confirmPassword}}
+                onChange={{e => setConfirmPassword(e.target.value)}}
+                fullWidth
+                margin="normal"
+                required
+            />
+            <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                disabled={{loading}}
+                sx={{{{ mt: 2 }}}}
+            >
+                {{loading ? <CircularProgress size={{24}} /> : 'Register'}}
+            </Button>
+        </Box>
+    );
+}};
+
+const ForgotPasswordForm = ({{ onBack }}) => {{
+    const [email, setEmail] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [sent, setSent] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e) => {{
+        e.preventDefault();
+        setError('');
+        if (!email) {{ setError('Email is required'); return; }}
+        setLoading(true);
+        try {{
+            const {{ error: resetError }} = await supabaseClient.auth.resetPasswordForEmail(email, {{
+                redirectTo: BASE_URL,
+            }});
+            if (resetError) setError(resetError.message);
+            else setSent(true);
+        }} catch (err) {{
+            setError(err.message);
+        }} finally {{
+            setLoading(false);
+        }}
+    }};
+
+    if (sent) {{
+        return (
+            <Box sx={{{{ padding: 2 }}}}>
+                <Alert severity="success">Check your email for a link to reset your password.</Alert>
+                <Button fullWidth sx={{{{ mt: 2 }}}} onClick={{onBack}}>Back to Sign In</Button>
+            </Box>
+        );
+    }}
+
+    return (
+        <Box component="form" onSubmit={{handleSubmit}} sx={{{{ padding: 2 }}}}>
+            {{error && <Alert severity="error" sx={{{{ mb: 2 }}}}>{{error}}</Alert>}}
+            <TextField
+                label="Email"
+                type="email"
+                value={{email}}
+                onChange={{e => setEmail(e.target.value)}}
+                fullWidth
+                margin="normal"
+                required
+                autoFocus
+            />
+            <Button type="submit" variant="contained" fullWidth disabled={{loading}} sx={{{{ mt: 2 }}}}>
+                {{loading ? <CircularProgress size={{24}} /> : 'Send Reset Link'}}
+            </Button>
+            <Button fullWidth sx={{{{ mt: 1 }}}} onClick={{onBack}}>Back to Sign In</Button>
+        </Box>
+    );
+}};
+
+const MyLoginForm = props => (
+    <LoginForm {{...props}}>
+        <TextInput
+            source="username"
+            label="Email"
+            autoFocus
+        />
+    </LoginForm>
+);
+
+const LoginWithTabs = (props) => {{
+    const [tab, setTab] = useState(0);
+    const [showForgot, setShowForgot] = useState(false);
+
+    if (showForgot) {{
+        return <ForgotPasswordForm onBack={{() => setShowForgot(false)}} />;
+    }}
+
+    return (
+        <Box>
+            <Tabs value={{tab}} onChange={{(_, v) => setTab(v)}} centered>
+                <Tab label="Sign In" />
+                <Tab label="Register" />
+            </Tabs>
+            {{tab === 0 && (
+                <Box>
+                    <MyLoginForm {{...props}} />
+                    <Box sx={{{{ textAlign: 'center', pb: 2 }}}}>
+                        <Button size="small" onClick={{() => setShowForgot(true)}}>Forgot your password?</Button>
+                    </Box>
+                </Box>
+            )}}
+            {{tab === 1 && <RegisterForm />}}
+        </Box>
+    );
+}};
+
+export const MyLoginPage = props => (
+    <Login {{...props}}>
+        <LoginWithTabs />
     </Login>
 );
 """
         with open(self.output_dir / "src" / "layout" / "MyLoginPage.js", 'w', encoding='utf-8') as f:
             f.write(login_page_content)
+
+    def _generate_auth_error_page(self):
+        """Generate AuthErrorPage component shown when Supabase auth redirects fail."""
+        content = """import * as React from 'react';
+import { useLocation, Link } from 'react-router-dom';
+import { Box, Alert, Button, Typography } from '@mui/material';
+
+export const AuthErrorPage = () => {
+    const location = useLocation();
+    const params = new URLSearchParams(location.search);
+    const message = params.get('message') || 'An authentication error occurred.';
+
+    return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', bgcolor: '#f5f5f5' }}>
+            <Box sx={{ maxWidth: 480, width: '100%', p: 4 }}>
+                <Alert severity="error" sx={{ mb: 3 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 0.5 }}>Authentication Error</Typography>
+                    {message}
+                </Alert>
+                <Button component={Link} to="/login" variant="contained" fullWidth>
+                    Back to Login
+                </Button>
+            </Box>
+        </Box>
+    );
+};
+"""
+        with open(self.output_dir / "src" / "layout" / "AuthErrorPage.js", 'w', encoding='utf-8') as f:
+            f.write(content)
+
+    def _generate_reset_password_page(self):
+        """Generate ResetPasswordPage component for handling password reset from email link."""
+        content = """import * as React from 'react';
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { Box, TextField, Button, Alert, CircularProgress, Typography } from '@mui/material';
+import { Link } from 'react-router-dom';
+
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
+const supabaseClient = createClient(supabaseUrl, supabaseKey);
+
+export const ResetPasswordPage = () => {
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [done, setDone] = useState(false);
+    const [sessionReady, setSessionReady] = useState(false);
+
+    useEffect(() => {
+        // When the user lands on this page via a password reset email, the Supabase
+        // client has already processed the recovery token from the URL hash (it runs
+        // at module load time via authProvider.js) and stored the session in localStorage.
+        // We just need to confirm there is a valid session to show the form.
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+            if (session) {
+                setSessionReady(true);
+            } else {
+                setError('No reset token found. Please request a new password reset link.');
+            }
+        });
+    }, []);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        if (password !== confirmPassword) { setError('Passwords do not match'); return; }
+        if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+        setLoading(true);
+        try {
+            const { error: updateError } = await supabaseClient.auth.updateUser({ password });
+            if (updateError) setError(updateError.message);
+            else setDone(true);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', bgcolor: '#f5f5f5' }}>
+            <Box sx={{ maxWidth: 400, width: '100%', p: 4, bgcolor: 'white', borderRadius: 2, boxShadow: 2 }}>
+                <Typography variant="h5" sx={{ mb: 3, textAlign: 'center' }}>Reset Password</Typography>
+                {done ? (
+                    <Box>
+                        <Alert severity="success" sx={{ mb: 2 }}>Your password has been updated successfully.</Alert>
+                        <Button component={Link} to="/login" variant="contained" fullWidth>Sign In</Button>
+                    </Box>
+                ) : (
+                    <Box>
+                        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                        {!error && !sessionReady && (
+                            <Box sx={{ textAlign: 'center' }}><CircularProgress /></Box>
+                        )}
+                        {sessionReady && (
+                            <Box component="form" onSubmit={handleSubmit}>
+                                <TextField
+                                    label="New Password"
+                                    type="password"
+                                    value={password}
+                                    onChange={e => setPassword(e.target.value)}
+                                    fullWidth
+                                    margin="normal"
+                                    required
+                                    autoFocus
+                                />
+                                <TextField
+                                    label="Confirm Password"
+                                    type="password"
+                                    value={confirmPassword}
+                                    onChange={e => setConfirmPassword(e.target.value)}
+                                    fullWidth
+                                    margin="normal"
+                                    required
+                                />
+                                <Button type="submit" variant="contained" fullWidth disabled={loading} sx={{ mt: 2 }}>
+                                    {loading ? <CircularProgress size={24} /> : 'Update Password'}
+                                </Button>
+                            </Box>
+                        )}
+                        {error && (
+                            <Button component={Link} to="/login" variant="outlined" fullWidth sx={{ mt: 2 }}>Back to Sign In</Button>
+                        )}
+                    </Box>
+                )}
+            </Box>
+        </Box>
+    );
+};
+"""
+        with open(self.output_dir / "src" / "layout" / "ResetPasswordPage.js", 'w', encoding='utf-8') as f:
+            f.write(content)
 
     def _generate_data_provider(self):
         """Generate data provider configuration with Many-to-Many support."""
@@ -2007,7 +2478,7 @@ const {edit_comp_name} = () => {{
             disabled_prop = ""
             if visibility == "read_only":
                 disabled_prop = " disabled"
-            elif self.schema_loader.security_config.get("authentication_required"):
+            elif self.schema_loader.security_config["authentication_required"]:
                 disabled_prop = f" disabled={{!permissions?.['{concept['name']}.{field_name}']?.includes('write')}}"
             
             # Construct Input Component (Create/Edit)
