@@ -105,6 +105,10 @@ $$ LANGUAGE plpgsql;
         fk_constraints = self._generate_foreign_key_constraints()
         sql_parts.extend(fk_constraints)
 
+        # Generate document tables
+        document_tables = self._generate_document_tables()
+        sql_parts.extend(document_tables)
+
         # Generate presentation triggers
         presentation_triggers = self._generate_presentation_triggers()
         sql_parts.extend(presentation_triggers)
@@ -371,8 +375,253 @@ TO authenticated
 USING ({role_condition} AND "security_owner_id" = auth.uid()::text);
 """)
 
+        # RLS for document tables (based on _documents virtual field ACL)
+        for concept in self.concepts:
+            if not concept["documents"]["enabled"]:
+                continue
+
+            owner_name = concept["name"]
+            doc_table = f"{owner_name}_document"
+            policies.append(f'ALTER TABLE "{doc_table}" ENABLE ROW LEVEL SECURITY;')
+
+            concept_acl = _acl.get(owner_name)
+            if not concept_acl:
+                policies.append(f"""
+CREATE POLICY "allow_all_authenticated_{doc_table}" ON "{doc_table}"
+FOR ALL
+TO authenticated
+USING (true)
+WITH CHECK (true);
+""")
+                continue
+
+            # Use _documents field ACL, falling back to concept main ACL
+            docs_field_acl = concept_acl["_fields"].get("_documents", {})
+            main_acl = concept_acl["_main"]
+
+            fk_col = f"{owner_name}_id"
+            for role in all_role_names:
+                access = docs_field_acl.get(role) or main_acl.get(role, "none")
+                if access == "none":
+                    continue
+                role_condition = f"auth.jwt() -> 'app_metadata' -> 'roles' ? '{role}'"
+
+                if access == "owner_write":
+                    owner_condition = (
+                        f'EXISTS (SELECT 1 FROM "{owner_name}" '
+                        f'WHERE "{owner_name}"."id" = "{doc_table}"."{fk_col}" '
+                        f'AND "{owner_name}"."security_owner_id" = auth.uid()::text)'
+                    )
+                    full_using = f"{role_condition} AND {owner_condition}"
+                    policies.append(f"""
+CREATE POLICY "{role}_select_{doc_table}" ON "{doc_table}"
+FOR SELECT
+TO authenticated
+USING ({full_using});
+""")
+                    policies.append(f"""
+CREATE POLICY "{role}_insert_{doc_table}" ON "{doc_table}"
+FOR INSERT
+TO authenticated
+WITH CHECK ({full_using});
+""")
+                    policies.append(f"""
+CREATE POLICY "{role}_update_{doc_table}" ON "{doc_table}"
+FOR UPDATE
+TO authenticated
+USING ({full_using})
+WITH CHECK ({full_using});
+""")
+                    policies.append(f"""
+CREATE POLICY "{role}_delete_{doc_table}" ON "{doc_table}"
+FOR DELETE
+TO authenticated
+USING ({full_using});
+""")
+                elif access == "write":
+                    policies.append(f"""
+CREATE POLICY "{role}_select_{doc_table}" ON "{doc_table}"
+FOR SELECT
+TO authenticated
+USING ({role_condition});
+""")
+                    policies.append(f"""
+CREATE POLICY "{role}_insert_{doc_table}" ON "{doc_table}"
+FOR INSERT
+TO authenticated
+WITH CHECK ({role_condition});
+""")
+                    policies.append(f"""
+CREATE POLICY "{role}_update_{doc_table}" ON "{doc_table}"
+FOR UPDATE
+TO authenticated
+USING ({role_condition})
+WITH CHECK ({role_condition});
+""")
+                    policies.append(f"""
+CREATE POLICY "{role}_delete_{doc_table}" ON "{doc_table}"
+FOR DELETE
+TO authenticated
+USING ({role_condition});
+""")
+                elif access == "read":
+                    policies.append(f"""
+CREATE POLICY "{role}_read_{doc_table}" ON "{doc_table}"
+FOR SELECT
+TO authenticated
+USING ({role_condition});
+""")
+
         return policies
-    
+
+    def _generate_document_tables(self) -> List[str]:
+        """
+        Generate SQL for document tables for concepts that have documents enabled.
+        Also creates the Supabase Storage bucket for each concept's documents.
+        """
+        sql_parts = []
+        for concept in self.concepts:
+            docs = concept["documents"]
+            if not docs["enabled"]:
+                continue
+
+            owner_name = concept["name"]
+            table_name = f"{owner_name}_document"
+            fk_col = f"{owner_name}_id"
+            versioned = docs["versioned"]
+            tags = docs["tags"]
+            tags_sql = ", ".join(f"'{t}'" for t in tags)
+            bucket_name = f"{owner_name}-documents"
+
+            cols = [
+                f'  "id" SERIAL PRIMARY KEY,',
+                f'  "{fk_col}" INTEGER NOT NULL REFERENCES "{owner_name}"("id") ON DELETE CASCADE,',
+                f'  "tag" TEXT NOT NULL,',
+            ]
+            if versioned:
+                cols.append('  "version" INTEGER NOT NULL DEFAULT 1,')
+                cols.append('  "is_current" BOOLEAN NOT NULL DEFAULT TRUE,')
+            cols.append('  "storage_path" TEXT NOT NULL,')
+            cols.append('  "_created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,')
+            cols.append('  "_updated_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,')
+            cols.append(f'  CONSTRAINT "{table_name}_tag_check" CHECK ("tag" IN ({tags_sql})),')
+            if versioned:
+                cols.append(f'  UNIQUE ("{fk_col}", "tag", "version")')
+            else:
+                cols.append(f'  UNIQUE ("{fk_col}", "tag")')
+
+            create_sql = f'CREATE TABLE "{table_name}" (\n' + '\n'.join(cols) + '\n);'
+            sql_parts.append(create_sql)
+
+            # Trigger to update _updated_at
+            sql_parts.append(f"""CREATE TRIGGER "{table_name}_updated_at_trigger"
+  BEFORE UPDATE ON "{table_name}"
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();""")
+
+            # Trigger to manage is_current for versioned documents
+            if versioned:
+                sql_parts.append(f"""CREATE OR REPLACE FUNCTION "{table_name}_manage_current_func"()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW."is_current" = TRUE THEN
+    UPDATE "{table_name}"
+    SET "is_current" = FALSE
+    WHERE "{fk_col}" = NEW."{fk_col}"
+      AND "tag" = NEW."tag"
+      AND "id" != NEW."id";
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "{table_name}_manage_current_trigger"
+  AFTER INSERT OR UPDATE OF "is_current" ON "{table_name}"
+  FOR EACH ROW EXECUTE FUNCTION "{table_name}_manage_current_func"();""")
+
+            # Build per-role storage policies based on the concept's document ACL
+            _acl = self.schema_loader.security_config.get("_acl", {})
+            concept_acl = _acl.get(owner_name, {})
+            docs_field_acl = concept_acl.get("_fields", {}).get("_documents", {})
+            main_acl = concept_acl.get("_main", {})
+            all_roles = self.schema_loader.security_config.get("roles", [])
+
+            # JOIN condition used by owner_write roles for SELECT/DELETE
+            owner_read_join = (
+                f'EXISTS (SELECT 1 FROM "{table_name}" od '
+                f'JOIN "{owner_name}" o ON o.id = od."{fk_col}" '
+                f'WHERE od."storage_path" = objects.name '
+                f'AND o."security_owner_id" = auth.uid()::text)'
+            )
+            # JOIN condition used by owner_write roles for INSERT (path must start with an owned record ID)
+            owner_insert_join = (
+                f'EXISTS (SELECT 1 FROM "{owner_name}" o '
+                f'WHERE o.id::text = (storage.foldername(objects.name))[1] '
+                f'AND o."security_owner_id" = auth.uid()::text)'
+            )
+
+            bucket_clause = f"bucket_id = '{bucket_name}'"
+
+            storage_sql = [f"""-- Storage bucket for {owner_name} documents
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('{bucket_name}', '{bucket_name}', false)
+ON CONFLICT (id) DO NOTHING;"""]
+
+            for r in all_roles:
+                role = r["name"]
+                access = docs_field_acl.get(role) or main_acl.get(role, "none")
+                if access == "none":
+                    continue
+                role_cond = f"auth.jwt() -> 'app_metadata' -> 'roles' ? '{role}'"
+
+                # DROP existing per-role policies (idempotent re-runs)
+                for op in ("select", "insert", "update", "delete"):
+                    storage_sql.append(
+                        f'DROP POLICY IF EXISTS "{role}_{op}_{bucket_name}" ON storage.objects;'
+                    )
+
+                if access == "owner_write":
+                    storage_sql.append(f"""CREATE POLICY "{role}_select_{bucket_name}" ON storage.objects
+  FOR SELECT TO authenticated
+  USING ({bucket_clause} AND {role_cond} AND {owner_read_join});""")
+                    storage_sql.append(f"""CREATE POLICY "{role}_insert_{bucket_name}" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK ({bucket_clause} AND {role_cond} AND {owner_insert_join});""")
+                    storage_sql.append(f"""CREATE POLICY "{role}_update_{bucket_name}" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING ({bucket_clause} AND {role_cond} AND {owner_read_join})
+  WITH CHECK ({bucket_clause} AND {role_cond} AND {owner_insert_join});""")
+                    storage_sql.append(f"""CREATE POLICY "{role}_delete_{bucket_name}" ON storage.objects
+  FOR DELETE TO authenticated
+  USING ({bucket_clause} AND {role_cond} AND {owner_read_join});""")
+                elif access in ("write",):
+                    storage_sql.append(f"""CREATE POLICY "{role}_select_{bucket_name}" ON storage.objects
+  FOR SELECT TO authenticated
+  USING ({bucket_clause} AND {role_cond});""")
+                    storage_sql.append(f"""CREATE POLICY "{role}_insert_{bucket_name}" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK ({bucket_clause} AND {role_cond});""")
+                    storage_sql.append(f"""CREATE POLICY "{role}_update_{bucket_name}" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING ({bucket_clause} AND {role_cond})
+  WITH CHECK ({bucket_clause} AND {role_cond});""")
+                    storage_sql.append(f"""CREATE POLICY "{role}_delete_{bucket_name}" ON storage.objects
+  FOR DELETE TO authenticated
+  USING ({bucket_clause} AND {role_cond});""")
+                elif access == "read":
+                    storage_sql.append(f"""CREATE POLICY "{role}_select_{bucket_name}" ON storage.objects
+  FOR SELECT TO authenticated
+  USING ({bucket_clause} AND {role_cond});""")
+
+            # Also drop the old blanket policy names from previous schema versions
+            for old_op in ("read", "write", "update", "delete"):
+                storage_sql.append(
+                    f'DROP POLICY IF EXISTS "authenticated_{old_op}_{bucket_name}" ON storage.objects;'
+                )
+
+            sql_parts.append("\n".join(storage_sql))
+
+        return sql_parts
+
     def _generate_table_sql(self, concept: Dict[str, Any]) -> str:
         """
         Generate SQL for a single concept table.

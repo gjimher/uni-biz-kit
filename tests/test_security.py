@@ -363,3 +363,244 @@ def test_timestamps_cannot_be_forged_on_insert():
             pass
         finally:
             cur.execute("ROLLBACK;")
+
+
+@pytest.mark.integration
+def test_order_document_owner_isolation():
+    """Test that user2 cannot access user1's order document via DB table or Storage API.
+
+    Verifies two layers of protection:
+    1. DB RLS: the order_document table enforces ownership via JOIN on order.security_owner_id
+    2. Storage RLS: the storage bucket enforces ownership via the same JOIN
+    """
+    import requests as req
+
+    load_dotenv("test-app/backend/.env")
+    load_dotenv("test-app/frontend/.env")
+    db_url = os.getenv("DB_URL")
+    supabase_url = os.getenv("SUPABASE_URL")
+    anon_key = os.getenv("REACT_APP_SUPABASE_KEY")
+    if not db_url or not supabase_url or not anon_key:
+        pytest.skip("Missing DB_URL / SUPABASE_URL / REACT_APP_SUPABASE_KEY.")
+
+    # --- Sign in as user1 and user2 via Auth API to get real JWTs ---
+    def sign_in(email, password):
+        resp = req.post(
+            f"{supabase_url}/auth/v1/token?grant_type=password",
+            headers={"apikey": anon_key, "Content-Type": "application/json"},
+            json={"email": email, "password": password},
+            timeout=10,
+        )
+        assert resp.status_code == 200, f"Sign-in failed for {email}: {resp.text}"
+        return resp.json()["access_token"]
+
+    user1_token = sign_in("user1@test.com", "useruser")
+    user2_token = sign_in("user2@test.com", "useruser")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+
+    storage_path = None
+    order_id = None
+    bucket = "order-documents"
+    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, email FROM auth.users")
+        user_ids = {email: uid for uid, email in cur.fetchall()}
+        user1_id = user_ids.get("user1@test.com")
+        user2_id = user_ids.get("user2@test.com")
+        if not user1_id or not user2_id:
+            pytest.skip(f"Required users not found. Found: {user_ids}")
+
+        cur.execute("SELECT id FROM customer LIMIT 1;")
+        customer_id = cur.fetchone()[0]
+
+        user1_claims = f'{{"sub": "{user1_id}", "app_metadata": {{"roles": ["user"]}}}}'
+        user2_claims = f'{{"sub": "{user2_id}", "app_metadata": {{"roles": ["user"]}}}}'
+
+        try:
+            # --- Insert order and document as user1 (committed, so storage policy JOIN can see them) ---
+            cur.execute("SET ROLE authenticated;")
+            cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
+
+            cur.execute(f"""
+                INSERT INTO "order" (customer, order_date, total_amount, state, shipping_address, security_owner_id)
+                VALUES ({customer_id}, CURRENT_TIMESTAMP, 200.00, 'pending', 'User1 Address', '{user1_id}')
+                RETURNING id;
+            """)
+            order_id = cur.fetchone()[0]
+
+            # Upload file to Storage as user1
+            storage_path = f"{order_id}/invoice/test_isolation.txt"
+            upload_resp = req.post(
+                f"{supabase_url}/storage/v1/object/{bucket}/{storage_path}",
+                headers={"Authorization": f"Bearer {user1_token}", "apikey": anon_key},
+                data=b"user1 private invoice",
+                timeout=10,
+            )
+            assert upload_resp.status_code in (200, 201), \
+                f"user1 upload failed: {upload_resp.status_code} {upload_resp.text}"
+
+            # Insert the document DB record (committed so storage policy can JOIN on it)
+            cur.execute(f"""
+                INSERT INTO "order_document" (order_id, tag, storage_path)
+                VALUES ({order_id}, 'invoice', '{storage_path}')
+                RETURNING id;
+            """)
+            doc_id = cur.fetchone()[0]
+
+            # --- Layer 1: DB RLS ---
+            cur.execute(f'SELECT id FROM "order_document" WHERE id = {doc_id}')
+            assert cur.fetchone() is not None, "user1 should be able to read their own order_document row"
+
+            cur.execute(f"SELECT set_config('request.jwt.claims', '{user2_claims}', false);")
+            cur.execute(f'SELECT id FROM "order_document" WHERE id = {doc_id}')
+            assert cur.fetchone() is None, \
+                "user2 should NOT be able to read user1's order_document row (DB RLS violation)"
+
+            # --- Layer 2: Storage RLS ---
+            # user1 can download their own file
+            dl_user1 = req.get(
+                f"{supabase_url}/storage/v1/object/{bucket}/{storage_path}",
+                headers={"Authorization": f"Bearer {user1_token}", "apikey": anon_key},
+                timeout=10,
+            )
+            assert dl_user1.status_code == 200, \
+                f"user1 should be able to download their own file, got {dl_user1.status_code}: {dl_user1.text}"
+
+            # user2 cannot download user1's file
+            dl_user2 = req.get(
+                f"{supabase_url}/storage/v1/object/{bucket}/{storage_path}",
+                headers={"Authorization": f"Bearer {user2_token}", "apikey": anon_key},
+                timeout=10,
+            )
+            assert dl_user2.status_code in (400, 403, 404), \
+                f"user2 should NOT be able to download user1's file, got {dl_user2.status_code}: {dl_user2.text}"
+
+        finally:
+            # Reset role and clean up committed data
+            cur.execute("RESET ROLE;")
+            cur.execute("SELECT set_config('request.jwt.claims', '', false);")
+            if order_id:
+                cur.execute(f'DELETE FROM "order" WHERE id = {order_id};')
+            if storage_path and service_role_key:
+                req.delete(
+                    f"{supabase_url}/storage/v1/object/{bucket}",
+                    headers={
+                        "Authorization": f"Bearer {service_role_key}",
+                        "apikey": anon_key,
+                        "Content-Type": "application/json",
+                    },
+                    json={"prefixes": [storage_path]},
+                    timeout=10,
+                )
+
+
+@pytest.mark.integration
+def test_order_document_upload_authorization():
+    """Test storage upload authorization for order-documents bucket.
+
+    Verifies:
+    - user2 cannot upload to a non-existent order ID path
+    - user2 cannot upload to a path belonging to user1's order
+    - admin can upload to user1's order path (write access, no ownership restriction)
+    """
+    import requests as req
+
+    load_dotenv("test-app/backend/.env")
+    load_dotenv("test-app/frontend/.env")
+    db_url = os.getenv("DB_URL")
+    supabase_url = os.getenv("SUPABASE_URL")
+    anon_key = os.getenv("REACT_APP_SUPABASE_KEY")
+    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    if not db_url or not supabase_url or not anon_key:
+        pytest.skip("Missing DB_URL / SUPABASE_URL / REACT_APP_SUPABASE_KEY.")
+
+    def sign_in(email, password):
+        resp = req.post(
+            f"{supabase_url}/auth/v1/token?grant_type=password",
+            headers={"apikey": anon_key, "Content-Type": "application/json"},
+            json={"email": email, "password": password},
+            timeout=10,
+        )
+        assert resp.status_code == 200, f"Sign-in failed for {email}: {resp.text}"
+        return resp.json()["access_token"]
+
+    user2_token = sign_in("user2@test.com", "useruser")
+    admin_token = sign_in("admin@test.com", "adminadmin")
+
+    bucket = "order-documents"
+    uploaded_paths = []
+
+    def upload(token, path, content=b"test"):
+        return req.post(
+            f"{supabase_url}/storage/v1/object/{bucket}/{path}",
+            headers={"Authorization": f"Bearer {token}", "apikey": anon_key},
+            data=content,
+            timeout=10,
+        )
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    order_id = None
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, email FROM auth.users")
+        user_ids = {email: uid for uid, email in cur.fetchall()}
+        user1_id = user_ids.get("user1@test.com")
+        if not user1_id:
+            pytest.skip(f"user1 not found. Found: {user_ids}")
+
+        cur.execute("SELECT id FROM customer LIMIT 1;")
+        customer_id = cur.fetchone()[0]
+
+        try:
+            # Create an order owned by user1 (committed so storage policy can JOIN on it)
+            user1_claims = f'{{"sub": "{user1_id}", "app_metadata": {{"roles": ["user"]}}}}'
+            cur.execute("SET ROLE authenticated;")
+            cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
+            cur.execute(f"""
+                INSERT INTO "order" (customer, order_date, total_amount, state, shipping_address, security_owner_id)
+                VALUES ({customer_id}, CURRENT_TIMESTAMP, 50.00, 'pending', 'User1 Address', '{user1_id}')
+                RETURNING id;
+            """)
+            order_id = cur.fetchone()[0]
+            cur.execute("RESET ROLE;")
+            cur.execute("SELECT set_config('request.jwt.claims', '', false);")
+
+            nonexistent_id = 999999999
+
+            # user2 cannot upload to a non-existent order ID path
+            r = upload(user2_token, f"{nonexistent_id}/invoice/u2_fake.txt")
+            assert r.status_code not in (200, 201), \
+                f"user2 should NOT upload to non-existent order path, got {r.status_code}: {r.text}"
+
+            # user2 cannot upload to user1's order path
+            r = upload(user2_token, f"{order_id}/invoice/u2_steal.txt")
+            assert r.status_code not in (200, 201), \
+                f"user2 should NOT upload to user1's order path, got {r.status_code}: {r.text}"
+
+            # admin can upload to user1's order path
+            admin_path = f"{order_id}/invoice/admin_upload.txt"
+            r = upload(admin_token, admin_path)
+            assert r.status_code in (200, 201), \
+                f"admin should be able to upload to any order path, got {r.status_code}: {r.text}"
+            uploaded_paths.append(admin_path)
+
+        finally:
+            cur.execute("RESET ROLE;")
+            cur.execute("SELECT set_config('request.jwt.claims', '', false);")
+            if order_id:
+                cur.execute(f'DELETE FROM "order" WHERE id = {order_id};')
+            if uploaded_paths and service_role_key:
+                req.delete(
+                    f"{supabase_url}/storage/v1/object/{bucket}",
+                    headers={
+                        "Authorization": f"Bearer {service_role_key}",
+                        "apikey": anon_key,
+                        "Content-Type": "application/json",
+                    },
+                    json={"prefixes": uploaded_paths},
+                    timeout=10,
+                )

@@ -159,6 +159,16 @@ class SchemaProcessor:
         Returns:
             The extended schema dictionary.
         """
+        # 0. Apply documents defaults to all concepts so generators can use [] access.
+        # tags is intentionally NOT defaulted here: it is only present when explicitly
+        # configured, and generators always check ["enabled"] before accessing ["tags"].
+        for concept in self.concepts:
+            if "documents" not in concept:
+                concept["documents"] = {}
+            docs = concept["documents"]
+            docs.setdefault("enabled", False)
+            docs.setdefault("versioned", False)
+
         # 0. Enrich Workflow
         self._enrich_workflow()
 
@@ -434,7 +444,7 @@ class SchemaProcessor:
             for field in concept["fields"]:
                 field_name = field["name"]
                 field_rules = {}
-                
+
                 # Check each role for this field
                 for role_name in role_names:
                     # Specific field rule overrides concept rule
@@ -442,13 +452,25 @@ class SchemaProcessor:
                     if not access:
                         # Fallback to main rule
                         access = concept_acl["_main"].get(role_name)
-                        
+
                     if access:
                         field_rules[role_name] = access
-                
+
                 if field_rules:
                     concept_acl["_fields"][field_name] = field_rules
-            
+
+            # 3. Virtual _documents field (controls access to the concept's document table)
+            if concept["documents"]["enabled"]:
+                docs_field_rules = {}
+                for role_name in role_names:
+                    access = rules_map.get((concept_name, "_documents", role_name))
+                    if not access:
+                        access = concept_acl["_main"].get(role_name)
+                    if access:
+                        docs_field_rules[role_name] = access
+                if docs_field_rules:
+                    concept_acl["_fields"]["_documents"] = docs_field_rules
+
             if concept_acl["_main"] or concept_acl["_fields"]:
                 _acl[concept_name] = concept_acl
                 
@@ -504,7 +526,9 @@ class SchemaProcessor:
         # Insert _type and _part_of_field here
         new_concept["_type"] = c_type
         new_concept["_part_of_field"] = part_of_field
-        
+
+        # documents defaults were already applied in process() before this call
+
         # Insert remaining keys
         for k, v in concept.items():
             if k not in top_keys:

@@ -193,6 +193,15 @@ Examples:
         base_concept_items["required"].extend(keys_to_require)
         base_concept_items["required"] = list(set(base_concept_items["required"]))
              
+        # In the extended schema, documents.tags is not required: the enrichment process
+        # injects documents with enabled/versioned defaults on all concepts, even those
+        # that didn't originally configure documents (so tags may be absent for disabled docs).
+        docs_def = base_concept_props.get("documents")
+        if docs_def and "required" in docs_def:
+            docs_def["required"] = [r for r in docs_def["required"] if r != "tags"]
+            if not docs_def["required"]:
+                del docs_def["required"]
+
         # Update metadata
         base_schema["title"] = "Extended Business Application Schema"
         base_schema["description"] = "Dynamically generated extended schema."

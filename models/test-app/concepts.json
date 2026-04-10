@@ -11,6 +11,11 @@
       "id_presentation": {
         "fields": ["name"]
       },
+      "documents": {
+        "enabled": true,
+        "versioned": true,
+        "tags": ["img_s", "img_m", "datasheet"]
+      },
       "fields": [
         {
           "name": "name",
@@ -95,6 +100,10 @@
         "fields": ["parent.id_presentation", "name"],
         "separator": "/",
         "show": true
+      },
+      "documents": {
+        "enabled": true,
+        "tags": ["img_s", "img_m"]
       },
       "fields": [
         {
@@ -191,6 +200,10 @@
       "description": "Customer orders containing products",
       "id_presentation": {
         "fields": ["id"]
+      },
+      "documents": {
+        "enabled": true,
+        "tags": ["invoice", "receipt"]
       },
       "fields": [
         {

@@ -73,6 +73,30 @@
             },
             "required": ["fields"]
           },
+          "documents": {
+            "type": "object",
+            "description": "Document management configuration for this concept",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Whether document management is active for this concept",
+                "default": false
+              },
+              "versioned": {
+                "type": "boolean",
+                "description": "Whether documents support versioning",
+                "default": false
+              },
+              "tags": {
+                "type": "array",
+                "description": "Allowed document tag values (enum)",
+                "items": { "type": "string" },
+                "minItems": 1
+              }
+            },
+            "required": ["tags"],
+            "additionalProperties": false
+          },
           "fields": {
             "type": "array",
             "items": {
