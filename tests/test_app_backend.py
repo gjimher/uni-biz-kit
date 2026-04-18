@@ -267,7 +267,7 @@ class TestAppBackend:
                 for user in auth_users:
                     email = user["email"]
                     password = user["password"]
-                    print(f"  Creating user: {email}")
+                    print(f"  Creating user: {email} with password: {password}")
                     
                     # Supabase Admin API to create user
                     url = f"{api_url}/auth/v1/admin/users"

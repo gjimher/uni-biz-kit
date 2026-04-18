@@ -1,6 +1,7 @@
 import pytest
 from unibizkit.schema_processor import SchemaProcessor
 import os
+import json
 import psycopg2
 from dotenv import load_dotenv
 
@@ -527,8 +528,14 @@ def test_order_document_upload_authorization():
         assert resp.status_code == 200, f"Sign-in failed for {email}: {resp.text}"
         return resp.json()["access_token"]
 
-    user2_token = sign_in("user2@test.com", "useruser")
-    admin_token = sign_in("admin@test.com", "adminadmin")
+    # Read credentials from security_extended.json to be resilient
+    with open(os.path.abspath("test-app/security_extended.json")) as f:
+        security_config = json.load(f)
+        admin_data = next(u for u in security_config["users"] if "admin" in u["roles"])
+        user2_data = next(u for u in security_config["users"] if u["email"] == "user2@test.com")
+        
+    user2_token = sign_in(user2_data["email"], user2_data["password"])
+    admin_token = sign_in(admin_data["email"], admin_data["password"])
 
     bucket = "order-documents"
     uploaded_paths = []

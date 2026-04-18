@@ -41,18 +41,22 @@ class ReactAdminGenerator:
         
         # Create directory structure
         self._create_directory_structure()
-        
+
         # Generate main app files
         self._generate_package_json()
+        self._generate_vite_config()
+        self._generate_eslintrc()
+        self._generate_supabase_client_js()
         
         # Generate auth provider
         has_auth_provider = False
         if self.schema_loader.security_config["authentication_required"]:
              self._generate_auth_provider()
              self._generate_login_page()
-             self._generate_reset_password_page()
+             self._generate_set_password_page()
              self._generate_appbar_component()
              self._generate_user_profile_dialog()
+             self._generate_change_password_dialog()
              has_auth_provider = True
 
         # Generate Menu and Layout if configured
@@ -62,8 +66,6 @@ class ReactAdminGenerator:
 
         self._generate_index_js()
 
-        if has_auth_provider:
-            self._generate_auth_error_page()
 
         # Generate data provider
         self._generate_data_provider()
@@ -96,12 +98,14 @@ class ReactAdminGenerator:
         menu_js_content = f"""import * as React from 'react';
 import {{ Menu, useTranslate }} from 'react-admin';
 import {{ Collapse, List, ListItemButton, ListItemIcon, ListItemText }} from '@mui/material';
-import ExpandLess from '@mui/icons-material/ExpandLess';
-import ExpandMore from '@mui/icons-material/ExpandMore';
-import SubMenuIcon from '@mui/icons-material/ViewList';
-import SecurityIcon from '@mui/icons-material/Security';
-import UserIcon from '@mui/icons-material/People';
-import RoleIcon from '@mui/icons-material/VerifiedUser';
+import {{
+    ExpandLess,
+    ExpandMore,
+    ViewList as SubMenuIcon,
+    Security as SecurityIcon,
+    People as UserIcon,
+    VerifiedUser as RoleIcon
+}} from '@mui/icons-material';
 
 const menuItems = {menu_items_json};
 
@@ -178,7 +182,7 @@ export const MyMenu = () => {{
     );
 }};
 """
-        with open(self.output_dir / "src" / "layout" / "MyMenu.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "layout" / "MyMenu.jsx", 'w', encoding='utf-8') as f:
             f.write(menu_js_content)
         return True
 
@@ -199,7 +203,7 @@ import { MyMenu } from './MyMenu';
 
 export const MyLayout = (props) => <Layout {...props} menu={MyMenu} />;
 """
-        with open(self.output_dir / "src" / "layout" / "MyLayout.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "layout" / "MyLayout.jsx", 'w', encoding='utf-8') as f:
             f.write(layout_js_content)
 
     def _generate_appbar_component(self):
@@ -207,7 +211,7 @@ export const MyLayout = (props) => <Layout {...props} menu={MyMenu} />;
         appbar_js_content = """import * as React from 'react';
 import { AppBar, Logout, UserMenu, useGetIdentity, useUserMenu } from 'react-admin';
 import { MenuItem, ListItemIcon, ListItemText } from '@mui/material';
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import { AccountCircle as AccountCircleIcon } from '@mui/icons-material';
 import { UserProfileDialog } from './UserProfileDialog';
 
 const ProfileContext = React.createContext();
@@ -243,7 +247,7 @@ export const MyAppBar = () => {
     );
 };
 """
-        with open(self.output_dir / "src" / "layout" / "MyAppBar.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "layout" / "MyAppBar.jsx", 'w', encoding='utf-8') as f:
             f.write(appbar_js_content)
 
     def _generate_user_profile_dialog(self):
@@ -253,37 +257,161 @@ import {
     Dialog, DialogTitle, DialogContent, DialogActions,
     Button, Typography, Chip, Box
 } from '@mui/material';
+import { ChangePasswordDialog } from './ChangePasswordDialog';
 
 export const UserProfileDialog = ({ open, onClose, identity }) => {
+    const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
     if (!identity) return null;
     const roles = identity.roles || [];
     return (
-        <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-            <DialogTitle>User Profile</DialogTitle>
-            <DialogContent>
-                <Typography variant="body1" gutterBottom>
-                    <strong>Email:</strong> {identity.fullName}
-                </Typography>
-                <Typography variant="body1" component="div">
-                    <strong>Roles:</strong>
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
-                    {roles.length > 0
-                        ? roles.map((role) => (
-                            <Chip key={role} label={role} color="primary" variant="outlined" />
-                        ))
-                        : <Typography variant="body2" color="text.secondary">No roles assigned</Typography>
-                    }
-                </Box>
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={onClose}>Close</Button>
-            </DialogActions>
+        <>
+            <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+                <DialogTitle>User Profile</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body1" gutterBottom>
+                        <strong>Email:</strong> {identity.fullName}
+                    </Typography>
+                    <Typography variant="body1" component="div">
+                        <strong>Roles:</strong>
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
+                        {roles.length > 0
+                            ? roles.map((role) => (
+                                <Chip key={role} label={role} color="primary" variant="outlined" />
+                            ))
+                            : <Typography variant="body2" color="text.secondary">No roles assigned</Typography>
+                        }
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setChangePasswordOpen(true)}>Change Password</Button>
+                    <Button onClick={onClose}>Close</Button>
+                </DialogActions>
+            </Dialog>
+            <ChangePasswordDialog open={changePasswordOpen} onClose={() => setChangePasswordOpen(false)} />
+        </>
+    );
+};
+"""
+        with open(self.output_dir / "src" / "layout" / "UserProfileDialog.jsx", 'w', encoding='utf-8') as f:
+            f.write(dialog_js_content)
+
+    def _generate_change_password_dialog(self):
+        """Generate ChangePasswordDialog component for logged-in users to change their password."""
+        dialog_js_content = """import * as React from 'react';
+import { useNotify } from 'react-admin';
+import {
+    Dialog, DialogTitle, DialogContent, DialogActions,
+    Button, TextField, CircularProgress, Box
+} from '@mui/material';
+import { supabaseClient } from '../supabaseClient';
+
+export const ChangePasswordDialog = ({ open, onClose }) => {
+    const notify = useNotify();
+    const [currentPassword, setCurrentPassword] = React.useState('');
+    const [newPassword, setNewPassword] = React.useState('');
+    const [confirmPassword, setConfirmPassword] = React.useState('');
+    const [loading, setLoading] = React.useState(false);
+
+    const handleClose = () => {
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        onClose();
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!currentPassword) {
+            notify('Please enter your current password.', { type: 'warning' });
+            return;
+        }
+        if (!newPassword) {
+            notify('Please enter a new password.', { type: 'warning' });
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            notify('New passwords do not match.', { type: 'warning' });
+            return;
+        }
+        if (newPassword.length < 6) {
+            notify('New password must be at least 6 characters.', { type: 'warning' });
+            return;
+        }
+        setLoading(true);
+        const { data: { user }, error: getUserError } = await supabaseClient.auth.getUser();
+        if (getUserError || !user?.email) {
+            notify('Could not retrieve current user.', { type: 'error' });
+            setLoading(false);
+            return;
+        }
+        const { error: signInError } = await supabaseClient.auth.signInWithPassword({
+            email: user.email,
+            password: currentPassword,
+        });
+        if (signInError) {
+            notify('Current password is incorrect.', { type: 'error' });
+            setLoading(false);
+            return;
+        }
+        const { error: updateError } = await supabaseClient.auth.updateUser({ password: newPassword });
+        setLoading(false);
+        if (updateError) {
+            notify(updateError.message, { type: 'error' });
+        } else {
+            notify('Password updated successfully.', { type: 'success' });
+            handleClose();
+        }
+    };
+
+    return (
+        <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+            <DialogTitle>Change Password</DialogTitle>
+            <Box component="form" onSubmit={handleSubmit}>
+                <DialogContent>
+                    <TextField
+                        label="Current Password"
+                        type="password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        fullWidth
+                        margin="normal"
+                        autoComplete="current-password"
+                        disabled={loading}
+                    />
+                    <TextField
+                        label="New Password"
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        fullWidth
+                        margin="normal"
+                        autoComplete="new-password"
+                        disabled={loading}
+                    />
+                    <TextField
+                        label="Confirm New Password"
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        fullWidth
+                        margin="normal"
+                        autoComplete="new-password"
+                        disabled={loading}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleClose} disabled={loading}>Cancel</Button>
+                    <Button type="submit" variant="contained" disabled={loading}>
+                        {loading ? <CircularProgress size={20} /> : 'Update Password'}
+                    </Button>
+                </DialogActions>
+            </Box>
         </Dialog>
     );
 };
 """
-        with open(self.output_dir / "src" / "layout" / "UserProfileDialog.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "layout" / "ChangePasswordDialog.jsx", 'w', encoding='utf-8') as f:
             f.write(dialog_js_content)
 
     def _generate_app_js(self, has_custom_layout: bool = False, has_auth_provider: bool = False):
@@ -294,7 +422,7 @@ export const UserProfileDialog = ({ open, onClose, identity }) => {
         
         for concept in self.concepts:
             resource_name = concept["name"]
-            import_statements.append(f"import {{ {resource_name.upper()}_LIST, {resource_name.upper()}_CREATE, {resource_name.upper()}_EDIT, {resource_name.upper()}_SHOW }} from './resources/{resource_name}/{resource_name}.js';")
+            import_statements.append(f"import {{ {resource_name.upper()}_LIST, {resource_name.upper()}_CREATE, {resource_name.upper()}_EDIT, {resource_name.upper()}_SHOW }} from './resources/{resource_name}/{resource_name}.jsx';")
             resource_components.append(f"""          {{(permissions?.['{resource_name}']?.includes('read') || permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('read') || permissions?.['*']?.includes('write')) ? (
               <Resource name="{resource_name}"
                   list={{ {resource_name.upper()}_LIST }}
@@ -316,17 +444,29 @@ export const UserProfileDialog = ({ open, onClose, identity }) => {
         ra_extra_imports = "Admin, Resource"
         extra_imports = ""
         custom_routes_block = ""
+        i18n_provider_def = ""
+        i18n_prop = ""
         if has_auth_provider:
-             auth_import = "import { authProvider } from './authProvider';\nimport { MyLoginPage } from './layout/MyLoginPage';\nimport { AuthErrorPage } from './layout/AuthErrorPage';\nimport { ResetPasswordPage } from './layout/ResetPasswordPage';"
-             auth_prop = " authProvider={authProvider} loginPage={MyLoginPage}"
+             allow_registration = self.schema_loader.security_config["registration"]["allow"]
+             if allow_registration:
+                 login_import = "import { MyLoginPage } from './layout/MyLoginPage';"
+                 login_prop = "MyLoginPage"
+             else:
+                 login_import = ""
+                 login_prop = "LoginPage"
+             ra_supabase_imports = f"{login_prop + ', ' if login_prop == 'LoginPage' else ''}ForgotPasswordPage, defaultI18nProvider"
+             auth_import = f"import {{ authProvider }} from './authProvider';\n{login_import}\nimport {{ MySetPasswordPage }} from './layout/MySetPasswordPage';\nimport {{ {ra_supabase_imports} }} from 'ra-supabase';"
+             auth_prop = f" authProvider={{authProvider}} loginPage={{{login_prop}}}"
              require_auth = " requireAuth"
              ra_extra_imports = "Admin, Resource, CustomRoutes"
              extra_imports = "import { Route } from 'react-router-dom';"
              custom_routes_block = """    <CustomRoutes noLayout>
-        <Route path="/_auth_error" element={<AuthErrorPage />} />
-        <Route path="/_reset_password" element={<ResetPasswordPage />} />
+        <Route path="/set-password" element={<MySetPasswordPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
     </CustomRoutes>
 """
+             i18n_provider_def = "\nconst i18nProvider = defaultI18nProvider;"
+             i18n_prop = " i18nProvider={i18nProvider}"
 
         app_js_content = f"""import * as React from 'react';
 import {{ {ra_extra_imports} }} from 'react-admin';
@@ -335,9 +475,9 @@ import {{ dataProvider }} from './dataProvider';
 {auth_import}
 {extra_imports}
 {chr(10).join(import_statements)}
-
+{i18n_provider_def}
 const App = () => (
-  <Admin{require_auth} dataProvider={{dataProvider}}{layout_prop}{auth_prop} mutationMode="pessimistic">
+  <Admin dataProvider={{dataProvider}}{layout_prop}{auth_prop}{i18n_prop} mutationMode="pessimistic">
 {custom_routes_block}      {{permissions => (
           <>
 {chr(10).join(resource_components)}
@@ -348,7 +488,7 @@ const App = () => (
 
 export default App;"""
         
-        with open(self.output_dir / "src" / "App.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "App.jsx", 'w', encoding='utf-8') as f:
             f.write(app_js_content)
 
     def _generate_custom_components(self):
@@ -365,22 +505,21 @@ export const Title = ({ name }) => {
     );
 };
 """
-        with open(self.output_dir / "src" / "components" / "title.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "components" / "title.jsx", 'w', encoding='utf-8') as f:
             f.write(title_js_content)
 
         reorderable_datagrid_js = """import * as React from 'react';
-import { 
-    Datagrid, 
-    DatagridBody, 
-    RecordContextProvider, 
-    useListContext, 
-    useListSortContext,
-    useUpdate, 
-    useNotify, 
-    useRefresh 
+import {
+    Datagrid,
+    DatagridBody,
+    RecordContextProvider,
+    useListContext,
+    useUpdate,
+    useNotify,
+    useRefresh
 } from 'react-admin';
 import { TableRow, TableCell } from '@mui/material';
-import DragHandleIcon from '@mui/icons-material/Reorder';
+import { Reorder as DragHandleIcon } from '@mui/icons-material';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 const DragHandle = ({ disabled }) => (
@@ -425,8 +564,8 @@ const ReorderableDatagridRow = ({ record, id, index, isReorderable, children, ..
 );
 
 const ReorderableDatagridBody = ({ children, localData, isReorderable, ...rest }) => {
-    const { isLoading } = useListContext();
-    if (isLoading || !localData) return null;
+    const { isPending } = useListContext();
+    if (isPending || !localData) return null;
 
     return (
         <Droppable droppableId="datagrid-body" isDropDisabled={!isReorderable}>
@@ -451,8 +590,7 @@ const ReorderableDatagridBody = ({ children, localData, isReorderable, ...rest }
 };
 
 export const ReorderableDatagrid = ({ children, ...props }) => {
-    const { data, resource, refetch, isLoading, sort } = useListContext();
-    const { setSort } = useListSortContext();
+    const { data, resource, refetch, isPending, sort, setSort } = useListContext();
     const [localData, setLocalData] = React.useState(data);
     const [update] = useUpdate();
     const notify = useNotify();
@@ -483,7 +621,7 @@ export const ReorderableDatagrid = ({ children, ...props }) => {
         }
     }, [data, isReorderable]);
 
-    if (isLoading || !localData) return null;
+    if (isPending || !localData) return null;
 
     const onDragEnd = async (result) => {
         if (!result.destination) return;
@@ -542,7 +680,7 @@ export const ReorderableDatagrid = ({ children, ...props }) => {
     );
 };
 """
-        with open(self.output_dir / "src" / "components" / "reorderable_datagrid.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "components" / "reorderable_datagrid.jsx", 'w', encoding='utf-8') as f:
             f.write(reorderable_datagrid_js)
 
         recursive_parent_selector_js = """import * as React from 'react';
@@ -618,7 +756,7 @@ export const RecursiveParentSelector = ({ source, reference, label, separator, d
     );
 };
 """
-        with open(self.output_dir / "src" / "components" / "recursive_parent_selector.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "components" / "recursive_parent_selector.jsx", 'w', encoding='utf-8') as f:
             f.write(recursive_parent_selector_js)
 
         custom_edit_toolbar_js = """import * as React from 'react';
@@ -637,7 +775,7 @@ export const CustomEditToolbar = ({ resource, workflowCanEdit = true, ...props }
     );
 };
 """
-        with open(self.output_dir / "src" / "components" / "custom_edit_toolbar.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "components" / "custom_edit_toolbar.jsx", 'w', encoding='utf-8') as f:
             f.write(custom_edit_toolbar_js)
 
         # Generate DocumentTab component if any concept has documents enabled
@@ -655,11 +793,13 @@ import {
   Box, Button, Chip, CircularProgress, Collapse, IconButton,
   Table, TableBody, TableCell, TableHead, TableRow, Typography
 } from '@mui/material';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
-import DeleteIcon from '@mui/icons-material/Delete';
-import HistoryIcon from '@mui/icons-material/History';
-import RestoreIcon from '@mui/icons-material/Restore';
+import {
+  CloudUpload as CloudUploadIcon,
+  CloudDownload as CloudDownloadIcon,
+  Delete as DeleteIcon,
+  History as HistoryIcon,
+  Restore as RestoreIcon
+} from '@mui/icons-material';
 
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
@@ -954,7 +1094,7 @@ export const DocumentTab = ({ conceptName, tags, versioned }) => {
   );
 };
 """
-        with open(self.output_dir / "src" / "components" / "document_tab.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "components" / "document_tab.jsx", 'w', encoding='utf-8') as f:
             f.write(content)
 
     def _generate_workflow_selector(self):
@@ -1085,7 +1225,7 @@ export const WorkflowSelector = ({ workflow, resource, canEdit }) => {
             )}
 
             <Dialog open={!!pendingState} onClose={handleCancel} maxWidth="sm" fullWidth>
-                <DialogTitle>Change state to "{pendingState}"?</DialogTitle>
+                <DialogTitle>{`Change state to "${pendingState}"?`}</DialogTitle>
                 <DialogContent>
                     <TextField
                         autoFocus
@@ -1107,7 +1247,7 @@ export const WorkflowSelector = ({ workflow, resource, canEdit }) => {
     );
 };
 """
-        with open(self.output_dir / "src" / "components" / "workflow_selector.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "components" / "workflow_selector.jsx", 'w', encoding='utf-8') as f:
             f.write(workflow_selector_js)
 
     def _create_directory_structure(self):
@@ -1130,10 +1270,7 @@ export const WorkflowSelector = ({ workflow, resource, canEdit }) => {
         (src_dir / "utils").mkdir(exist_ok=True)
         (src_dir / "layout").mkdir(exist_ok=True)
         
-        # Create public directory
-        (self.output_dir / "public").mkdir(exist_ok=True)
-        
-        # Generate index.html in public directory
+        # Generate index.html in project root (Vite entry point)
         self._generate_index_html()
     
     def _generate_package_json(self):
@@ -1142,50 +1279,29 @@ export const WorkflowSelector = ({ workflow, resource, canEdit }) => {
   "name": "unibizkit-react-admin",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "dependencies": {
-    "@mui/material": "^5.15.0",
-    "@mui/icons-material": "^5.15.0",
-    "@mui/x-date-pickers": "^6.19.0",
+    "@mui/material": "^5.16.12",
+    "@mui/icons-material": "^5.16.12",
     "@supabase/supabase-js": "^2.89.0",
-    "react": "^18.2.0",
-    "react-admin": "^4.16.0",
-    "react-dom": "^18.2.0",
-    "react-scripts": "5.0.1",
+    "react": "18.2.0",
+    "react-admin": "^5.14.0",
+    "react-dom": "18.2.0",
     "ra-supabase": "^3.5.2",
     "@hello-pangea/dnd": "^16.5.0"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "lint": "eslint src/ --max-warnings 0",
-    "lint:fix": "eslint src/ --fix"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ],
-    "rules": {
-      "no-unused-vars": "off"
-    }
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src/ --ext .js,.jsx --max-warnings 0",
+    "lint:fix": "eslint src/ --ext .js,.jsx --fix"
   },
   "devDependencies": {
+    "vite": "^5.4.0",
+    "@vitejs/plugin-react": "^4.3.0",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.1"
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
   }
 }"""
         
@@ -1198,17 +1314,22 @@ export const WorkflowSelector = ({ workflow, resource, canEdit }) => {
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-// Supabase appends hash fragments to redirect_to on auth events.
-// React-Admin uses HashRouter, so these become unknown routes and render a blank page.
-// Intercept here and redirect to the appropriate route before React mounts.
+// Handle Supabase auth callback before React mounts.
+// Supabase emails link to the root URL with auth tokens in the hash.
+// The root URL always serves index.html (unlike /set-password which may not).
+// Here we convert the hash params into the correct SPA path using replaceState
+// (no server request, no page reload — browser already has index.html loaded).
+// Supabase's _initialize() already read the hash synchronously before this
+// runs, so it still processes the tokens and fires PASSWORD_RECOVERY if valid.
 const _hash = window.location.hash.substring(1);
-if (_hash && !_hash.startsWith('/')) {
-    const _p = new URLSearchParams(_hash);
-    if (_p.get('error')) {
-        const _msg = _p.get('error_description') || _p.get('error_code') || _p.get('error');
-        window.location.replace('/#/_auth_error?' + new URLSearchParams({ message: _msg }).toString());
+if (_hash) {
+    const _hashParams = new URLSearchParams(_hash);
+    const _accessToken = _hashParams.get('access_token');
+    const _refreshToken = _hashParams.get('refresh_token');
+    const _type = _hashParams.get('type');
+    if (_type === 'recovery' && _accessToken && _refreshToken) {
+        window.history.replaceState({}, '', '/#/set-password?access_token=' + encodeURIComponent(_accessToken) + '&refresh_token=' + encodeURIComponent(_refreshToken));
     }
-    // Recovery is handled via onAuthStateChange in authProvider.js
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -1217,12 +1338,72 @@ root.render(
     <App />
   </React.StrictMode>
 );"""
-        
-        with open(self.output_dir / "src" / "index.js", 'w', encoding='utf-8') as f:
+
+        with open(self.output_dir / "src" / "index.jsx", 'w', encoding='utf-8') as f:
             f.write(index_js_content)
-    
+
+    def _generate_vite_config(self):
+        """Generate vite.config.js for Vite bundler."""
+        content = """import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'REACT_APP_');
+  const processEnv = Object.fromEntries(
+    Object.entries(env).map(([k, v]) => [`process.env.${k}`, JSON.stringify(v)])
+  );
+  return {
+    plugins: [react()],
+    define: processEnv,
+    resolve: {
+      alias: [
+        {
+          find: /^@mui\\/icons-material\\/(.+)/,
+          replacement: '@mui/icons-material/esm/$1',
+        },
+        {
+          find: '@mui/icons-material',
+          replacement: '@mui/icons-material/esm',
+        },
+      ],
+    },
+    server: {
+      port: parseInt(process.env.PORT) || 3000,
+      open: false,
+    },
+  };
+});
+"""
+        with open(self.output_dir / "vite.config.js", 'w', encoding='utf-8') as f:
+            f.write(content)
+
+    def _generate_eslintrc(self):
+        """Generate .eslintrc.json for ESLint configuration."""
+        import json
+        config = {
+            "env": {"browser": True, "es2020": True},
+            "extends": ["eslint:recommended", "plugin:react/recommended"],
+            "plugins": ["react"],
+            "settings": {"react": {"version": "detect"}},
+            "parserOptions": {
+                "ecmaVersion": 2020,
+                "sourceType": "module",
+                "ecmaFeatures": {"jsx": True}
+            },
+            "rules": {
+                "no-unused-vars": "off",
+                "react/prop-types": "off",
+                "react/react-in-jsx-scope": "off",
+                "react/display-name": "off",
+                "react/jsx-key": "off",
+                "no-undef": "off"
+            }
+        }
+        with open(self.output_dir / ".eslintrc.json", 'w', encoding='utf-8') as f:
+            f.write(json.dumps(config, indent=2))
+
     def _generate_index_html(self):
-        """Generate index.html file in public directory."""
+        """Generate index.html file in project root (Vite entry point)."""
         locale = self.presentation_config["locale"]
         index_html_content = f"""<!DOCTYPE html>
 <html lang="{locale}">
@@ -1233,131 +1414,85 @@ root.render(
     <title>UniBizKit React-Admin</title>
   </head>
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    <script type="module" src="/src/index.jsx"></script>
   </body>
 </html>"""
-        
-        with open(self.output_dir / "public" / "index.html", 'w', encoding='utf-8') as f:
+
+        with open(self.output_dir / "index.html", 'w', encoding='utf-8') as f:
             f.write(index_html_content)
     
 
-    def _generate_auth_provider(self):
-        """Generate auth provider using explicit Supabase implementation."""
-        import json
-        rules_json = json.dumps(self.schema_loader.security_config["_acl"], indent=4)
-        auth_provider_content = f"""import {{ createClient }} from '@supabase/supabase-js';
+    def _generate_supabase_client_js(self):
+        """Generate shared Supabase client singleton used across all modules."""
+        content = """import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
-const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
-// Listen for auth events to handle recovery and other flows
-supabaseClient.auth.onAuthStateChange((event) => {{
-    if (event === 'PASSWORD_RECOVERY') {{
-        window.location.hash = '/_reset_password';
-    }}
-}});
+export const supabaseClient = createClient(supabaseUrl, supabaseKey, {
+    auth: { detectSessionInUrl: false },
+});
+"""
+        with open(self.output_dir / "src" / "supabaseClient.js", 'w', encoding='utf-8') as f:
+            f.write(content)
+
+    def _generate_auth_provider(self):
+        """Generate auth provider using ra-supabase's supabaseAuthProvider as the base."""
+        import json
+        rules_json = json.dumps(self.schema_loader.security_config["_acl"], indent=4)
+        auth_provider_content = f"""import {{ supabaseAuthProvider }} from 'ra-supabase';
+import {{ supabaseClient }} from './supabaseClient';
 
 const RULES = {rules_json};
 
-export const authProvider = {{
-    login: async ({{ username, password }}) => {{
-        // Supabase expects email, so we assume username is email or map it
-        // Check if username looks like an email
-        let email = username;
-        if (!email.includes('@')) {{
-            // Fallback for demo users (e.g. admin -> admin@test.com)
-            email = `${{username}}@test.com`;
-        }}
-
-        const {{ data, error }} = await supabaseClient.auth.signInWithPassword({{
-            email,
-            password
-        }});
-
-        if (error) {{
-            if (error.message && error.message.toLowerCase().includes('email not confirmed')) {{
-                throw new Error('Your email address has not been confirmed. Please check your inbox and click the confirmation link.');
-            }}
-            throw new Error(error.message);
-        }}
-
-        return data;
-    }},
-    logout: async () => {{
-        await supabaseClient.auth.signOut();
-        return Promise.resolve();
-    }},
-    checkError: async (error) => {{
-        // If the error is 401 or 403, it's likely a permission/RLS issue from Supabase.
-        // We do NOT want to log the user out (which happens if we return Promise.reject()),
-        // we just want React-Admin to show a notification error.
-        if (error.status === 401 || error.status === 403) {{
-             return Promise.resolve();
-        }}
-        return Promise.resolve();
-    }},
-    checkAuth: async () => {{
-        const {{ data: {{ session }} }} = await supabaseClient.auth.getSession();
-        if (!session) {{
-            return Promise.reject();
-        }}
-        return Promise.resolve();
-    }},
-    getPermissions: async () => {{
-        const {{ data: {{ session }} }} = await supabaseClient.auth.getSession();
-        if (!session) return Promise.resolve({{}});
-        
-        const roles = session.user?.app_metadata?.roles || [];
-        const permissions = {{}};
-        
-        // RULES structure: concept -> {{ _main: {{ role: access }}, _fields: {{ field: {{ role: access }} }} }}
-        for (const [concept, acl] of Object.entries(RULES)) {{
-            const mainRules = acl._main || {{}};
-            const fieldRules = acl._fields || {{}};
-            
-            for (const role of roles) {{
-                // Concept level access
-                const mainAccess = mainRules[role];
-                if (mainAccess) {{
-                    if (!permissions[concept]) permissions[concept] = [];
-                    if (!permissions[concept].includes(mainAccess)) {{
-                        permissions[concept].push(mainAccess);
-                    }}
-                    if (mainAccess === 'owner_write' && !permissions[concept].includes('write')) {{
-                        permissions[concept].push('write');
-                    }}
-                }}
-                
-                // Field level access
-                for (const [field, fRules] of Object.entries(fieldRules)) {{
-                    const fieldAccess = fRules[role] || mainAccess; // Fallback to main if not explicitly set (though backend should pre-fill it)
-                    if (fieldAccess) {{
-                        const fieldKey = `${{concept}}.${{field}}`;
-                        if (!permissions[fieldKey]) permissions[fieldKey] = [];
-                        if (!permissions[fieldKey].includes(fieldAccess)) {{
-                            permissions[fieldKey].push(fieldAccess);
-                        }}
-                        if (fieldAccess === 'owner_write' && !permissions[fieldKey].includes('write')) {{
-                            permissions[fieldKey].push('write');
-                        }}
-                    }}
-                }}
-            }}
-        }}
-        return Promise.resolve(permissions);
-    }},
-    getIdentity: async () => {{
-        const {{ data: {{ user }} }} = await supabaseClient.auth.getUser();
-        if (!user) return Promise.reject();
-        return Promise.resolve({{ 
-            id: user.id, 
+export const authProvider = supabaseAuthProvider(supabaseClient, {{
+        getIdentity: async (user) => ({{
+            id: user.id,
             fullName: user.email,
             roles: user.app_metadata?.roles || []
-        }});
-    }}
-}};
+        }}),
+        getPermissions: async (user) => {{
+            const roles = user.app_metadata?.roles || [];
+            const permissions = {{}};
+
+            // RULES structure: concept -> {{ _main: {{ role: access }}, _fields: {{ field: {{ role: access }} }} }}
+            for (const [concept, acl] of Object.entries(RULES)) {{
+                const mainRules = acl._main || {{}};
+                const fieldRules = acl._fields || {{}};
+
+                for (const role of roles) {{
+                    // Concept level access
+                    const mainAccess = mainRules[role];
+                    if (mainAccess) {{
+                        if (!permissions[concept]) permissions[concept] = [];
+                        if (!permissions[concept].includes(mainAccess)) {{
+                            permissions[concept].push(mainAccess);
+                        }}
+                        if (mainAccess === 'owner_write' && !permissions[concept].includes('write')) {{
+                            permissions[concept].push('write');
+                        }}
+                    }}
+
+                    // Field level access
+                    for (const [field, fRules] of Object.entries(fieldRules)) {{
+                        const fieldAccess = fRules[role] || mainAccess;
+                        if (fieldAccess) {{
+                            const fieldKey = `${{concept}}.${{field}}`;
+                            if (!permissions[fieldKey]) permissions[fieldKey] = [];
+                            if (!permissions[fieldKey].includes(fieldAccess)) {{
+                                permissions[fieldKey].push(fieldAccess);
+                            }}
+                            if (fieldAccess === 'owner_write' && !permissions[fieldKey].includes('write')) {{
+                                permissions[fieldKey].push('write');
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+            return permissions;
+        }},
+    }});
 """
         with open(self.output_dir / "src" / "authProvider.js", 'w', encoding='utf-8') as f:
             f.write(auth_provider_content)
@@ -1369,111 +1504,14 @@ export const authProvider = {{
         base_url = self.system_config.get("base_url", "http://localhost:3000")
 
         if not allow_registration:
-            login_page_content = f"""import * as React from 'react';
-import {{ useState }} from 'react';
-import {{ Login, LoginForm, TextInput }} from 'react-admin';
-import {{ createClient }} from '@supabase/supabase-js';
-import {{ Box, Button, TextField, CircularProgress, Alert }} from '@mui/material';
-
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
-const supabaseClient = createClient(supabaseUrl, supabaseKey);
-
-const BASE_URL = '{base_url}';
-
-const ForgotPasswordForm = ({{ onBack }}) => {{
-    const [email, setEmail] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [sent, setSent] = useState(false);
-    const [error, setError] = useState('');
-
-    const handleSubmit = async (e) => {{
-        e.preventDefault();
-        setError('');
-        if (!email) {{ setError('Email is required'); return; }}
-        setLoading(true);
-        try {{
-            const {{ error: resetError }} = await supabaseClient.auth.resetPasswordForEmail(email, {{
-                redirectTo: BASE_URL,
-            }});
-            if (resetError) setError(resetError.message);
-            else setSent(true);
-        }} catch (err) {{
-            setError(err.message);
-        }} finally {{
-            setLoading(false);
-        }}
-    }};
-
-    if (sent) {{
-        return (
-            <Box sx={{{{ padding: 2 }}}}>
-                <Alert severity="success">Check your email for a link to reset your password.</Alert>
-                <Button fullWidth sx={{{{ mt: 2 }}}} onClick={{onBack}}>Back to Sign In</Button>
-            </Box>
-        );
-    }}
-
-    return (
-        <Box component="form" onSubmit={{handleSubmit}} sx={{{{ padding: 2 }}}}>
-            {{error && <Alert severity="error" sx={{{{ mb: 2 }}}}>{{error}}</Alert>}}
-            <TextField
-                label="Email"
-                type="email"
-                value={{email}}
-                onChange={{e => setEmail(e.target.value)}}
-                fullWidth
-                margin="normal"
-                required
-                autoFocus
-            />
-            <Button type="submit" variant="contained" fullWidth disabled={{loading}} sx={{{{ mt: 2 }}}}>
-                {{loading ? <CircularProgress size={{24}} /> : 'Send Reset Link'}}
-            </Button>
-            <Button fullWidth sx={{{{ mt: 1 }}}} onClick={{onBack}}>Back to Sign In</Button>
-        </Box>
-    );
-}};
-
-const MyLoginForm = props => (
-    <LoginForm {{...props}}>
-        <TextInput
-            source="username"
-            label="Email"
-            autoFocus
-        />
-    </LoginForm>
-);
-
-const LoginOrReset = (props) => {{
-    const [showForgot, setShowForgot] = useState(false);
-    if (showForgot) return <ForgotPasswordForm onBack={{() => setShowForgot(false)}} />;
-    return (
-        <Box>
-            <MyLoginForm {{...props}} />
-            <Box sx={{{{ textAlign: 'center', pb: 2 }}}}>
-                <Button size="small" onClick={{() => setShowForgot(true)}}>Forgot your password?</Button>
-            </Box>
-        </Box>
-    );
-}};
-
-export const MyLoginPage = props => (
-    <Login {{...props}}>
-        <LoginOrReset />
-    </Login>
-);
-"""
+            return
         else:
             login_page_content = f"""import * as React from 'react';
 import {{ useState }} from 'react';
-import {{ Login, LoginForm, TextInput, useNotify }} from 'react-admin';
-import {{ createClient }} from '@supabase/supabase-js';
+import {{ useNotify }} from 'react-admin';
+import {{ LoginPage, LoginForm }} from 'ra-supabase';
+import {{ supabaseClient }} from '../supabaseClient';
 import {{ Box, Tab, Tabs, Button, TextField, CircularProgress, Alert }} from '@mui/material';
-
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
-const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
 const BASE_URL = '{base_url}';
 
@@ -1584,77 +1622,8 @@ const RegisterForm = () => {{
     );
 }};
 
-const ForgotPasswordForm = ({{ onBack }}) => {{
-    const [email, setEmail] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [sent, setSent] = useState(false);
-    const [error, setError] = useState('');
-
-    const handleSubmit = async (e) => {{
-        e.preventDefault();
-        setError('');
-        if (!email) {{ setError('Email is required'); return; }}
-        setLoading(true);
-        try {{
-            const {{ error: resetError }} = await supabaseClient.auth.resetPasswordForEmail(email, {{
-                redirectTo: BASE_URL,
-            }});
-            if (resetError) setError(resetError.message);
-            else setSent(true);
-        }} catch (err) {{
-            setError(err.message);
-        }} finally {{
-            setLoading(false);
-        }}
-    }};
-
-    if (sent) {{
-        return (
-            <Box sx={{{{ padding: 2 }}}}>
-                <Alert severity="success">Check your email for a link to reset your password.</Alert>
-                <Button fullWidth sx={{{{ mt: 2 }}}} onClick={{onBack}}>Back to Sign In</Button>
-            </Box>
-        );
-    }}
-
-    return (
-        <Box component="form" onSubmit={{handleSubmit}} sx={{{{ padding: 2 }}}}>
-            {{error && <Alert severity="error" sx={{{{ mb: 2 }}}}>{{error}}</Alert>}}
-            <TextField
-                label="Email"
-                type="email"
-                value={{email}}
-                onChange={{e => setEmail(e.target.value)}}
-                fullWidth
-                margin="normal"
-                required
-                autoFocus
-            />
-            <Button type="submit" variant="contained" fullWidth disabled={{loading}} sx={{{{ mt: 2 }}}}>
-                {{loading ? <CircularProgress size={{24}} /> : 'Send Reset Link'}}
-            </Button>
-            <Button fullWidth sx={{{{ mt: 1 }}}} onClick={{onBack}}>Back to Sign In</Button>
-        </Box>
-    );
-}};
-
-const MyLoginForm = props => (
-    <LoginForm {{...props}}>
-        <TextInput
-            source="username"
-            label="Email"
-            autoFocus
-        />
-    </LoginForm>
-);
-
 const LoginWithTabs = (props) => {{
     const [tab, setTab] = useState(0);
-    const [showForgot, setShowForgot] = useState(false);
-
-    if (showForgot) {{
-        return <ForgotPasswordForm onBack={{() => setShowForgot(false)}} />;
-    }}
 
     return (
         <Box>
@@ -1662,160 +1631,69 @@ const LoginWithTabs = (props) => {{
                 <Tab label="Sign In" />
                 <Tab label="Register" />
             </Tabs>
-            {{tab === 0 && (
-                <Box>
-                    <MyLoginForm {{...props}} />
-                    <Box sx={{{{ textAlign: 'center', pb: 2 }}}}>
-                        <Button size="small" onClick={{() => setShowForgot(true)}}>Forgot your password?</Button>
-                    </Box>
-                </Box>
-            )}}
+            {{tab === 0 && <LoginForm {{...props}} />}}
             {{tab === 1 && <RegisterForm />}}
         </Box>
     );
 }};
 
 export const MyLoginPage = props => (
-    <Login {{...props}}>
+    <LoginPage {{...props}}>
         <LoginWithTabs />
-    </Login>
+    </LoginPage>
 );
 """
-        with open(self.output_dir / "src" / "layout" / "MyLoginPage.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "layout" / "MyLoginPage.jsx", 'w', encoding='utf-8') as f:
             f.write(login_page_content)
 
-    def _generate_auth_error_page(self):
-        """Generate AuthErrorPage component shown when Supabase auth redirects fail."""
+    def _generate_set_password_page(self):
+        """Generate a minimal SetPasswordPage that uses a hard reload on success.
+
+        A SPA navigation (redirect('/')) leaves the recovery token in the Supabase
+        client's in-memory session. PostgREST rejects subsequent API calls with that
+        stale token. A hard reload forces the client to re-initialise from storage,
+        picking up the fresh session issued after updateUser().
+        """
         content = """import * as React from 'react';
-import { useLocation, Link } from 'react-router-dom';
-import { Box, Alert, Button, Typography } from '@mui/material';
+import { SetPasswordPage, useSetPassword, useSupabaseAccessToken } from 'ra-supabase';
+import { Form, required } from 'react-admin';
+import { PasswordInput, SaveButton } from 'react-admin';
 
-export const AuthErrorPage = () => {
-    const location = useLocation();
-    const params = new URLSearchParams(location.search);
-    const message = params.get('message') || 'An authentication error occurred.';
+const MySetPasswordForm = () => {
+    const access_token = useSupabaseAccessToken();
+    const refresh_token = useSupabaseAccessToken({ parameterName: 'refresh_token' });
 
-    return (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', bgcolor: '#f5f5f5' }}>
-            <Box sx={{ maxWidth: 480, width: '100%', p: 4 }}>
-                <Alert severity="error" sx={{ mb: 3 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 0.5 }}>Authentication Error</Typography>
-                    {message}
-                </Alert>
-                <Button component={Link} to="/login" variant="contained" fullWidth>
-                    Back to Login
-                </Button>
-            </Box>
-        </Box>
-    );
-};
-"""
-        with open(self.output_dir / "src" / "layout" / "AuthErrorPage.js", 'w', encoding='utf-8') as f:
-            f.write(content)
+    const [, { mutateAsync: setPassword }] = useSetPassword({
+        // Hard reload so the Supabase client re-initialises its session from
+        // storage — a SPA navigation leaves the recovery token in memory and
+        // PostgREST rejects subsequent API calls with that stale token.
+        onSuccess: () => window.location.replace('/'),
+    });
 
-    def _generate_reset_password_page(self):
-        """Generate ResetPasswordPage component for handling password reset from email link."""
-        content = """import * as React from 'react';
-import { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { Box, TextField, Button, Alert, CircularProgress, Typography } from '@mui/material';
-import { Link } from 'react-router-dom';
-
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
-const supabaseClient = createClient(supabaseUrl, supabaseKey);
-
-export const ResetPasswordPage = () => {
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [done, setDone] = useState(false);
-    const [sessionReady, setSessionReady] = useState(false);
-
-    useEffect(() => {
-        // When the user lands on this page via a password reset email, the Supabase
-        // client has already processed the recovery token from the URL hash (it runs
-        // at module load time via authProvider.js) and stored the session in localStorage.
-        // We just need to confirm there is a valid session to show the form.
-        supabaseClient.auth.getSession().then(({ data: { session } }) => {
-            if (session) {
-                setSessionReady(true);
-            } else {
-                setError('No reset token found. Please request a new password reset link.');
-            }
-        });
-    }, []);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        if (password !== confirmPassword) { setError('Passwords do not match'); return; }
-        if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
-        setLoading(true);
-        try {
-            const { error: updateError } = await supabaseClient.auth.updateUser({ password });
-            if (updateError) setError(updateError.message);
-            else setDone(true);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
+    const validate = (values) => {
+        if (values.password !== values.confirmPassword) {
+            return { password: 'Passwords do not match', confirmPassword: 'Passwords do not match' };
         }
     };
 
+    const submit = (values) => setPassword({ access_token, refresh_token, password: values.password });
+
     return (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', bgcolor: '#f5f5f5' }}>
-            <Box sx={{ maxWidth: 400, width: '100%', p: 4, bgcolor: 'white', borderRadius: 2, boxShadow: 2 }}>
-                <Typography variant="h5" sx={{ mb: 3, textAlign: 'center' }}>Reset Password</Typography>
-                {done ? (
-                    <Box>
-                        <Alert severity="success" sx={{ mb: 2 }}>Your password has been updated successfully.</Alert>
-                        <Button component={Link} to="/login" variant="contained" fullWidth>Sign In</Button>
-                    </Box>
-                ) : (
-                    <Box>
-                        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-                        {!error && !sessionReady && (
-                            <Box sx={{ textAlign: 'center' }}><CircularProgress /></Box>
-                        )}
-                        {sessionReady && (
-                            <Box component="form" onSubmit={handleSubmit}>
-                                <TextField
-                                    label="New Password"
-                                    type="password"
-                                    value={password}
-                                    onChange={e => setPassword(e.target.value)}
-                                    fullWidth
-                                    margin="normal"
-                                    required
-                                    autoFocus
-                                />
-                                <TextField
-                                    label="Confirm Password"
-                                    type="password"
-                                    value={confirmPassword}
-                                    onChange={e => setConfirmPassword(e.target.value)}
-                                    fullWidth
-                                    margin="normal"
-                                    required
-                                />
-                                <Button type="submit" variant="contained" fullWidth disabled={loading} sx={{ mt: 2 }}>
-                                    {loading ? <CircularProgress size={24} /> : 'Update Password'}
-                                </Button>
-                            </Box>
-                        )}
-                        {error && (
-                            <Button component={Link} to="/login" variant="outlined" fullWidth sx={{ mt: 2 }}>Back to Sign In</Button>
-                        )}
-                    </Box>
-                )}
-            </Box>
-        </Box>
+        <Form onSubmit={submit} validate={validate}>
+            <PasswordInput source="password" label="Password" fullWidth validate={required()} autoComplete="new-password" />
+            <PasswordInput source="confirmPassword" label="Confirm password" fullWidth validate={required()} />
+            <SaveButton />
+        </Form>
     );
 };
+
+export const MySetPasswordPage = () => (
+    <SetPasswordPage>
+        <MySetPasswordForm />
+    </SetPasswordPage>
+);
 """
-        with open(self.output_dir / "src" / "layout" / "ResetPasswordPage.js", 'w', encoding='utf-8') as f:
+        with open(self.output_dir / "src" / "layout" / "MySetPasswordPage.jsx", 'w', encoding='utf-8') as f:
             f.write(content)
 
     def _generate_data_provider(self):
@@ -1840,13 +1718,10 @@ export const ResetPasswordPage = () => {
         m2m_config_json = json.dumps(m2m_config, indent=2)
 
         data_provider_content = f"""import {{ supabaseDataProvider }} from 'ra-supabase';
-import {{ createClient }} from '@supabase/supabase-js';
+import {{ supabaseClient }} from './supabaseClient';
 
-// Use the correct Supabase URL format and ensure the key is properly configured
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
-
-const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
 const baseDataProvider = supabaseDataProvider({{
   instanceUrl: supabaseUrl,
@@ -2178,7 +2053,7 @@ export const {resource_name.upper()}_SHOW = (props) => (
 );
 """
         
-        with open(resource_dir / f"{resource_name}.js", 'w', encoding='utf-8') as f:
+        with open(resource_dir / f"{resource_name}.jsx", 'w', encoding='utf-8') as f:
             f.write(resource_content)
 
     def _collect_all_descendants(self, concept_name: str, visited=None) -> List[Dict[str, Any]]:
