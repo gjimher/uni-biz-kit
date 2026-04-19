@@ -1,0 +1,29 @@
+def generate() -> str:
+    return """import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+
+// Handle Supabase auth callback before React mounts.
+// Supabase emails link to the root URL with auth tokens in the hash.
+// The root URL always serves index.html (unlike /set-password which may not).
+// Here we convert the hash params into the correct SPA path using replaceState
+// (no server request, no page reload — browser already has index.html loaded).
+// Supabase's _initialize() already read the hash synchronously before this
+// runs, so it still processes the tokens and fires PASSWORD_RECOVERY if valid.
+const _hash = window.location.hash.substring(1);
+if (_hash) {
+    const _hashParams = new URLSearchParams(_hash);
+    const _accessToken = _hashParams.get('access_token');
+    const _refreshToken = _hashParams.get('refresh_token');
+    const _type = _hashParams.get('type');
+    if (_type === 'recovery' && _accessToken && _refreshToken) {
+        window.history.replaceState({}, '', '/#/set-password?access_token=' + encodeURIComponent(_accessToken) + '&refresh_token=' + encodeURIComponent(_refreshToken));
+    }
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);"""

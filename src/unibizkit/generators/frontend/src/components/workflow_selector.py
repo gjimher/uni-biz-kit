@@ -1,0 +1,150 @@
+def generate() -> str:
+    return """import * as React from 'react';
+import {
+    useRecordContext,
+    useNotify,
+    useRefresh,
+    useUpdate,
+    useGetIdentity
+} from 'react-admin';
+import {
+    Box,
+    Button,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    Radio,
+    RadioGroup,
+    FormControlLabel,
+    FormControl,
+    TextField,
+    Typography,
+    Tooltip
+} from '@mui/material';
+
+export const useWorkflowCanEdit = (workflow, record, identity, identityLoading) => {
+    if (identityLoading || !record) return true;
+    if (!workflow) return true;
+    const states = workflow.states;
+    const currentStateName = record.state || states[0].name;
+    const currentState = states.find(s => s.name === currentStateName);
+    const userRoles = identity?.roles || [];
+    return currentState?.owners.some(role => userRoles.includes(role)) ?? true;
+};
+
+export const WorkflowSelector = ({ workflow, resource, canEdit }) => {
+    const record = useRecordContext();
+    const { data: identity } = useGetIdentity();
+    const [update] = useUpdate();
+    const notify = useNotify();
+    const refresh = useRefresh();
+    const [pendingState, setPendingState] = React.useState(null);
+    const [transitionText, setTransitionText] = React.useState('');
+
+    // Build a map of state name -> last transition info for that state
+    const transitionByState = React.useMemo(() => {
+        const map = {};
+        if (!record || !record.state_info) return map;
+        let transitions;
+        try { transitions = typeof record.state_info === 'string' ? JSON.parse(record.state_info) : record.state_info; }
+        catch { return map; }
+        for (const t of transitions) {
+            const note = t.text ? `
+${t.text}` : '';
+            map[t.to] = `${t.user || 'Unknown'} · ${new Date(t.date).toLocaleString()}${note}`;
+        }
+        return map;
+    }, [record]);
+
+    if (!workflow) return null;
+
+    const states = workflow.states;
+    const currentStateName = record?.state || states[0].name;
+
+    const handleRadioClick = (stateName) => {
+        if (!canEdit || stateName === currentStateName) return;
+        setPendingState(stateName);
+    };
+
+    const handleCancel = () => {
+        setPendingState(null);
+        setTransitionText('');
+    };
+
+    const handleConfirm = async () => {
+        const now = new Date().toISOString();
+        const userName = identity?.fullName || 'Unknown';
+
+        let transitions;
+        try { transitions = record.state_info ? (typeof record.state_info === 'string' ? JSON.parse(record.state_info) : record.state_info) : []; }
+        catch { transitions = []; }
+        transitions.push({ from: currentStateName, to: pendingState, user: userName, date: now, text: transitionText });
+        const newStateInfo = JSON.stringify(transitions);
+
+        try {
+            await update(resource, {
+                id: record.id,
+                data: { state: pendingState, state_info: newStateInfo },
+                previousData: record
+            }, { mutationMode: 'pessimistic' });
+
+            notify('State updated', { type: 'info' });
+            handleCancel();
+            refresh();
+        } catch (error) {
+            notify('Error updating state: ' + error.message, { type: 'warning' });
+        }
+    };
+
+    return (
+        <Box sx={{ mb: 2, p: 2, border: '1px solid #ccc', borderRadius: 1, backgroundColor: '#f9f9f9' }}>
+            <Typography variant="subtitle2" gutterBottom>Workflow State</Typography>
+            <FormControl component="fieldset">
+                <RadioGroup row value={currentStateName} onChange={() => {}}>
+                    {states.map(s => (
+                        <Tooltip
+                            key={s.name}
+                            title={transitionByState[s.name] || ''}
+                            componentsProps={{ tooltip: { sx: { fontSize: '0.875rem', whiteSpace: 'pre-line' } } }}
+                        >
+                            <FormControlLabel
+                                value={s.name}
+                                control={<Radio size="small" />}
+                                label={s.name === currentStateName ? <strong>{s.name}</strong> : s.name}
+                                disabled={!canEdit}
+                                onClick={() => handleRadioClick(s.name)}
+                            />
+                        </Tooltip>
+                    ))}
+                </RadioGroup>
+            </FormControl>
+            {!canEdit && record && (
+                <Typography variant="caption" color="error">
+                    You do not have permission to edit in this state.
+                </Typography>
+            )}
+
+            <Dialog open={!!pendingState} onClose={handleCancel} maxWidth="sm" fullWidth>
+                <DialogTitle>{`Change state to "${pendingState}"?`}</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        autoFocus
+                        fullWidth
+                        multiline
+                        rows={5}
+                        label="Note (optional)"
+                        value={transitionText}
+                        onChange={(e) => setTransitionText(e.target.value)}
+                        sx={{ mt: 1 }}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCancel}>Cancel</Button>
+                    <Button onClick={handleConfirm} variant="contained">Confirm</Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
+    );
+};
+"""

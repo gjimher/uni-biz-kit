@@ -1,0 +1,30 @@
+def generate() -> str:
+    return """{
+  "name": "unibizkit-react-admin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mui/material": "^5.16.12",
+    "@mui/icons-material": "^5.16.12",
+    "@supabase/supabase-js": "^2.89.0",
+    "react": "18.2.0",
+    "react-admin": "^5.14.0",
+    "react-dom": "18.2.0",
+    "ra-supabase": "^3.5.2",
+    "@hello-pangea/dnd": "^16.5.0"
+  },
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src/ --ext .js,.jsx --max-warnings 0",
+    "lint:fix": "eslint src/ --ext .js,.jsx --fix"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.1"
+  }
+}"""
