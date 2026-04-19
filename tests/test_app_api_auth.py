@@ -23,8 +23,8 @@ from smtp_mock import smtp_emails as _smtp_emails, smtp_lock as _smtp_lock, extr
 # ---------------------------------------------------------------------------
 
 def _load_env():
-    frontend_dir = os.path.abspath("test-app/frontend")
-    load_dotenv(os.path.join(frontend_dir, ".env"))
+    load_dotenv(os.path.abspath("test-app/backend/.env"))
+    load_dotenv(os.path.abspath("test-app/frontend/.env"))
     api_url = os.getenv("REACT_APP_SUPABASE_URL")
     anon_key = os.getenv("REACT_APP_SUPABASE_KEY")
     assert api_url, "REACT_APP_SUPABASE_URL not found in frontend .env"
@@ -415,6 +415,14 @@ def test_forgot_password_flow(smtp_server):
     email = test_user["email"]
     original_password = test_user["password"]
     new_password = "ResetTestPassword789!"
+
+    # Ensure user has their original password before running (handles broken state from previous runs)
+    ok, _ = _supabase_login(api_url, anon_key, email, original_password)
+    if not ok and service_key:
+        print(f"Restoring original password for {email} before test...")
+        user_id = _supabase_get_user_id_by_email(api_url, service_key, email)
+        assert user_id, f"Could not find user ID for {email}"
+        _supabase_admin_update_password(api_url, service_key, user_id, original_password)
 
     # -- Step 1: Request password reset
     with _smtp_lock:
