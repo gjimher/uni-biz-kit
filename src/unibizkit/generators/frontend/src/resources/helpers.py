@@ -248,7 +248,8 @@ def generate_field_components(
     security_config: Dict[str, Any],
     owned_children: List[Dict[str, Any]] = None,
     exclude_fields: List[str] = None,
-    many_to_many_links: List[Dict[str, Any]] = None
+    many_to_many_links: List[Dict[str, Any]] = None,
+    parent_workflow: Dict[str, Any] = None,
 ) -> Dict[str, str]:
     imports = []
     list_fields = []
@@ -314,8 +315,10 @@ def generate_field_components(
             dialog_comp_name = f"CREATE_{child_name.upper()}_FOR_{parent_name.upper()}"
             edit_dialog_comp_name = f"EDIT_{child_name.upper()}_FOR_{parent_name.upper()}"
 
-            child_columns.append(f"<{edit_dialog_comp_name} />")
-            child_columns.append(f"{{(permissions?.['{child_name}']?.includes('write') || permissions?.['*']?.includes('write')) && <DeleteButton mutationMode='pessimistic' redirect={{false}} />}}")
+            can_edit_prop = " canEditParent={canEdit}" if parent_workflow else ""
+            child_columns.append(f"<{edit_dialog_comp_name}{can_edit_prop} />")
+            delete_guard = "canEdit && " if parent_workflow else ""
+            child_columns.append(f"{{{delete_guard}(permissions?.['{child_name}']?.includes('write') || permissions?.['*']?.includes('write')) && <DeleteButton mutationMode='pessimistic' redirect={{false}} />}}")
 
             sort_prop = " sort={{ field: 'id_presentation', order: 'ASC' }}"
             datagrid_comp = "Datagrid"
@@ -326,11 +329,12 @@ def generate_field_components(
 
             child_columns_str = '\n        '.join(child_columns)
 
+            create_can_edit_prop = " canEditParent={canEdit}" if parent_workflow else ""
             tab_content = f"""
       <FormTab label="{child_plural}">
         <ReferenceManyField reference="{child_name}" target="&quot;{fk_field_name}&quot;" label={{false}}{sort_prop}>
           <Box display="flex" justifyContent="flex-end" mb={{1}}>
-            <{dialog_comp_name} />
+            <{dialog_comp_name}{create_can_edit_prop} />
           </Box>
           <{datagrid_comp}>
             {child_columns_str}

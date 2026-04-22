@@ -379,18 +379,26 @@ class SchemaProcessor:
         if "rules_level_3" not in self.security_extended:
             self.security_extended["rules_level_3"] = []
 
+        # Map: parent concept name -> [child concept names] (via relation_to_one FK)
+        child_concepts_map: Dict[str, list] = {}
+        for concept in self.concepts:
+            for field in concept["fields"]:
+                if field["type"] == "relation_to_one":
+                    parent = field["target"]
+                    child_concepts_map.setdefault(parent, []).append(concept["name"])
+
         def expand_rules(rules):
             import fnmatch
             expanded = []
             for rule in rules:
                 field_val = rule.get("field", "*")
-                
+
                 concepts_to_apply = []
                 if rule["concept"] == "*":
                     concepts_to_apply = [c["name"] for c in self.concepts]
                 else:
                     concepts_to_apply = [rule["concept"]]
-                    
+
                 for c_name in concepts_to_apply:
                     if field_val == "*":
                         expanded.append({
@@ -399,6 +407,14 @@ class SchemaProcessor:
                             "field": "*",
                             "access": rule["access"]
                         })
+                        # Propagate to child concepts (those with a FK back to c_name)
+                        for child_name in child_concepts_map.get(c_name, []):
+                            expanded.append({
+                                "role": rule["role"],
+                                "concept": child_name,
+                                "field": "*",
+                                "access": rule["access"]
+                            })
                     elif "*" in field_val:
                         concept = self.concept_map.get(c_name)
                         if concept:
@@ -411,12 +427,22 @@ class SchemaProcessor:
                                         "access": rule["access"]
                                     })
                     else:
-                        expanded.append({
-                            "role": rule["role"],
-                            "concept": c_name,
-                            "field": field_val,
-                            "access": rule["access"]
-                        })
+                        # Check if field_val is the singular name of a child concept
+                        child_names = child_concepts_map.get(c_name, [])
+                        if field_val in child_names:
+                            expanded.append({
+                                "role": rule["role"],
+                                "concept": field_val,
+                                "field": "*",
+                                "access": rule["access"]
+                            })
+                        else:
+                            expanded.append({
+                                "role": rule["role"],
+                                "concept": c_name,
+                                "field": field_val,
+                                "access": rule["access"]
+                            })
             return expanded
 
         # Merge rules: higher levels override lower levels

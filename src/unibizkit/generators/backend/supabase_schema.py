@@ -26,7 +26,7 @@ $$ LANGUAGE plpgsql;
 
     sql_parts.extend(generate_join_tables(ctx.concepts, ctx.concept_map))
     sql_parts.extend(generate_foreign_key_constraints(ctx.concepts))
-    sql_parts.extend(generate_document_tables(ctx.concepts, ctx.security_config))
+    sql_parts.extend(generate_document_tables(ctx.concepts, ctx.security_config, ctx.business_schema.get("_concept_workflow", {})))
     sql_parts.extend(generate_presentation_triggers(ctx.concepts))
 
     if ctx.security_config["authentication_required"]:

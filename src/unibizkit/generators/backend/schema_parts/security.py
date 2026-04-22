@@ -59,6 +59,33 @@ CREATE TRIGGER on_auth_user_created
     all_tables = [c["name"] for c in concepts] + join_tables
     concept_workflows = business_schema["_concept_workflow"]
 
+    # Map: child concept name -> list of {fk_field, parent, workflow}
+    child_parent_workflows: Dict[str, list] = {}
+    for concept in concepts:
+        for field in concept["fields"]:
+            if field["type"] == "relation_to_one":
+                parent_name = field["target"]
+                workflow = concept_workflows.get(parent_name)
+                if workflow:
+                    child_parent_workflows.setdefault(concept["name"], []).append({
+                        "fk_field": field["name"],
+                        "parent": parent_name,
+                        "workflow": workflow,
+                    })
+
+    def build_parent_state_condition(table: str, role: str) -> str:
+        """Returns SQL AND-clause to restrict writes to parent workflow states the role owns."""
+        parts = []
+        for entry in child_parent_workflows.get(table, []):
+            allowed_states = [s["name"] for s in entry["workflow"]["states"] if role in s["owners"]]
+            if allowed_states:
+                states_sql = ", ".join(f"'{s}'" for s in allowed_states)
+                parts.append(
+                    f'EXISTS (SELECT 1 FROM "{entry["parent"]}" p'
+                    f' WHERE p."id" = "{entry["fk_field"]}" AND p."state" IN ({states_sql}))'
+                )
+        return (" AND " + " AND ".join(parts)) if parts else ""
+
     for table in all_tables:
         policies.append(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY;')
 
@@ -110,8 +137,10 @@ WITH CHECK (true);
             has_security_owner_id = any(f["name"] == "security_owner_id" for f in concept["fields"])
             if has_security_owner_id:
                 trigger_checks.append("""
-    -- security_owner_id is immutable after insert
-    IF (TG_OP = 'UPDATE' AND NEW."security_owner_id" IS DISTINCT FROM OLD."security_owner_id") THEN
+    -- security_owner_id must be auth.uid() on insert, and is immutable after that
+    IF (TG_OP = 'INSERT' AND NEW."security_owner_id" IS DISTINCT FROM auth.uid()::text) THEN
+        RAISE EXCEPTION 'Permission denied: security_owner_id must be auth.uid()' USING ERRCODE = 'insufficient_privilege';
+    ELSIF (TG_OP = 'UPDATE' AND NEW."security_owner_id" IS DISTINCT FROM OLD."security_owner_id") THEN
         RAISE EXCEPTION 'Permission denied: security_owner_id is immutable' USING ERRCODE = 'insufficient_privilege';
     END IF;""")
 
@@ -214,30 +243,32 @@ TO authenticated
 USING ({role_condition});
 """)
             elif access == "owner_write":
+                parent_state_cond = build_parent_state_condition(table, role)
+                owner_cond = f'{role_condition} AND "security_owner_id" = auth.uid()::text'
                 policies.append(f"""
 CREATE POLICY "{role}_owner_select_{table}" ON "{table}"
 FOR SELECT
 TO authenticated
-USING ({role_condition} AND "security_owner_id" = auth.uid()::text);
+USING ({owner_cond});
 """)
                 policies.append(f"""
 CREATE POLICY "{role}_owner_insert_{table}" ON "{table}"
 FOR INSERT
 TO authenticated
-WITH CHECK ({role_condition} AND "security_owner_id" = auth.uid()::text);
+WITH CHECK ({owner_cond}{parent_state_cond});
 """)
                 policies.append(f"""
 CREATE POLICY "{role}_owner_update_{table}" ON "{table}"
 FOR UPDATE
 TO authenticated
-USING ({role_condition} AND "security_owner_id" = auth.uid()::text)
-WITH CHECK ({role_condition} AND "security_owner_id" = auth.uid()::text);
+USING ({owner_cond})
+WITH CHECK ({owner_cond}{parent_state_cond});
 """)
                 policies.append(f"""
 CREATE POLICY "{role}_owner_delete_{table}" ON "{table}"
 FOR DELETE
 TO authenticated
-USING ({role_condition} AND "security_owner_id" = auth.uid()::text);
+USING ({owner_cond}{parent_state_cond});
 """)
 
     # RLS for document tables
@@ -276,31 +307,43 @@ WITH CHECK (true);
                     f'WHERE "{owner_name}"."id" = "{doc_table}"."{fk_col}" '
                     f'AND "{owner_name}"."security_owner_id" = auth.uid()::text)'
                 )
-                full_using = f"{role_condition} AND {owner_condition}"
+                # Add workflow state check for write operations
+                doc_workflow = concept_workflows.get(owner_name)
+                state_extra = ""
+                if doc_workflow:
+                    allowed_states = [s["name"] for s in doc_workflow["states"] if role in s["owners"]]
+                    if allowed_states:
+                        states_sql = ", ".join(f"'{s}'" for s in allowed_states)
+                        state_extra = (
+                            f' AND EXISTS (SELECT 1 FROM "{owner_name}" p'
+                            f' WHERE p."id" = "{doc_table}"."{fk_col}" AND p."state" IN ({states_sql}))'
+                        )
+                select_cond = f"{role_condition} AND {owner_condition}"
+                write_cond = f"{role_condition} AND {owner_condition}{state_extra}"
                 policies.append(f"""
 CREATE POLICY "{role}_select_{doc_table}" ON "{doc_table}"
 FOR SELECT
 TO authenticated
-USING ({full_using});
+USING ({select_cond});
 """)
                 policies.append(f"""
 CREATE POLICY "{role}_insert_{doc_table}" ON "{doc_table}"
 FOR INSERT
 TO authenticated
-WITH CHECK ({full_using});
+WITH CHECK ({write_cond});
 """)
                 policies.append(f"""
 CREATE POLICY "{role}_update_{doc_table}" ON "{doc_table}"
 FOR UPDATE
 TO authenticated
-USING ({full_using})
-WITH CHECK ({full_using});
+USING ({select_cond})
+WITH CHECK ({write_cond});
 """)
                 policies.append(f"""
 CREATE POLICY "{role}_delete_{doc_table}" ON "{doc_table}"
 FOR DELETE
 TO authenticated
-USING ({full_using});
+USING ({write_cond});
 """)
             elif access == "write":
                 policies.append(f"""

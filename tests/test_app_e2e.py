@@ -38,6 +38,12 @@ def app_server(xprocess, request):
         cwd = frontend_dir
         timeout = 30
 
+    # Always restart so the freshly built bundle is served
+    try:
+        xprocess.getinfo("app_server_pure").terminate()
+    except Exception:
+        pass
+
     xprocess.ensure("app_server_pure", Starter)
     yield "http://localhost:3005"
     xprocess.getinfo("app_server_pure").terminate()
@@ -89,6 +95,63 @@ def test_create_product_as_user(page: Page, app_server):
     page.get_by_role("row", name="_User Journey Product").click()
     page.get_by_role("tab", name="Relations").click()
     expect(page.get_by_label("Categories")).to_be_visible()
+
+
+def test_create_order_and_upload_document_as_user(page: Page, app_server):
+    """
+    E2E test as user1: create an order in 'initial' state and upload a document.
+    Verifies the full document upload flow works end-to-end from the browser.
+    """
+    with open(os.path.abspath("test-app/security_extended.json")) as f:
+        users = json.load(f)["users"]
+    user1 = next(u for u in users if "user" in u["roles"])
+
+    page.set_default_timeout(10000)
+    page.goto(app_server)
+    page.wait_for_timeout(2000)
+
+    # Login as user1
+    page.locator('input[name="email"]').fill(user1["email"])
+    page.locator('input[name="password"]').fill(user1["password"])
+    page.get_by_role("button", name="Sign in").click()
+    expect(page.get_by_text("Sales")).to_be_visible()
+
+    # Navigate to Orders → Create
+    page.get_by_text("Sales").click()
+    page.get_by_role("menuitem", name="Orders").click()
+    page.get_by_label("Create").click()
+    page.wait_for_url("**#/order/create**")
+
+    # Fill the order form
+    page.locator('input[name="order_date"]').fill("2024-01-15")
+    page.locator('input[name="total_amount"]').fill("99.99")
+    page.locator('input[name="shipping_address"]').fill("_E2E Test Order Address")
+    # Select first available customer from the MUI Select dropdown
+    page.get_by_label("Customer *").click()
+    page.get_by_role("option").first.click()
+
+    page.get_by_label("Save").click()
+    # Wait for redirect to the edit page (URL contains a numeric order ID)
+    page.wait_for_url(lambda url: bool(__import__('re').search(r'#/order/\d+', url)), timeout=10000)
+    page.wait_for_load_state("networkidle")
+
+    # Go to Documents tab
+    page.get_by_role("tab", name="Documents").click()
+    page.wait_for_timeout(500)
+
+    import uuid
+    unique_name = f"e2e_invoice_{uuid.uuid4().hex[:8]}.txt"
+
+    # Upload a file to the "invoice" tag (first file input)
+    file_input = page.locator('input[type="file"]').first
+    file_input.set_input_files({
+        "name": unique_name,
+        "mimeType": "text/plain",
+        "buffer": b"E2E test invoice content",
+    })
+
+    # Verify the filename appears in the Documents table (more reliable than catching the transient notification)
+    expect(page.get_by_text(unique_name)).to_be_visible(timeout=10000)
 
 
 def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):

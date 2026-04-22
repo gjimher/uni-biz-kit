@@ -1,7 +1,7 @@
 from typing import Any, Dict, List
 
 
-def generate_document_tables(concepts: List[Dict[str, Any]], security_config: Dict[str, Any]) -> List[str]:
+def generate_document_tables(concepts: List[Dict[str, Any]], security_config: Dict[str, Any], concept_workflows: Dict[str, Any] = None) -> List[str]:
     sql_parts = []
 
     for concept in concepts:
@@ -66,6 +66,13 @@ CREATE TRIGGER "{table_name}_manage_current_trigger"
         main_acl = concept_acl.get("_main", {})
         all_roles = security_config.get("roles", [])
 
+        workflow = (concept_workflows or {}).get(owner_name)
+        state_filter = ""
+        if workflow:
+            allowed_states = [s["name"] for s in workflow["states"]]
+            # Will be narrowed per role below; compute full list as fallback
+            state_filter = ", ".join(f"'{s}'" for s in allowed_states)
+
         owner_read_join = (
             f'EXISTS (SELECT 1 FROM "{table_name}" od '
             f'JOIN "{owner_name}" o ON o.id = od."{fk_col}" '
@@ -98,19 +105,39 @@ ON CONFLICT (id) DO NOTHING;"""]
                 )
 
             if access == "owner_write":
+                # Build per-role state restriction for write operations
+                role_write_join_read = owner_read_join
+                role_write_join_insert = owner_insert_join
+                if workflow:
+                    role_allowed = [s["name"] for s in workflow["states"] if role in s["owners"]]
+                    if role_allowed:
+                        states_sql = ", ".join(f"'{s}'" for s in role_allowed)
+                        role_write_join_read = (
+                            f'EXISTS (SELECT 1 FROM "{table_name}" od '
+                            f'JOIN "{owner_name}" o ON o.id = od."{fk_col}" '
+                            f'WHERE od."storage_path" = objects.name '
+                            f'AND o."security_owner_id" = auth.uid()::text '
+                            f'AND o."state" IN ({states_sql}))'
+                        )
+                        role_write_join_insert = (
+                            f'EXISTS (SELECT 1 FROM "{owner_name}" o '
+                            f'WHERE o.id::text = (storage.foldername(objects.name))[1] '
+                            f'AND o."security_owner_id" = auth.uid()::text '
+                            f'AND o."state" IN ({states_sql}))'
+                        )
                 storage_sql.append(f"""CREATE POLICY "{role}_select_{bucket_name}" ON storage.objects
   FOR SELECT TO authenticated
   USING ({bucket_clause} AND {role_cond} AND {owner_read_join});""")
                 storage_sql.append(f"""CREATE POLICY "{role}_insert_{bucket_name}" ON storage.objects
   FOR INSERT TO authenticated
-  WITH CHECK ({bucket_clause} AND {role_cond} AND {owner_insert_join});""")
+  WITH CHECK ({bucket_clause} AND {role_cond} AND {role_write_join_insert});""")
                 storage_sql.append(f"""CREATE POLICY "{role}_update_{bucket_name}" ON storage.objects
   FOR UPDATE TO authenticated
-  USING ({bucket_clause} AND {role_cond} AND {owner_read_join})
-  WITH CHECK ({bucket_clause} AND {role_cond} AND {owner_insert_join});""")
+  USING ({bucket_clause} AND {role_cond} AND {role_write_join_insert})
+  WITH CHECK ({bucket_clause} AND {role_cond} AND {role_write_join_insert});""")
                 storage_sql.append(f"""CREATE POLICY "{role}_delete_{bucket_name}" ON storage.objects
   FOR DELETE TO authenticated
-  USING ({bucket_clause} AND {role_cond} AND {owner_read_join});""")
+  USING ({bucket_clause} AND {role_cond} AND {role_write_join_read});""")
             elif access in ("write",):
                 storage_sql.append(f"""CREATE POLICY "{role}_select_{bucket_name}" ON storage.objects
   FOR SELECT TO authenticated

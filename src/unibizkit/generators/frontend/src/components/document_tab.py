@@ -1,7 +1,7 @@
 def generate() -> str:
     return """import * as React from 'react';
 import { useRecordContext, useNotify, usePermissions } from 'react-admin';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseClient } from '../supabaseClient';
 import {
   Box, Button, Chip, CircularProgress, Collapse, IconButton,
   Table, TableBody, TableCell, TableHead, TableRow, Typography
@@ -14,11 +14,7 @@ import {
   Restore as RestoreIcon
 } from '@mui/icons-material';
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
-const supabaseClient = createClient(supabaseUrl, supabaseKey);
-
-export const DocumentTab = ({ conceptName, tags, versioned }) => {
+export const DocumentTab = ({ conceptName, tags, versioned, canEditParent = true }) => {
   const record = useRecordContext();
   const { permissions } = usePermissions();
   const notify = useNotify();
@@ -27,11 +23,13 @@ export const DocumentTab = ({ conceptName, tags, versioned }) => {
   const fkCol = `${conceptName}_id`;
   const bucketName = `${conceptName}-documents`;
 
-  const canWrite = permissions?.[`${conceptName}._documents`]?.includes('write')
-    || permissions?.['*']?.includes('write');
-  const canRead = canWrite
+  const hasDocPermission = permissions?.[`${conceptName}._documents`]?.includes('write')
     || permissions?.[`${conceptName}._documents`]?.includes('read')
+    || permissions?.['*']?.includes('write')
     || permissions?.['*']?.includes('read');
+  const canWrite = (permissions?.[`${conceptName}._documents`]?.includes('write')
+    || permissions?.['*']?.includes('write')) && canEditParent;
+  const canRead = hasDocPermission;
 
   const [docs, setDocs] = React.useState([]);
   const [uploading, setUploading] = React.useState({});
@@ -74,7 +72,7 @@ export const DocumentTab = ({ conceptName, tags, versioned }) => {
 
       const { error: uploadError } = await supabaseClient.storage
         .from(bucketName)
-        .upload(storagePath, file, { upsert: true });
+        .upload(storagePath, file);
       if (uploadError) throw uploadError;
 
       if (versioned) {

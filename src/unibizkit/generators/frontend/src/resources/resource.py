@@ -10,12 +10,13 @@ from .helpers import (
 )
 
 
-def _generate_document_tab(concept_name: str, docs: Dict[str, Any]) -> str:
+def _generate_document_tab(concept_name: str, docs: Dict[str, Any], has_workflow: bool = False) -> str:
     tags_js = ", ".join(f"'{t}'" for t in docs["tags"])
     versioned_js = "true" if docs["versioned"] else "false"
+    can_edit_prop = " canEditParent={canEdit}" if has_workflow else ""
     return f"""
       <FormTab label="Documents">
-        <DocumentTab conceptName="{concept_name}" tags={{[{tags_js}]}} versioned={{{versioned_js}}} />
+        <DocumentTab conceptName="{concept_name}" tags={{[{tags_js}]}} versioned={{{versioned_js}}}{can_edit_prop} />
       </FormTab>"""
 
 
@@ -73,13 +74,13 @@ def _generate_recursive_dialogs(
     edit_comp_name = f"EDIT_{resource_name.upper()}_FOR_{parent_name.upper()}"
 
     create_comp = f"""
-const {create_comp_name} = () => {{
+const {create_comp_name} = ({{ canEditParent = true }}) => {{
   const {{ id }} = useRecordContext();
   const [open, setOpen] = React.useState(false);
   const notify = useNotify();
   const refresh = useRefresh();
   const {{ permissions }} = usePermissions();
-  const canWrite = permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write');
+  const canWrite = (permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write')) && canEditParent;
 
   if (!canWrite) return null;
 
@@ -133,14 +134,14 @@ const {create_comp_name} = () => {{
             </SimpleForm>"""
 
     edit_comp = f"""
-const {edit_comp_name} = () => {{
+const {edit_comp_name} = ({{ canEditParent = true }}) => {{
   const record = useRecordContext();
   const [open, setOpen] = React.useState(false);
   const notify = useNotify();
   const refresh = useRefresh();
   const [update] = useUpdate();
   const {{ permissions }} = usePermissions();
-  const canWrite = permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write');
+  const canWrite = (permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write')) && canEditParent;
 
   const handleClick = (e) => {{
     e.stopPropagation();
@@ -200,6 +201,7 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     owned_children = find_owned_children(resource_name, ctx.concepts)
     many_to_many_links = find_many_to_many_links(resource_name, ctx.concepts, ctx.concept_map)
     has_documents = concept["documents"]["enabled"]
+    concept_workflow = ctx.business_schema.get("_concept_workflow", {}).get(resource_name)
 
     field_components = generate_field_components(
         concept,
@@ -208,14 +210,13 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         ctx.presentation_config,
         ctx.security_config,
         owned_children=owned_children,
-        many_to_many_links=many_to_many_links
+        many_to_many_links=many_to_many_links,
+        parent_workflow=concept_workflow,
     )
 
     react_admin_imports = get_optimized_react_admin_imports(
         concept, ctx.concepts, owned_children, many_to_many_links
     )
-
-    concept_workflow = ctx.business_schema.get("_concept_workflow", {}).get(resource_name)
 
     mui_imports = ["Grid"]
     if owned_children or many_to_many_links:
@@ -236,7 +237,7 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
 
     doc_tab = ""
     if has_documents:
-        doc_tab = _generate_document_tab(resource_name, concept["documents"])
+        doc_tab = _generate_document_tab(resource_name, concept["documents"], has_workflow=concept_workflow is not None)
 
     workflow_import = ""
     create_workflow_ui = ""
