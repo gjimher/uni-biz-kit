@@ -54,7 +54,6 @@ export const DocumentTab = ({ conceptName, tags, versioned, canEditParent = true
     if (!file) return;
     setUploading(prev => ({ ...prev, [tag]: true }));
     try {
-      let version = 1;
       let storagePath;
       if (versioned) {
         const { data: existing } = await supabaseClient
@@ -64,7 +63,7 @@ export const DocumentTab = ({ conceptName, tags, versioned, canEditParent = true
           .eq('"tag"', tag)
           .order('"version"', { ascending: false })
           .limit(1);
-        if (existing?.length) version = existing[0].version + 1;
+        const version = existing?.length ? existing[0].version + 1 : 1;
         storagePath = `${record.id}/${tag}/v${version}/${file.name}`;
       } else {
         storagePath = `${record.id}/${tag}/${file.name}`;
@@ -74,21 +73,6 @@ export const DocumentTab = ({ conceptName, tags, versioned, canEditParent = true
         .from(bucketName)
         .upload(storagePath, file);
       if (uploadError) throw uploadError;
-
-      if (versioned) {
-        const { error: dbError } = await supabaseClient
-          .from(tableName)
-          .insert({ [fkCol]: record.id, tag, version, is_current: true, storage_path: storagePath });
-        if (dbError) throw dbError;
-      } else {
-        const { error: dbError } = await supabaseClient
-          .from(tableName)
-          .upsert(
-            { [fkCol]: record.id, tag, storage_path: storagePath },
-            { onConflict: `${fkCol},tag` }
-          );
-        if (dbError) throw dbError;
-      }
 
       notify('Document uploaded', { type: 'success' });
       await loadDocs();
@@ -148,24 +132,11 @@ export const DocumentTab = ({ conceptName, tags, versioned, canEditParent = true
     }
   };
 
-  const handleDelete = async (docId, storagePath, tag, isCurrent) => {
+  const handleDelete = async (storagePath, tag) => {
     if (!window.confirm('Delete this document?')) return;
     try {
-      await supabaseClient.storage.from(bucketName).remove([storagePath]);
-      const { error } = await supabaseClient.from(tableName).delete().eq('"id"', docId);
+      const { error } = await supabaseClient.storage.from(bucketName).remove([storagePath]);
       if (error) throw error;
-      if (versioned && isCurrent) {
-        const { data: next } = await supabaseClient
-          .from(tableName)
-          .select('id')
-          .eq(`"${fkCol}"`, record.id)
-          .eq('"tag"', tag)
-          .order('"version"', { ascending: false })
-          .limit(1);
-        if (next?.length) {
-          await supabaseClient.from(tableName).update({ is_current: true }).eq('"id"', next[0].id);
-        }
-      }
       notify('Document deleted', { type: 'success' });
       await loadDocs();
       if (versioned && expandedTag === tag) await loadHistory(tag);
@@ -223,8 +194,8 @@ export const DocumentTab = ({ conceptName, tags, versioned, canEditParent = true
                           <HistoryIcon fontSize="small" />
                         </IconButton>
                       )}
-                      {!versioned && canWrite && doc && (
-                        <IconButton size="small" onClick={() => handleDelete(doc.id, doc.storage_path, tag, false)} title="Delete" color="error">
+                      {canWrite && doc && (
+                        <IconButton size="small" onClick={() => handleDelete(doc.storage_path, tag)} title="Delete" color="error">
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       )}
@@ -281,7 +252,7 @@ export const DocumentTab = ({ conceptName, tags, versioned, canEditParent = true
                                         </IconButton>
                                       )}
                                       {canWrite && (
-                                        <IconButton size="small" onClick={() => handleDelete(h.id, h.storage_path, tag, h.is_current)} title="Delete this version" color="error">
+                                        <IconButton size="small" onClick={() => handleDelete(h.storage_path, tag)} title="Delete this version" color="error">
                                           <DeleteIcon fontSize="small" />
                                         </IconButton>
                                       )}

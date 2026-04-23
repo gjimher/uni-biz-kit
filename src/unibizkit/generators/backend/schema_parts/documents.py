@@ -44,7 +44,24 @@ def generate_document_tables(concepts: List[Dict[str, Any]], security_config: Di
         if versioned:
             sql_parts.append(f"""CREATE OR REPLACE FUNCTION "{table_name}_manage_current_func"()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_next_id INTEGER;
 BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD."is_current" = TRUE THEN
+      SELECT "id" INTO v_next_id
+      FROM "{table_name}"
+      WHERE "{fk_col}" = OLD."{fk_col}"
+        AND "tag" = OLD."tag"
+        AND "id" != OLD."id"
+      ORDER BY "version" DESC
+      LIMIT 1;
+      IF v_next_id IS NOT NULL THEN
+        UPDATE "{table_name}" SET "is_current" = TRUE WHERE "id" = v_next_id;
+      END IF;
+    END IF;
+    RETURN OLD;
+  END IF;
   IF NEW."is_current" = TRUE THEN
     UPDATE "{table_name}"
     SET "is_current" = FALSE
@@ -57,7 +74,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER "{table_name}_manage_current_trigger"
-  AFTER INSERT OR UPDATE OF "is_current" ON "{table_name}"
+  AFTER INSERT OR UPDATE OF "is_current" OR DELETE ON "{table_name}"
   FOR EACH ROW EXECUTE FUNCTION "{table_name}_manage_current_func"();""")
 
         _acl = security_config.get("_acl", {})
@@ -163,5 +180,72 @@ ON CONFLICT (id) DO NOTHING;"""]
             )
 
         sql_parts.append("\n".join(storage_sql))
+
+    if any(c["documents"]["enabled"] for c in concepts):
+        sql_parts.append("""CREATE OR REPLACE FUNCTION public.sync_document_on_upload()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_concept TEXT;
+  v_parts   TEXT[];
+  v_rec_id  INTEGER;
+  v_tag     TEXT;
+  v_version INTEGER;
+  v_tbl     TEXT;
+  v_fk      TEXT;
+BEGIN
+  IF NEW.bucket_id NOT LIKE '%-documents' THEN
+    RETURN NEW;
+  END IF;
+  v_concept := replace(NEW.bucket_id, '-documents', '');
+  v_tbl     := v_concept || '_document';
+  v_fk      := v_concept || '_id';
+  v_parts   := string_to_array(NEW.name, '/');
+  v_rec_id  := v_parts[1]::INTEGER;
+  v_tag     := v_parts[2];
+  IF array_length(v_parts, 1) >= 4 AND v_parts[3] ~ '^v[0-9]+$' THEN
+    v_version := substring(v_parts[3] FROM 2)::INTEGER;
+    EXECUTE format(
+      'INSERT INTO public.%I (%I, tag, version, is_current, storage_path) VALUES ($1, $2, $3, true, $4)',
+      v_tbl, v_fk
+    ) USING v_rec_id, v_tag, v_version, NEW.name;
+  ELSE
+    EXECUTE format(
+      'INSERT INTO public.%I (%I, tag, storage_path) VALUES ($1, $2, $3)
+       ON CONFLICT (%I, tag) DO UPDATE SET storage_path = EXCLUDED.storage_path',
+      v_tbl, v_fk, v_fk
+    ) USING v_rec_id, v_tag, NEW.name;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS sync_document_on_upload ON storage.objects;
+CREATE TRIGGER sync_document_on_upload
+  AFTER INSERT ON storage.objects
+  FOR EACH ROW EXECUTE FUNCTION public.sync_document_on_upload();
+
+CREATE OR REPLACE FUNCTION public.cleanup_document_on_delete()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_concept TEXT;
+  v_tbl     TEXT;
+BEGIN
+  IF OLD.bucket_id NOT LIKE '%-documents' THEN
+    RETURN OLD;
+  END IF;
+  v_concept := replace(OLD.bucket_id, '-documents', '');
+  v_tbl     := v_concept || '_document';
+  EXECUTE format(
+    'DELETE FROM public.%I WHERE storage_path = $1',
+    v_tbl
+  ) USING OLD.name;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS cleanup_document_on_delete ON storage.objects;
+CREATE TRIGGER cleanup_document_on_delete
+  AFTER DELETE ON storage.objects
+  FOR EACH ROW EXECUTE FUNCTION public.cleanup_document_on_delete();""")
 
     return sql_parts

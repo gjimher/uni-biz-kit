@@ -73,9 +73,37 @@ db_url = backend_env.get('DB_URL')
 if not db_url:
     sys.exit("Error: DB_URL not found in backend/.env")
 
+service_role_key = backend_env.get('SUPABASE_SERVICE_ROLE_KEY')
+frontend_env = parse_env(frontend_dir / '.env') if (frontend_dir / '.env').exists() else {}
+api_url = frontend_env.get('REACT_APP_SUPABASE_URL')
+
 conn = psycopg2.connect(db_url)
 conn.autocommit = True
 with conn.cursor() as cur:
+    # Empty document storage buckets BEFORE dropping tables so the cleanup
+    # trigger can still delete from *_document tables while they exist.
+    if service_role_key and api_url:
+        cur.execute("SELECT id FROM storage.buckets WHERE id LIKE '%-documents'")
+        doc_buckets = [row[0] for row in cur.fetchall()]
+        for bucket_id in doc_buckets:
+            req = urllib.request.Request(
+                f"{api_url}/storage/v1/bucket/{bucket_id}/empty",
+                data=b'{}',
+                headers={
+                    'Authorization': f'Bearer {service_role_key}',
+                    'Content-Type': 'application/json',
+                    'apikey': service_role_key,
+                },
+                method='POST',
+            )
+            try:
+                with urllib.request.urlopen(req):
+                    print(f"  Emptied storage bucket: {bucket_id}")
+            except urllib.error.HTTPError as e:
+                body = e.read().decode('utf-8')
+                if e.code != 404:
+                    print(f"  Warning: could not empty {bucket_id}: {e.code} {body}")
+
     print("Dropping all tables in public schema...")
     cur.execute(\"\"\"
         DO $$
@@ -102,10 +130,6 @@ security_file = root_dir / 'security_extended.json'
 if security_file.exists():
     security_data = json.loads(security_file.read_text())
     auth_users = security_data.get('users', [])
-
-    service_role_key = backend_env.get('SUPABASE_SERVICE_ROLE_KEY')
-    frontend_env = parse_env(frontend_dir / '.env')
-    api_url = frontend_env.get('REACT_APP_SUPABASE_URL')
 
     print(f"Creating {len(auth_users)} auth user(s)...")
     for user in auth_users:

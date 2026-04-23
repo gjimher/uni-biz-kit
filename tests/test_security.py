@@ -447,12 +447,8 @@ def test_order_document_owner_isolation():
             assert upload_resp.status_code in (200, 201), \
                 f"user1 upload failed: {upload_resp.status_code} {upload_resp.text}"
 
-            # Insert the document DB record (committed so storage policy can JOIN on it)
-            cur.execute(f"""
-                INSERT INTO "order_document" (order_id, tag, storage_path)
-                VALUES ({order_id}, 'invoice', '{storage_path}')
-                RETURNING id;
-            """)
+            # Trigger created the record automatically on upload
+            cur.execute(f"SELECT id FROM \"order_document\" WHERE order_id = {order_id} AND tag = 'invoice'")
             doc_id = cur.fetchone()[0]
 
             # --- Layer 1: DB RLS ---
@@ -1261,14 +1257,13 @@ def test_order_lifecycle_via_api():
         )
         assert r.status_code in (200, 201), f"user1 failed to upload document: {r.status_code} {r.text}"
 
-        # user1 creates the order_document record
-        r = req.post(
-            f"{supabase_url}/rest/v1/order_document",
-            headers={**api_headers(user1_token), "Prefer": "return=representation"},
-            json={"order_id": order_id, "tag": "invoice", "storage_path": storage_path},
+        # Trigger created the record automatically on upload - retrieve the id
+        r = req.get(
+            f"{supabase_url}/rest/v1/order_document?order_id=eq.{order_id}&tag=eq.invoice",
+            headers=api_headers(user1_token),
             timeout=10,
         )
-        assert r.status_code in (200, 201), f"user1 failed to create order_document: {r.status_code} {r.text}"
+        assert r.status_code == 200 and r.json(), f"order_document not found after upload: {r.status_code} {r.text}"
         doc_id = r.json()[0]["id"]
 
         # 2. user2 tries to see the order — should get empty list
