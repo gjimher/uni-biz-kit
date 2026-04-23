@@ -11,7 +11,7 @@ from .src.layout import (
 )
 from .src.components import (
     title, reorderable_datagrid, recursive_parent_selector,
-    custom_edit_toolbar, document_tab, workflow_selector
+    custom_edit_toolbar, document_tab, workflow_selector, field_help_icon
 )
 from .src.resources import resource
 
@@ -83,6 +83,7 @@ class ReactAdminGenerator:
         _write(ctx.output_dir / "src" / "components" / "recursive_parent_selector.jsx", recursive_parent_selector.generate())
         _write(ctx.output_dir / "src" / "components" / "custom_edit_toolbar.jsx", custom_edit_toolbar.generate())
         _write(ctx.output_dir / "src" / "components" / "workflow_selector.jsx", workflow_selector.generate())
+        _write(ctx.output_dir / "src" / "components" / "field_help_icon.jsx", field_help_icon.generate())
         if any(c.get("documents") and c["documents"]["enabled"] for c in ctx.concepts):
             _write(ctx.output_dir / "src" / "components" / "document_tab.jsx", document_tab.generate())
 

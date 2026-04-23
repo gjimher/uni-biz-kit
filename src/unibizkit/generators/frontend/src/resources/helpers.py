@@ -295,16 +295,23 @@ def generate_field_components(
             for field in relevant_fields:
                 fname = field["name"]
                 comp = field["_fe_list_component"]
+                fdesc = field["description"]
+                if fdesc:
+                    flabel = fname.replace('_', ' ').capitalize()
+                    fdesc_escaped = fdesc.replace('"', '&quot;')
+                    fcol_label = f' label={{<FIELD_HELP_ICON label="{flabel}" help="{fdesc_escaped}" />}}'
+                else:
+                    fcol_label = ''
 
                 if field["type"] == "relation_to_one":
                     target = field["target"]
-                    child_raw_columns.append((fname, f'<ReferenceField source="{fname}" reference="{target}" link={{false}}><TextField source="id_presentation" /></ReferenceField>'))
+                    child_raw_columns.append((fname, f'<ReferenceField source="{fname}" reference="{target}" link={{false}}{fcol_label}><TextField source="id_presentation" /></ReferenceField>'))
                 elif field["type"] == "decimal" and field.get("subtype") == "money":
                     currency = presentation_config["currency"]
                     number_locale = presentation_config["number_locale"]
-                    child_raw_columns.append((fname, f'<NumberField source="{fname}" options={{{{ style: "currency", currency: "{currency}" }}}} locales="{number_locale}" />'))
+                    child_raw_columns.append((fname, f'<NumberField source="{fname}" options={{{{ style: "currency", currency: "{currency}" }}}} locales="{number_locale}"{fcol_label} />'))
                 else:
-                    child_raw_columns.append((fname, f'<{comp} source="{fname}" />'))
+                    child_raw_columns.append((fname, f'<{comp} source="{fname}"{fcol_label} />'))
 
             child_all_names = [f[0] for f in child_raw_columns]
             child_result_names = presentation_config.get("_list_fields", {}).get(child_name, child_all_names)
@@ -367,6 +374,16 @@ def generate_field_components(
         elif security_config["authentication_required"]:
             disabled_prop = f" disabled={{!permissions?.['{concept['name']}.{field_name}']?.includes('write')}}"
 
+        description = field["description"]
+        if description:
+            label = field_name.replace('_', ' ').capitalize()
+            desc_escaped = description.replace('"', '&quot;')
+            label_prop = f' label={{<FIELD_HELP_ICON label="{label}" help="{desc_escaped}" />}} InputLabelProps={{{{ shrink: true }}}}'
+            col_label_prop = f' label={{<FIELD_HELP_ICON label="{label}" help="{desc_escaped}" />}}'
+        else:
+            label_prop = ''
+            col_label_prop = ''
+
         input_html = ""
 
         if field["type"] == "relation_to_one":
@@ -378,7 +395,8 @@ def generate_field_components(
                 pres_fields = presentation["fields"]
                 display_field = pres_fields[-1]
 
-                input_html = f'          <RecursiveParentSelector source="{field_name}" reference="{target}" label="{field_name}" separator="{separator}" displayField="{display_field}"{disabled_prop} />'
+                rps_label = f'{{<FIELD_HELP_ICON label="{field_name.replace("_", " ").capitalize()}" help="{desc_escaped}" />}}' if description else f'"{field_name}"'
+                input_html = f'          <RecursiveParentSelector source="{field_name}" reference="{target}" label={rps_label} separator="{separator}" displayField="{display_field}"{disabled_prop} />'
                 width_units = 6
                 grid_props = f"xs={{12}} sm={{{width_units}}}"
 
@@ -387,13 +405,13 @@ def generate_field_components(
             else:
                 input_inner = ""
                 if comp_type == "AutocompleteInput":
-                    input_inner = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}}{full_width}{validation}{margin}{disabled_prop} />'
+                    input_inner = f'<AutocompleteInput optionText="id_presentation" filterToQuery={{searchText => ({{ "id_presentation@ilike": searchText }})}}{full_width}{validation}{margin}{disabled_prop}{label_prop} />'
                 else:
-                    input_inner = f'<SelectInput optionText="id_presentation"{full_width}{validation}{margin}{disabled_prop} />'
+                    input_inner = f'<SelectInput optionText="id_presentation"{full_width}{validation}{margin}{disabled_prop}{label_prop} />'
 
                 input_html = f'          <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{input_inner}</ReferenceInput>'
 
-                filter_inner = input_inner.replace(f'{validation}{margin}{disabled_prop}', '')
+                filter_inner = input_inner.replace(f'{validation}{margin}{disabled_prop}{label_prop}', '')
                 filter_fields.append((field_name, f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>'))
 
         elif field["type"] == "relation_to_many":
@@ -414,7 +432,7 @@ def generate_field_components(
             enum_values = field["enum_values"]
             choices_str = ', '.join([f"{{ id: '{val}', name: '{val}' }}" for val in enum_values])
             choices_array = f"[{choices_str}]"
-            input_html = f'          <SelectInput source="{field_name}" choices={{{choices_array}}}{full_width}{validation}{margin}{disabled_prop} />'
+            input_html = f'          <SelectInput source="{field_name}" choices={{{choices_array}}}{full_width}{validation}{margin}{disabled_prop}{label_prop} />'
             filter_fields.append((field_name, f'  <SelectInput source="{field_name}" choices={{{choices_array}}} />'))
 
         else:
@@ -424,28 +442,28 @@ def generate_field_components(
             if field["type"] == "decimal":
                 pass
 
-            input_html = f'          <{comp_type} source="{field_name}"{extra_props}{full_width}{validation}{margin}{disabled_prop} />'
+            input_html = f'          <{comp_type} source="{field_name}"{extra_props}{full_width}{validation}{margin}{disabled_prop}{label_prop} />'
             filter_fields.append((field_name, f'  <{comp_type} source="{field_name}" />'))
 
         list_html = ""
         show_html = ""
         if field["type"] == "relation_to_one":
             target = field["target"]
-            list_html = f'      <ReferenceField source="{field_name}" reference="{target}" link={{false}}><TextField source="id_presentation" /></ReferenceField>'
-            show_html = f'      <ReferenceField source="{field_name}" reference="{target}"><TextField source="id_presentation" /></ReferenceField>'
+            list_html = f'      <ReferenceField source="{field_name}" reference="{target}" link={{false}}{col_label_prop}><TextField source="id_presentation" /></ReferenceField>'
+            show_html = f'      <ReferenceField source="{field_name}" reference="{target}"{col_label_prop}><TextField source="id_presentation" /></ReferenceField>'
         elif field["type"] == "relation_to_many":
             pass
         elif field["type"] == "decimal":
             if field.get("subtype") == "money":
                 currency = presentation_config["currency"]
                 number_locale = presentation_config["number_locale"]
-                list_html = f"""      <NumberField source="{field_name}" options={{{{ style: 'currency', currency: '{currency}' }}}} locales="{number_locale}" />"""
+                list_html = f"""      <NumberField source="{field_name}" options={{{{ style: 'currency', currency: '{currency}' }}}} locales="{number_locale}"{col_label_prop} />"""
                 show_html = list_html
             else:
-                list_html = f'      <{list_comp} source="{field_name}" />'
+                list_html = f'      <{list_comp} source="{field_name}"{col_label_prop} />'
                 show_html = list_html
         else:
-            list_html = f'      <{list_comp} source="{field_name}" />'
+            list_html = f'      <{list_comp} source="{field_name}"{col_label_prop} />'
             show_html = list_html
 
         if list_html and visibility != "internal":

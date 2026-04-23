@@ -22,6 +22,7 @@ import {
     Typography,
     Tooltip
 } from '@mui/material';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 
 export const useWorkflowCanEdit = (workflow, record, identity, identityLoading) => {
     if (identityLoading || !record) return true;
@@ -99,10 +100,27 @@ ${t.text}` : '';
 
     return (
         <Box sx={{ mb: 2, p: 2, border: '1px solid #ccc', borderRadius: 1, backgroundColor: '#f9f9f9' }}>
-            <Typography variant="subtitle2" gutterBottom>Workflow State</Typography>
+            <Typography variant="subtitle2" gutterBottom sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                Workflow State
+                {workflow.description && (
+                    <Tooltip title={workflow.description} placement="top">
+                        <HelpOutlineIcon sx={{ fontSize: 16, cursor: 'help', color: 'text.secondary' }} />
+                    </Tooltip>
+                )}
+            </Typography>
             <FormControl component="fieldset">
                 <RadioGroup row value={currentStateName} onChange={() => {}}>
-                    {states.map(s => (
+                    {states.map(s => {
+                        const stateName = s.name === currentStateName ? <strong>{s.name}</strong> : s.name;
+                        const stateLabel = s.description ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                {stateName}
+                                <Tooltip title={s.description} placement="top">
+                                    <HelpOutlineIcon sx={{ fontSize: 14, cursor: 'help', color: 'text.secondary' }} />
+                                </Tooltip>
+                            </span>
+                        ) : stateName;
+                        return (
                         <Tooltip
                             key={s.name}
                             title={transitionByState[s.name] || ''}
@@ -111,12 +129,13 @@ ${t.text}` : '';
                             <FormControlLabel
                                 value={s.name}
                                 control={<Radio size="small" />}
-                                label={s.name === currentStateName ? <strong>{s.name}</strong> : s.name}
+                                label={stateLabel}
                                 disabled={!canEdit}
                                 onClick={() => handleRadioClick(s.name)}
                             />
                         </Tooltip>
-                    ))}
+                        );
+                    })}
                 </RadioGroup>
             </FormControl>
             {!canEdit && record && (

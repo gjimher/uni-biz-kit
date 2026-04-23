@@ -3,9 +3,10 @@
   "workflow_rules": [
     {
       "name": "order_workflow",
+      "description": "Tracks the lifecycle of a customer order from creation to delivery.",
       "concepts": "order",
       "states": [
-        { "name": "initial", "owners": ["user", "admin"] },
+        { "name": "initial", "description": "Order just created, pending confirmation by the customer.", "owners": ["user", "admin"] },
         { "name": "ordered", "owners": ["admin"] },
         { "name": "accepted", "owners": ["admin"] },
         { "name": "sent", "owners": ["admin"] },

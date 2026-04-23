@@ -44,6 +44,8 @@ def _generate_recursive_dialogs(
             continue
         components.extend(_generate_recursive_dialogs(ctx, child_info["concept"], resource_name, visited))
 
+    title_desc_prop = f' description="{concept["description"].replace(chr(34), "&quot;")}"' if concept["description"] else ''
+
     fk_field_name = ""
     for field in concept["fields"]:
         if field["type"] == "relation_to_one" and field["target"] == parent_name:
@@ -181,7 +183,7 @@ const {edit_comp_name} = ({{ canEditParent = true }}) => {{
     <>
       <Button onClick={{handleClick}} size="small" color="primary">{{canWrite ? 'Edit' : 'Show'}}</Button>
       <Dialog open={{open}} onClose={{handleClose}} fullWidth maxWidth="md" onClick={{(e) => e.stopPropagation()}}>
-        <DialogTitle><Title name="{resource_name}" /></DialogTitle>
+        <DialogTitle><Title name="{resource_name}"{title_desc_prop} /></DialogTitle>
         <DialogContent>
             {form_content}
         </DialogContent>
@@ -197,6 +199,7 @@ const {edit_comp_name} = ({{ canEditParent = true }}) => {{
 
 def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     resource_name = concept["name"]
+    title_desc_prop = f' description="{concept["description"].replace(chr(34), "&quot;")}"' if concept["description"] else ''
 
     owned_children = find_owned_children(resource_name, ctx.concepts)
     many_to_many_links = find_many_to_many_links(resource_name, ctx.concepts, ctx.concept_map)
@@ -259,6 +262,8 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         component_imports.append(f"import {{ ReorderableDatagrid }} from '../../components/reorderable_datagrid';")
     if "RecursiveParentSelector" in field_components["create_fields"] or "RecursiveParentSelector" in field_components["edit_fields"]:
         component_imports.append(f"import {{ RecursiveParentSelector }} from '../../components/recursive_parent_selector';")
+    if "FIELD_HELP_ICON" in field_components["create_fields"] or "FIELD_HELP_ICON" in field_components["edit_fields"] or "FIELD_HELP_ICON" in child_dialog_components:
+        component_imports.append(f"import {{ FIELD_HELP_ICON }} from '../../components/field_help_icon';")
     component_imports_str = "\n".join(component_imports)
 
     id_field_show = ""
@@ -310,11 +315,11 @@ const {inner_comp_name} = () => {{
         {form_content}
     );
 }};"""
-        edit_component = f"""<Edit title={{<Title name="{resource_name}" />}} {{...props}}>
+        edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}} {{...props}}>
     <{inner_comp_name} />
   </Edit>"""
     elif owned_children or many_to_many_links or has_documents:
-        edit_component = f"""<Edit title={{<Title name="{resource_name}" />}} {{...props}}>
+        edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}} {{...props}}>
     <TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" />}}>
       <FormTab label="Summary">
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
@@ -327,7 +332,7 @@ const {inner_comp_name} = () => {{
     </TabbedForm>
   </Edit>"""
     else:
-        edit_component = f"""<Edit title={{<Title name="{resource_name}" />}} {{...props}}>
+        edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}} {{...props}}>
     <SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}" />}}>
       <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
         {field_components["edit_fields"]}
@@ -381,7 +386,7 @@ export const {resource_name.upper()}_EDIT = (props) => {{
 }};
 
 export const {resource_name.upper()}_SHOW = (props) => (
-  <Show title={{<Title name="{resource_name}" />}} {{...props}}>
+  <Show title={{<Title name="{resource_name}"{title_desc_prop} />}} {{...props}}>
     <SimpleShowLayout>
       {id_field_show}
       {field_components["show_fields"]}

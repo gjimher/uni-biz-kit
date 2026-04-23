@@ -37,7 +37,8 @@
           },
           "description": {
             "type": "string",
-            "description": "Description of the concept"
+            "description": "Description of the concept",
+            "default": ""
           },
           "checks": {
             "type": "array",
@@ -192,7 +193,8 @@
                 },
                 "description": {
                   "type": "string",
-                  "description": "Description of the field"
+                  "description": "Description of the field",
+                  "default": ""
                 }
               },
               "required": ["name", "type"],
