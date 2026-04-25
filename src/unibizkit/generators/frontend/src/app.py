@@ -39,7 +39,8 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
     i18n_prop = ""
     if has_auth_provider:
         allow_registration = ctx.security_config["registration"]["allow"]
-        if allow_registration:
+        sso_enabled = ctx.security_config["sso"]["enabled"]
+        if allow_registration or sso_enabled:
             login_import = "import { MyLoginPage } from './layout/MyLoginPage';"
             login_prop = "MyLoginPage"
         else:

@@ -1,0 +1,188 @@
+"""
+SSO Headed E2E Test (Playwright + CDP)
+
+For each user (admin, user1):
+  1. Start SSO environment; launch Chrome with SPNEGO + remote debugging
+  2. Verify Keycloak account page loads within 30s (SSO authenticated)
+  3. Navigate to app, log in via SSO, verify role in profile dialog
+  4. Kill Chrome; delete user from Supabase
+  5. Relaunch Chrome, repeat SSO login, verify role again
+  6. Assert via Supabase API that user is Keycloak-only (no email/password identity)
+
+Requirements:
+  - App running (npm start):  cd test-app/frontend && npm start
+  - Run explicitly:           python -m pytest tests/test_e2e_sso_headed.py
+"""
+import os
+import re
+import subprocess
+import time
+import pytest
+import requests
+from pathlib import Path
+from dotenv import load_dotenv
+from playwright.sync_api import sync_playwright, expect, TimeoutError as PlaywrightTimeoutError
+
+CDP_PORT = 3011
+APP_URL = "http://localhost:3000"
+BIN_DIR = Path(__file__).parent.parent / "test-app" / "bin"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def require_explicit_run(request):
+    """Skip unless this file is explicitly specified on the command line."""
+    if not any("test_e2e_sso_headed" in str(a) for a in request.config.args):
+        pytest.skip("SSO headed test — run explicitly: python -m pytest tests/test_e2e_sso_headed.py")
+
+
+@pytest.fixture(scope="module")
+def sso_chrome():
+    """Start SSO environment and launch Chrome with remote debugging."""
+    print("\n[sso] Starting SSO environment (dev-sso-start.py)...")
+    result = subprocess.run(["python", str(BIN_DIR / "dev-sso-start.py")])
+    if result.returncode != 0:
+        pytest.fail("dev-sso-start.py failed — see output above.")
+    yield
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _launch_chrome(user=None):
+    cmd = ["python", str(BIN_DIR / "dev-sso-chrome.py")]
+    if user:
+        cmd.append(user)
+    cmd.append("--remote-debug")
+    print(f"[sso] Launching Chrome as {user or 'default user'}...")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        pytest.fail(f"dev-sso-chrome.py failed:\n{result.stderr.strip()}")
+    time.sleep(3)
+
+
+def _close_chrome():
+    """Kill the Chrome process bound to the CDP port (pkill is reliable; browser.close() via CDP is not)."""
+    result = subprocess.run(
+        ["pkill", "-f", f"remote-debugging-port={CDP_PORT}"],
+        capture_output=True,
+    )
+    time.sleep(2)
+    if result.returncode == 0:
+        print("[sso] Chrome process killed.")
+    else:
+        print("[sso] No Chrome process found to kill.")
+
+
+def _find_real_page(browser):
+    """Return first non-internal Chrome page, polling up to 10s."""
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        for ctx in browser.contexts:
+            for p in ctx.pages:
+                if not p.url.startswith("chrome://"):
+                    return p
+        time.sleep(0.3)
+    all_urls = [p.url for ctx in browser.contexts for p in ctx.pages]
+    pytest.fail(f"No Chrome tab found after 10s. Pages: {all_urls}")
+
+
+def _sso_login_and_verify_role(browser, email, expected_role, print_reminder=False):
+    """Verify KC SSO, log in to app, assert role in profile dialog."""
+    page = _find_real_page(browser)
+    page.set_default_timeout(10000)
+
+    expect(page).to_have_url(re.compile(r"keycloak\.dev\.local.*\/account"), timeout=30000)
+    print(f"\n[sso] Keycloak authenticated for {email}. URL: {page.url}")
+
+    if print_reminder:
+        print(f"\n[sso] REMINDER: npm start must be running on {APP_URL}")
+    page.goto(APP_URL)
+
+    user_label = page.locator("header").get_by_text(email)
+    try:
+        user_label.wait_for(state="visible", timeout=5000)
+        print(f"[sso] Already logged in as {email}")
+    except PlaywrightTimeoutError:
+        page.get_by_role("button", name="Login with SSO").click()
+        user_label.wait_for(state="visible", timeout=30000)
+        print(f"[sso] Logged in via SSO. {email} visible in header.")
+
+    user_label.click()
+    page.get_by_role("menuitem", name="Profile").click()
+    expect(page.get_by_role("dialog").get_by_text(expected_role, exact=True)).to_be_visible(timeout=5000)
+    print(f"[sso] Profile shows '{expected_role}' role. ✓")
+
+
+def _supabase_admin(path, method="GET", **kwargs):
+    load_dotenv(os.path.abspath("test-app/backend/.env"))
+    load_dotenv(os.path.abspath("test-app/frontend/.env"))
+    api_url = os.getenv("REACT_APP_SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("REACT_APP_SUPABASE_SERVICE_KEY")
+    assert api_url and key, "Missing REACT_APP_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
+    headers = {"Authorization": f"Bearer {key}", "apikey": key}
+    resp = requests.request(method, f"{api_url}/auth/v1/admin{path}", headers=headers, **kwargs)
+    resp.raise_for_status()
+    return resp
+
+
+def _find_supabase_user(email):
+    users = _supabase_admin("/users").json().get("users", [])
+    return next((u for u in users if u["email"] == email), None)
+
+
+def _delete_supabase_user(email):
+    user = _find_supabase_user(email)
+    assert user, f"User {email} not found in Supabase"
+    _supabase_admin(f"/users/{user['id']}", method="DELETE")
+    print(f"[sso] Deleted Supabase user: {email}")
+
+
+def _assert_keycloak_only(email):
+    user = _find_supabase_user(email)
+    assert user, f"User {email} not found in Supabase"
+
+    providers = user.get("app_metadata", {}).get("providers", [])
+    assert providers == ["keycloak"], f"Expected ['keycloak'] providers, got: {providers}"
+
+    # Supabase stores identities=null for pure SSO users (no local password identity).
+    identities = user.get("identities") or []
+    non_keycloak = [i["provider"] for i in identities if i["provider"] != "keycloak"]
+    assert not non_keycloak, f"Found non-keycloak identities: {non_keycloak}"
+
+    label = "null (pure SSO)" if user.get("identities") is None else identities
+    print(f"[sso] {email} is Keycloak-only. providers={providers}, identities={label} ✓")
+
+
+def _full_sso_cycle(playwright, email, expected_role, user_arg=None, print_reminder=False):
+    """
+    Round 1 → login + verify role
+    Kill Chrome → delete from Supabase
+    Round 2 → re-login + verify role
+    API check → Keycloak-only
+    Chrome stays open after round 2; caller is responsible for closing it.
+    """
+    browser = playwright.chromium.connect_over_cdp(f"http://localhost:{CDP_PORT}")
+    _sso_login_and_verify_role(browser, email, expected_role, print_reminder=print_reminder)
+
+    _close_chrome()
+    _delete_supabase_user(email)
+
+    _launch_chrome(user=user_arg)
+    browser2 = playwright.chromium.connect_over_cdp(f"http://localhost:{CDP_PORT}")
+    _sso_login_and_verify_role(browser2, email, expected_role)
+    _assert_keycloak_only(email)
+    _close_chrome()
+
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
+
+def test_sso_admin_profile(sso_chrome):
+    with sync_playwright() as playwright:
+        _launch_chrome(user="admin")
+        _full_sso_cycle(playwright, "admin@test.com", "admin", print_reminder=True)
+    # Chrome from round 2 stays open; test_sso_user1_profile will close it.
+
+
+def test_sso_user1_profile(sso_chrome):
+    with sync_playwright() as playwright:
+        _launch_chrome(user="user1")
+        _full_sso_cycle(playwright, "user1@test.com", "user", user_arg="user1")

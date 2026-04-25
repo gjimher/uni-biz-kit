@@ -61,6 +61,36 @@
         "required": ["email", "password", "roles"]
       }
     },
+    "sso": {
+      "type": "object",
+      "description": "SSO (Kerberos/OIDC via Keycloak) configuration for single sign-on login",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether SSO login is enabled",
+          "default": false
+        },
+        "domain": {
+          "type": "string",
+          "description": "Kerberos realm / email domain for SSO users (e.g. 'dev.local')"
+        },
+        "role_claim": {
+          "type": "string",
+          "description": "Name of the JWT claim containing the user role(s) from the SSO provider",
+          "default": "roles"
+        },
+        "default_role": {
+          "type": "string",
+          "description": "Role assigned when no matching role is found in the SSO claim",
+          "default": "user"
+        }
+      },
+      "default": {
+        "enabled": false,
+        "role_claim": "roles",
+        "default_role": "user"
+      }
+    },
     "rules_level_1": {
       "type": "array",
       "description": "General security rules for role-based access control. Lower priority.",

@@ -345,6 +345,13 @@ class SchemaProcessor:
 
     def _enrich_security(self):
         """Inject default roles and users if missing, and expand rule wildcards."""
+        # Propagate SSO config with defaults
+        if "sso" in self.security_extended:
+            sso = self.security_extended["sso"]
+            sso.setdefault("enabled", False)
+            sso.setdefault("role_claim", "roles")
+            sso.setdefault("default_role", "user")
+
         # Ensure basic structures are always present for schema validation
         if "roles" not in self.security_extended or not self.security_extended["roles"]:
             self.security_extended["roles"] = [

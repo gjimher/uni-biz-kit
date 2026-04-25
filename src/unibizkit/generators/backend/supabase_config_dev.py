@@ -1,5 +1,20 @@
 import re
 from .context import Context
+from ..dev_sso.constants import KC_PORT, REALM_NAME
+
+
+def _sso_sections(kc_port: int, realm_name: str) -> str:
+    return f"""
+[auth.external.keycloak]
+enabled = true
+client_id = "supabase"
+secret = "REPLACE_WITH_DEV_SSO_SECRET"
+url = "http://keycloak.dev.local:{kc_port}/realms/{realm_name}"
+
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
+"""
 
 
 def generate(ctx: Context) -> str:
@@ -18,6 +33,9 @@ def generate(ctx: Context) -> str:
     allow_registration = registration['allow']
     enable_signup = 'true' if allow_registration else 'false'
 
+    sso_config = ctx.security_config["sso"]
+    sso_enabled = sso_config["enabled"]
+
     app_name = ctx.business_schema.get('name', 'app')
     project_id = re.sub(r'[^a-z0-9]+', '_', app_name.lower()).strip('_')
 
@@ -28,6 +46,7 @@ project_id = "{project_id}"
 [api]
 enabled = true
 port = 55321
+external_url = "http://localhost:55321"
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
@@ -95,7 +114,7 @@ max_indexes = 5
 [auth]
 enabled = true
 site_url = "{base_url}"
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+additional_redirect_urls = ["{base_url}", "{base_url}/**"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
@@ -204,4 +223,4 @@ admin_email = "{smtp_from}"
 sender_name = "App"
 user = "{smtp_user}"
 pass = "{smtp_pass}"
-"""
+""" + (_sso_sections(KC_PORT, REALM_NAME) if sso_enabled else "")

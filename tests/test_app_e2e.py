@@ -79,7 +79,7 @@ def test_create_product_as_user(page: Page, app_server):
     page.locator('input[name="price"]').fill("49.99")
     page.locator('input[name="stock_quantity"]').fill("100")
     page.locator('input[name="sku"]').fill("PURE-E2E-001")
-    page.get_by_label("Status").click()
+    page.get_by_role("combobox", name="Status").click()
     page.get_by_role("option", name="published").click()
     page.get_by_label("Save").click()
     page.wait_for_timeout(1000)
@@ -94,7 +94,7 @@ def test_create_product_as_user(page: Page, app_server):
     # Verify Relations tab
     page.get_by_role("row", name="_User Journey Product").click()
     page.get_by_role("tab", name="Relations").click()
-    expect(page.get_by_label("Categories")).to_be_visible()
+    expect(page.get_by_role("combobox", name="Categories")).to_be_visible()
 
 
 def test_create_order_and_upload_document_as_user(page: Page, app_server):
@@ -127,7 +127,7 @@ def test_create_order_and_upload_document_as_user(page: Page, app_server):
     page.locator('input[name="total_amount"]').fill("99.99")
     page.locator('input[name="shipping_address"]').fill("_E2E Test Order Address")
     # Select first available customer from the MUI Select dropdown
-    page.get_by_label("Customer *").click()
+    page.get_by_role("combobox", name="Customer").click()
     page.get_by_role("option").first.click()
 
     page.get_by_label("Save").click()

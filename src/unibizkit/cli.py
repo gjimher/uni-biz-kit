@@ -531,7 +531,7 @@ Examples:
             # Generate bin/ scripts
             bin_dir = output_dir / "bin"
             bin_dir.mkdir(exist_ok=True)
-            generate_bin_scripts(bin_dir)
+            generate_bin_scripts(bin_dir, schema_loader.security_config)
         
         # Generate React-Admin frontend
         if not args.skip_frontend:

@@ -5,6 +5,12 @@
     "allow": true,
     "role": "user"
   },
+  "sso": {
+    "enabled": true,
+    "domain": "dev.local",
+    "role_claim": "roles",
+    "default_role": "user"
+  },
   "users": [
     {
       "email": "admin@test.com",

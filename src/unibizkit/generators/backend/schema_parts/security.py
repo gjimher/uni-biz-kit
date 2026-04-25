@@ -1,6 +1,117 @@
 from typing import Any, Dict, List
 
 
+def _generate_sso_hook(sso_config: Dict[str, Any]) -> str:
+    role_claim = sso_config.get('role_claim', 'roles')
+    default_role = sso_config.get('default_role', 'user')
+    allowed_roles = ", ".join(f"'{role['name']}'" for role in sso_config["_all_roles"])
+    return f"""
+-- SSO access token hook: maps the SSO JWT roles claim to app_metadata.roles.
+-- Email/password users keep their existing app_metadata.roles unchanged.
+CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+DECLARE
+  claims jsonb;
+  sso_roles jsonb;
+  filtered_sso_roles jsonb;
+BEGIN
+  claims := event -> 'claims';
+
+  SELECT coalesce(
+    identity_data -> '{role_claim}',
+    identity_data -> 'custom_claims' -> '{role_claim}',
+    identity_data -> 'realm_access' -> 'roles'
+  )
+  INTO sso_roles
+  FROM auth.identities
+  WHERE user_id = (event ->> 'user_id')::uuid
+    AND provider != 'email'
+  LIMIT 1;
+
+  IF sso_roles IS NOT NULL AND jsonb_typeof(sso_roles) = 'array' THEN
+    SELECT coalesce(jsonb_agg(to_jsonb(role_name)), '[]'::jsonb)
+    INTO filtered_sso_roles
+    FROM (
+      SELECT DISTINCT role_name
+      FROM jsonb_array_elements_text(sso_roles) AS role_name
+      WHERE role_name IN ({allowed_roles})
+    ) valid_roles;
+  ELSE
+    filtered_sso_roles := NULL;
+  END IF;
+
+  IF filtered_sso_roles IS NOT NULL AND jsonb_array_length(filtered_sso_roles) > 0 THEN
+    claims := jsonb_set(claims, '{{app_metadata}}',
+      coalesce(claims -> 'app_metadata', '{{}}'::jsonb) ||
+      jsonb_build_object('roles', filtered_sso_roles));
+  ELSIF sso_roles IS NOT NULL THEN
+    claims := jsonb_set(claims, '{{app_metadata}}',
+      coalesce(claims -> 'app_metadata', '{{}}'::jsonb) ||
+      jsonb_build_object('roles', to_jsonb(array['{default_role}'])));
+  END IF;
+
+  RETURN jsonb_set(event, '{{claims}}', claims);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.custom_access_token_hook TO supabase_auth_admin;
+REVOKE EXECUTE ON FUNCTION public.custom_access_token_hook FROM authenticated, anon, public;
+"""
+
+
+def _generate_auth_user_roles_trigger(security_config: Dict[str, Any]) -> str:
+    default_role = security_config["registration"]["role"]
+    allowed_roles = ", ".join(f"'{role['name']}'" for role in security_config["roles"])
+    return f"""
+-- Keep auth.users.raw_app_meta_data.roles aligned with SSO claims when present.
+CREATE OR REPLACE FUNCTION public.sync_auth_user_roles()
+RETURNS TRIGGER AS $$
+DECLARE
+  incoming_roles jsonb;
+  filtered_roles jsonb;
+BEGIN
+  incoming_roles := coalesce(
+    NEW.raw_user_meta_data -> 'roles',
+    NEW.raw_user_meta_data -> 'custom_claims' -> 'roles',
+    NEW.raw_user_meta_data -> 'realm_access' -> 'roles'
+  );
+
+  IF incoming_roles IS NOT NULL AND jsonb_typeof(incoming_roles) = 'array' THEN
+    SELECT coalesce(jsonb_agg(to_jsonb(role_name)), '[]'::jsonb)
+    INTO filtered_roles
+    FROM (
+      SELECT DISTINCT role_name
+      FROM jsonb_array_elements_text(incoming_roles) AS role_name
+      WHERE role_name IN ({allowed_roles})
+    ) valid_roles;
+
+    IF jsonb_array_length(filtered_roles) > 0 THEN
+      NEW.raw_app_meta_data := coalesce(NEW.raw_app_meta_data, '{{}}'::jsonb) ||
+        jsonb_build_object('roles', filtered_roles);
+      RETURN NEW;
+    END IF;
+  END IF;
+
+  IF TG_OP = 'INSERT' AND coalesce(NEW.raw_app_meta_data, '{{}}'::jsonb) -> 'roles' IS NULL THEN
+    NEW.raw_app_meta_data := coalesce(NEW.raw_app_meta_data, '{{}}'::jsonb) ||
+      jsonb_build_object('roles', to_jsonb(array['{default_role}']));
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_roles_sync ON auth.users;
+CREATE TRIGGER on_auth_user_roles_sync
+  BEFORE INSERT OR UPDATE OF raw_user_meta_data, raw_app_meta_data ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.sync_auth_user_roles();
+"""
+
+
 def generate_security_policies(
     concepts: List[Dict[str, Any]],
     concept_map: Dict[str, Any],
@@ -9,29 +120,14 @@ def generate_security_policies(
 ) -> List[str]:
     policies = []
 
+    sso_config = security_config["sso"]
+    if sso_config["enabled"]:
+        sso_config = {**sso_config, "_all_roles": security_config["roles"]}
+        policies.append(_generate_sso_hook(sso_config))
+
     registration = security_config["registration"]
     if registration["allow"]:
-        default_role = registration["role"]
-        policies.append(f"""
--- Trigger to set default roles for new users
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  -- We set the role in app_metadata
-  UPDATE auth.users
-  SET raw_app_meta_data = coalesce(raw_app_meta_data, '{{}}'::jsonb) ||
-    jsonb_build_object('roles', array['{default_role}'])
-  WHERE id = NEW.id;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Check if trigger exists and recreate it
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-""")
+        policies.append(_generate_auth_user_roles_trigger(security_config))
 
     _acl = security_config["_acl"]
     roles = security_config["roles"]
