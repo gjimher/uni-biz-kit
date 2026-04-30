@@ -24,11 +24,11 @@ from smtp_mock import smtp_emails as _smtp_emails, smtp_lock as _smtp_lock, extr
 
 def _load_env():
     load_dotenv(os.path.abspath("test-app/backend/.env"))
-    load_dotenv(os.path.abspath("test-app/frontend/.env"))
-    api_url = os.getenv("REACT_APP_SUPABASE_URL")
-    anon_key = os.getenv("REACT_APP_SUPABASE_KEY")
-    assert api_url, "REACT_APP_SUPABASE_URL not found in frontend .env"
-    assert anon_key, "REACT_APP_SUPABASE_KEY not found in frontend .env"
+    load_dotenv(os.path.abspath("test-app/frontend/.env.development"))
+    api_url = os.getenv("VITE_SUPABASE_URL")
+    anon_key = os.getenv("VITE_SUPABASE_KEY")
+    assert api_url, "VITE_SUPABASE_URL not found in frontend .env.development"
+    assert anon_key, "VITE_SUPABASE_KEY not found in frontend .env.development"
     return api_url, anon_key
 
 
@@ -223,7 +223,7 @@ TEST_PASSWORD = "TestPassword123!"
 def test_security_allows_registration():
     """Verify security_extended.json has registration.allow=true."""
     sec_file = os.path.abspath("test-app/security_extended.json")
-    assert os.path.exists(sec_file), "security_extended.json not found - run pytest tests/test_app_backend.py first"
+    assert os.path.exists(sec_file), "security_extended.json not found - run pytest tests/test_backend.py first"
 
     with open(sec_file) as f:
         sec = json.load(f)
@@ -235,13 +235,16 @@ def test_security_allows_registration():
 
 
 def test_supabase_config_generated():
-    """Verify the generated supabase_config.toml contains SMTP settings."""
-    config_file = os.path.abspath("test-app/backend/supabase_config.toml")
-    assert os.path.exists(config_file), "supabase_config.toml not found"
+    """Verify the generated supabase_config_dev.toml contains SMTP settings."""
+    config_file = os.path.abspath("test-app/backend/supabase_config_dev.toml")
+    assert os.path.exists(config_file), "supabase_config_dev.toml not found"
 
     content = Path(config_file).read_text()
     assert "enable_confirmations = true" in content
     assert "enable_signup = true" in content
+    assert "[auth.rate_limit]" in content
+    assert "email_sent = 120" in content
+    assert 'max_frequency = "1s"' in content
     assert str(SMTP_PORT) in content
 
 
@@ -266,7 +269,7 @@ def test_register_user_and_email_flow(smtp_server):
     5. Verify can now login
     """
     api_url, anon_key = _load_env()
-    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("REACT_APP_SUPABASE_SERVICE_KEY")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
     # -- Step 1: Sign up
     global _smtp_emails
@@ -328,12 +331,6 @@ def test_register_user_and_email_flow(smtp_server):
 
     content = email_received["content"]
     print(f"\n--- Confirmation email ---\n{content[:500]}\n---")
-    Path("tmp-dev-smtp-mock.txt").write_text(
-        f"=== Email received at {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n"
-        f"FROM: {email_received['mail_from']}\n"
-        f"TO: {', '.join(email_received['rcpt_tos'])}\n\n"
-        f"{content}\n"
-    )
 
     links = _extract_links(content)
     confirmation_links = [l for l in links if any(k in l for k in ("verify", "confirm", "token", "signup"))]
@@ -404,11 +401,11 @@ def test_forgot_password_flow(smtp_server):
     7. Restore the original password via the admin API
     """
     api_url, anon_key = _load_env()
-    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("REACT_APP_SUPABASE_SERVICE_KEY")
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
     # Use the first seeded user — already confirmed, no email flow needed for setup
     sec_file = os.path.abspath("test-app/security_extended.json")
-    assert os.path.exists(sec_file), "security_extended.json not found — run tests/test_app_backend.py first"
+    assert os.path.exists(sec_file), "security_extended.json not found — run tests/test_backend.py first"
     with open(sec_file) as f:
         sec = json.load(f)
     test_user = sec["users"][0]
@@ -511,10 +508,10 @@ def test_seeded_users_login_and_rls():
     with open(security_extended_file, "r") as f:
         auth_users = json.load(f)["users"]
 
-    load_dotenv(os.path.join(frontend_dir, ".env"))
-    api_url = os.getenv("REACT_APP_SUPABASE_URL")
-    anon_key = os.getenv("REACT_APP_SUPABASE_KEY")
-    assert api_url and anon_key, "REACT_APP_SUPABASE_URL / REACT_APP_SUPABASE_KEY not found in frontend .env"
+    load_dotenv(os.path.join(frontend_dir, ".env.development"))
+    api_url = os.getenv("VITE_SUPABASE_URL")
+    anon_key = os.getenv("VITE_SUPABASE_KEY")
+    assert api_url and anon_key, "VITE_SUPABASE_URL / VITE_SUPABASE_KEY not found in frontend .env.development"
 
     for user in auth_users:
         email = user["email"]

@@ -50,13 +50,13 @@ Change generators, run pytest and check generated code in test-app output direct
 
 To verify SQL generation:
 ```bash
-pytest tests/test_app_backend.py
+pytest tests/test_backend.py
 ```
 **Note:** This test recreates the database state (wipes the `public` schema and cleans up `auth` users) to ensure a clean deployment verification.
 
 To verify Frontend generation:
 ```bash
-pytest tests/test_app_frontend.py
+pytest tests/test_frontend.py
 ```
 
 To run all tests:

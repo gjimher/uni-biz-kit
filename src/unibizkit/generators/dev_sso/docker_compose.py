@@ -1,5 +1,5 @@
 from pathlib import Path
-from .constants import KDC_PORT, KADMIN_PORT, KC_PORT
+from .. import dev_ports
 
 
 def generate(sso_dir: Path):
@@ -7,23 +7,26 @@ def generate(sso_dir: Path):
 
 
 def _content() -> str:
+    n = f"{dev_ports.ENV_NUM:02d}"
     return f"""\
 services:
   kdc:
     build: ./kdc
+    image: unibizkit-sso-kdc-{n}:latest
+    container_name: kdc_{n}
     hostname: kdc.dev.local
     volumes:
       - ./krb5.conf:/etc/krb5.conf:ro
       - ./kdc.conf:/etc/krb5kdc/kdc.conf:ro
-      - kdc-data:/var/lib/krb5kdc
-      - keytabs:/keytabs
+      - kdc-data-{n}:/var/lib/krb5kdc
+      - keytabs-{n}:/keytabs
       - ./caches:/caches
     ports:
-      - "{KDC_PORT}:88/udp"
-      - "{KDC_PORT}:88/tcp"
-      - "{KADMIN_PORT}:749"
+      - "{dev_ports.KDC_PORT}:88/udp"
+      - "{dev_ports.KDC_PORT}:88/tcp"
+      - "{dev_ports.KADMIN_PORT}:749"
     networks:
-      sso-net:
+      sso-net-{n}:
         aliases:
           - kdc.dev.local
     healthcheck:
@@ -36,6 +39,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     command: start-dev
+    container_name: keycloak_{n}
     hostname: keycloak.dev.local
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -44,13 +48,13 @@ services:
       JAVA_OPTS_APPEND: "-Dsun.security.krb5.debug=true -Dsun.security.jgss.debug=true"
     volumes:
       - ./krb5.conf:/etc/krb5.conf:ro
-      - keytabs:/keytabs:ro
-      - keycloak-data:/opt/keycloak/data
+      - keytabs-{n}:/keytabs:ro
+      - keycloak-data-{n}:/opt/keycloak/data
     ports:
-      - "{KC_PORT}:8080"
-      - "19000:9000"
+      - "{dev_ports.KC_PORT}:8080"
+      - "{dev_ports.KC_MGMT_PORT}:9000"
     networks:
-      sso-net:
+      sso-net-{n}:
         aliases:
           - keycloak.dev.local
     depends_on:
@@ -58,11 +62,11 @@ services:
         condition: service_healthy
 
 volumes:
-  kdc-data:
-  keytabs:
-  keycloak-data:
+  kdc-data-{n}:
+  keytabs-{n}:
+  keycloak-data-{n}:
 
 networks:
-  sso-net:
+  sso-net-{n}:
     driver: bridge
 """

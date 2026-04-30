@@ -295,9 +295,9 @@ npx supabase status -o json # view urls and keys
 # view containter logs: docker ps --format '{{.Names}}' | grep '^supabase_' | xargs -I {} docker logs -f {} 
 
 # save api key
-cat > ../frontend/.env << EOF
-REACT_APP_SUPABASE_URL=$(npx supabase status -o json | jq -r '.API_URL')
-REACT_APP_SUPABASE_KEY=$(npx supabase status -o json | jq -r '.ANON_KEY')
+cat > ../frontend/.env.development << EOF
+VITE_SUPABASE_URL=$(npx supabase status -o json | jq -r '.API_URL')
+VITE_SUPABASE_KEY=$(npx supabase status -o json | jq -r '.ANON_KEY')
 EOF
 
 cat > .env << EOF
@@ -316,8 +316,8 @@ cp supabase_schema.sql supabase/migrations/*_init_schema.sql
 cp supabase_sample_data.sql supabase/seed.sql
 npx supabase db reset
 # check data
-source frontend/.env
-curl -X GET -H "apikey: $REACT_APP_SUPABASE_KEY" "$REACT_APP_SUPABASE_URL/rest/v1/customer?select=*" | jq '.' # ok, 3 customers
+source frontend/.env.development
+curl -X GET -H "apikey: $VITE_SUPABASE_KEY" "$VITE_SUPABASE_URL/rest/v1/customer?select=*" | jq '.' # ok, 3 customers
 ```
 
 ### Create Auth Users

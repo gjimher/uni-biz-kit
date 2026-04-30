@@ -1,19 +1,15 @@
-def generate() -> str:
-    return """import { defineConfig, loadEnv } from 'vite';
+from .. import dev_ports
+
+_TEMPLATE = r"""import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), 'REACT_APP_');
-  const processEnv = Object.fromEntries(
-    Object.entries(env).map(([k, v]) => [`process.env.${k}`, JSON.stringify(v)])
-  );
+export default defineConfig(() => {
   return {
     plugins: [react()],
-    define: processEnv,
     resolve: {
       alias: [
         {
-          find: /^@mui\\/icons-material\\/(.+)/,
+          find: /^@mui\/icons-material\/(.+)/,
           replacement: '@mui/icons-material/esm/$1',
         },
         {
@@ -23,9 +19,13 @@ export default defineConfig(({ mode }) => {
       ],
     },
     server: {
-      port: parseInt(process.env.PORT) || 3000,
+      port: parseInt(process.env.PORT) || __FRONTEND_PORT__,
       open: false,
     },
   };
 });
 """
+
+
+def generate() -> str:
+    return _TEMPLATE.replace('__FRONTEND_PORT__', str(dev_ports.FRONTEND))

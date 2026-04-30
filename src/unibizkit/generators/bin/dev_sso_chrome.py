@@ -1,5 +1,6 @@
 from pathlib import Path
-from ..dev_sso.constants import REALM, KC_PORT
+from .. import dev_ports
+from ..dev_sso.constants import REALM
 
 
 def generate(bin_dir: Path):
@@ -14,7 +15,9 @@ def _content() -> str:
         '"""Get a Kerberos ticket and launch Google Chrome for SSO testing."""\n'
         '\n'
         f'REALM = "{REALM}"\n'
-        f'KC_PORT = {KC_PORT}\n'
+        f'KC_PORT = {dev_ports.KC_PORT}\n'
+        f'REMOTE_DEBUG_PORT = {dev_ports.CHROME_DEBUG}\n'
+        f'COMPOSE_PROJECT = "unibizkit-sso-{dev_ports.ENV_NUM:02d}"\n'
         'REALM_NAME = "dev-local"\n'
     )
     return header + _body()
@@ -30,8 +33,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-
-REMOTE_DEBUG_PORT = 3011
 
 root_dir = Path(__file__).parent.parent
 sso_dir = root_dir / 'dev-sso'
@@ -77,7 +78,7 @@ if COMPOSE is None:
 
 print(f"Getting Kerberos ticket for {username}@{REALM}...")
 result = subprocess.run(
-    COMPOSE + ['-f', str(dc_file), 'exec', '-T', 'kdc', 'bash', '-c',
+    COMPOSE + ['-p', COMPOSE_PROJECT, '-f', str(dc_file), 'exec', '-T', 'kdc', 'bash', '-c',
         f"echo {repr(password)} | "
         f"KRB5CCNAME=FILE:/caches/krb5cc_{username} kinit {username}@{REALM} && "
         f"KRB5CCNAME=FILE:/caches/krb5cc_{username} kvno HTTP/keycloak.dev.local@{REALM} && "

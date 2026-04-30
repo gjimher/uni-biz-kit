@@ -1,93 +1,62 @@
-#!/usr/bin/env python
-"""
-Development SMTP Mock Server
+from pathlib import Path
 
-Listens on a configurable port (default: 3010) and captures all incoming emails.
-Prints email content to stdout and appends to tmp-dev-smtp-mock.txt.
-
-Usage:
-    python dev_smtp_mock.py [port]
-    python dev_smtp_mock.py 3010
-
-Environment:
-    SMTP_MOCK_PORT  - Port to listen on (default: 3010)
-    SMTP_MOCK_LOG   - Log file path (default: tmp-dev-smtp-mock.txt)
-"""
+_SCRIPT = r'''#!/usr/bin/python3
+"""Development SMTP mock server — captures emails and prints them to stdout."""
 
 import asyncio
-import sys
-import os
-import re
-import quopri
 import html
+import os
+import quopri
+import re
+import sys
 from datetime import datetime
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("SMTP_MOCK_PORT", 3010))
-LOG_FILE = os.environ.get("SMTP_MOCK_LOG", "tmp-dev-smtp-mock.txt")
-
-
-def log(text: str):
-    """Write to stdout and to the log file."""
-    print(text)
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(text + "\n")
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("SMTP_MOCK_PORT", 3000 + 100 * int(os.environ.get("UBK_DEV_ENV_NUM", "0")) + 10))
 
 
 def extract_links(body: str) -> list:
-    """Extract all URLs from the email body, decoding quoted-printable and HTML entities."""
-    decoded_body = body
+    decoded = body
     if re.search(r'Content-Transfer-Encoding:\s*quoted-printable', body, re.IGNORECASE):
         parts = re.split(r'\n\n', body, maxsplit=1)
         if len(parts) == 2:
             headers, content = parts
             try:
-                decoded_content = quopri.decodestring(content.encode()).decode('utf-8', errors='replace')
-                decoded_body = headers + '\n\n' + decoded_content
+                decoded = headers + '\n\n' + quopri.decodestring(content.encode()).decode('utf-8', errors='replace')
             except Exception:
                 pass
-    decoded_body = html.unescape(decoded_body)
-    url_pattern = re.compile(r'https?://[^\s<>"\']+')
-    return url_pattern.findall(decoded_body)
+    return re.compile(r'https?://[^\s<>"\']+').findall(html.unescape(decoded))
 
 
 class SMTPSession:
-    """Handles a single SMTP client connection."""
-
-    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    def __init__(self, reader, writer):
         self.reader = reader
         self.writer = writer
         self.mail_from = ""
         self.rcpt_to = []
         self.data_lines = []
         self.in_data = False
-        self.peer = writer.get_extra_info("peername", ("?", 0))
 
-    async def send(self, line: str):
+    async def send(self, line):
         self.writer.write((line + "\r\n").encode())
         await self.writer.drain()
 
     async def handle(self):
-        await self.send("220 localhost UniBizKit SMTP Mock Server")
-
+        await self.send("220 localhost SMTP Mock")
         try:
             while True:
                 raw = await asyncio.wait_for(self.reader.readline(), timeout=60)
                 if not raw:
                     break
                 line = raw.decode(errors="replace").rstrip("\r\n")
-
                 if self.in_data:
                     if line == ".":
                         self.in_data = False
-                        await self._save_email()
+                        await self._print_email()
                         await self.send("250 OK: Message accepted")
                     else:
-                        # Unescape leading dots
                         self.data_lines.append(line[1:] if line.startswith("..") else line)
                     continue
-
                 cmd = line.upper()
-
                 if cmd.startswith("EHLO") or cmd.startswith("HELO"):
                     await self.send("250-localhost\r\n250-SIZE 10240000\r\n250 OK")
                 elif cmd.startswith("MAIL FROM:"):
@@ -115,59 +84,42 @@ class SMTPSession:
                     await self.send("250 OK")
                 else:
                     await self.send("500 Command not recognized")
-        except asyncio.TimeoutError:
-            pass
-        except ConnectionResetError:
+        except (asyncio.TimeoutError, ConnectionResetError):
             pass
         finally:
             self.writer.close()
 
-    async def _save_email(self):
+    async def _print_email(self):
         body = "\n".join(self.data_lines)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sep = "=" * 72
+        output = f"\n{sep}\nSMTP EMAIL RECEIVED at {timestamp}\n{sep}\nFROM:    {self.mail_from}\nTO:      {', '.join(self.rcpt_to)}\n{sep}\n{body}"
         links = extract_links(body)
-
-        separator = "=" * 72
-        output = f"""
-{separator}
-SMTP EMAIL RECEIVED at {timestamp}
-{separator}
-FROM:    {self.mail_from}
-TO:      {", ".join(self.rcpt_to)}
-{separator}
-{body}
-"""
         if links:
-            output += f"\n--- LINKS FOUND ---\n"
-            for link in links:
-                output += f"  {link}\n"
-        output += separator
-
-        log(output)
+            output += "\n--- LINKS FOUND ---\n" + "".join(f"  {lnk}\n" for lnk in links)
+        output += sep
+        print(output, flush=True)
 
 
-async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-    session = SMTPSession(reader, writer)
-    await session.handle()
+async def handle_client(reader, writer):
+    await SMTPSession(reader, writer).handle()
 
 
 async def main():
     server = await asyncio.start_server(handle_client, "0.0.0.0", PORT)
-    banner = f"""
-{"=" * 60}
-  UniBizKit Dev SMTP Mock Server
-  Listening on port {PORT}
-  Logging to: {LOG_FILE}
-{"=" * 60}
-"""
-    log(banner)
-
+    print(f"\n{'=' * 60}\n  Dev SMTP Mock — listening on port {PORT}\n{'=' * 60}\n", flush=True)
     async with server:
         await server.serve_forever()
 
 
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\nSMTP mock server stopped.")
+try:
+    asyncio.run(main())
+except KeyboardInterrupt:
+    print("\nSMTP mock server stopped.")
+'''
+
+
+def generate(bin_dir: Path):
+    script = bin_dir / "dev-smtp-mock.py"
+    script.write_text(_SCRIPT)
+    script.chmod(0o755)

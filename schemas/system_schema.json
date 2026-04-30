@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "System Schema",
-  "description": "Schema for system-level configuration such as SMTP settings and base URL",
+  "description": "Schema for system-level configuration such as SMTP settings and production base URL",
   "type": "object",
   "properties": {
     "$schema": {
@@ -43,8 +43,7 @@
     },
     "base_url": {
       "type": "string",
-      "description": "Base URL of the application (used in email links)",
-      "default": "http://localhost:3000"
+      "description": "Production base URL of the application, used in production email links and redirects. Local development uses generated VITE_BASE_URL in frontend/.env.development."
     }
   },
   "additionalProperties": false

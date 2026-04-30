@@ -2,7 +2,6 @@ from ...context import Context
 
 
 def generate(ctx: Context) -> str:
-    base_url = ctx.system_config.get("base_url", "http://localhost:3000")
     sso_enabled = ctx.security_config["sso"]["enabled"]
     allow_registration = ctx.security_config["registration"]["allow"]
 
@@ -163,7 +162,7 @@ import {{ LoginPage, LoginForm }} from 'ra-supabase';
 import {{ supabaseClient }} from '../supabaseClient';
 import {{ Box, Tab, Tabs, Button, TextField, CircularProgress, Alert{divider_import} }} from '@mui/material';
 
-const BASE_URL = '{base_url}';
+const BASE_URL = import.meta.env.VITE_BASE_URL || window.location.origin;
 
 const RegisterForm = () => {{
     const notify = useNotify();

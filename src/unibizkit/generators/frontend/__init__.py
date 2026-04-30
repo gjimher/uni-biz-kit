@@ -14,6 +14,7 @@ from .src.components import (
     custom_edit_toolbar, document_tab, workflow_selector, field_help_icon
 )
 from .src.resources import resource
+from .. import dev_ports
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,24 @@ logger = logging.getLogger(__name__)
 def _write(path: Path, content: str):
     with open(path, 'w', encoding='utf-8') as f:
         f.write(content)
+
+
+def _upsert_env(path: Path, values: dict[str, str]):
+    existing = {}
+    order = []
+    if path.exists():
+        for line in path.read_text(encoding='utf-8').splitlines():
+            if line.strip() and not line.lstrip().startswith('#') and '=' in line:
+                key, _, value = line.partition('=')
+                key = key.strip()
+                existing[key] = value.strip()
+                order.append(key)
+    for key, value in values.items():
+        if key not in existing:
+            order.append(key)
+        existing[key] = value
+    content = ''.join(f"{key}={existing[key]}\n" for key in dict.fromkeys(order))
+    path.write_text(content, encoding='utf-8')
 
 
 class ReactAdminGenerator:
@@ -52,6 +71,9 @@ class ReactAdminGenerator:
         _write(ctx.output_dir / "vite.config.js", vite_config.generate())
         _write(ctx.output_dir / ".eslintrc.json", eslintrc.generate())
         _write(ctx.output_dir / "index.html", index_html.generate(ctx))
+        _upsert_env(ctx.output_dir / ".env.development", {
+            "VITE_BASE_URL": f"http://localhost:{dev_ports.FRONTEND}",
+        })
 
         # src/
         _write(ctx.output_dir / "src" / "supabaseClient.js", supabase_client.generate(ctx))

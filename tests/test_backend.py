@@ -55,10 +55,10 @@ class TestAppBackend:
         try:
             supabase_dir = backend_dir / 'supabase'
             if not supabase_dir.exists():
-                print("Running dev-supabase-create.py...")
-                create_script = output_dir / 'bin' / 'dev-supabase-create.py'
+                print("Running dev-supabase-start.py...")
+                create_script = output_dir / 'bin' / 'dev-supabase-start.py'
                 result = _run([sys.executable, str(create_script)], timeout=600)
-                assert result.returncode == 0, f"dev-supabase-create.py failed with code {result.returncode}"
+                assert result.returncode == 0, f"dev-supabase-start.py failed with code {result.returncode}"
             else:
                 print("Supabase directory already exists, skipping initialization")
 

@@ -1,5 +1,6 @@
 from pathlib import Path
-from .constants import REALM, KDC_PORT, KADMIN_PORT
+from .constants import REALM
+from .. import dev_ports
 
 
 def generate(sso_dir: Path):
@@ -16,8 +17,8 @@ def _content() -> str:
 
 [realms]
     {REALM} = {{
-        kdc = localhost:{KDC_PORT}
-        admin_server = localhost:{KADMIN_PORT}
+        kdc = localhost:{dev_ports.KDC_PORT}
+        admin_server = localhost:{dev_ports.KADMIN_PORT}
     }}
 
 [domain_realm]

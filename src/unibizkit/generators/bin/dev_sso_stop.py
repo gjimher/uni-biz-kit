@@ -1,4 +1,5 @@
 from pathlib import Path
+from .. import dev_ports
 
 
 def generate(bin_dir: Path, sso_dir: Path):
@@ -13,6 +14,7 @@ def _content(sso_dir: Path) -> str:
         '"""Stop SSO containers without removing volumes (use dev-sso-start.py to resume)."""\n'
         '\n'
         f'SSO_DIR = "{sso_dir}"\n'
+        f'COMPOSE_PROJECT = "unibizkit-sso-{dev_ports.ENV_NUM:02d}"\n'
     )
     return header + _body()
 
@@ -40,7 +42,7 @@ if COMPOSE is None:
     sys.exit("Error: Docker Compose not found.")
 
 result = subprocess.run(
-    COMPOSE + ['-f', str(dc_file), 'stop'],
+    COMPOSE + ['-p', COMPOSE_PROJECT, '-f', str(dc_file), 'stop'],
     stdout=sys.stdout, stderr=sys.stderr,
 )
 sys.exit(result.returncode)

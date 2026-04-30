@@ -4,6 +4,9 @@
 /tmp*/
 tmp-dev-smtp-mock.txt
 
+# direnv
+.envrc
+
 # Python
 __pycache__/
 *.py[cod]

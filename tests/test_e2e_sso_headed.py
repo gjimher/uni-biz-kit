@@ -23,8 +23,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, expect, TimeoutError as PlaywrightTimeoutError
 
-CDP_PORT = 3011
-APP_URL = "http://localhost:3000"
+_env_num = int(os.environ.get('UBK_DEV_ENV_NUM', '0'))
+_base = 3000 + 100 * _env_num
+CDP_PORT = _base + 2
+APP_URL = f"http://localhost:{_base}"
 BIN_DIR = Path(__file__).parent.parent / "test-app" / "bin"
 
 
@@ -114,10 +116,10 @@ def _sso_login_and_verify_role(browser, email, expected_role, print_reminder=Fal
 
 def _supabase_admin(path, method="GET", **kwargs):
     load_dotenv(os.path.abspath("test-app/backend/.env"))
-    load_dotenv(os.path.abspath("test-app/frontend/.env"))
-    api_url = os.getenv("REACT_APP_SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("REACT_APP_SUPABASE_SERVICE_KEY")
-    assert api_url and key, "Missing REACT_APP_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
+    load_dotenv(os.path.abspath("test-app/frontend/.env.development"))
+    api_url = os.getenv("VITE_SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    assert api_url and key, "Missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
     headers = {"Authorization": f"Bearer {key}", "apikey": key}
     resp = requests.request(method, f"{api_url}/auth/v1/admin{path}", headers=headers, **kwargs)
     resp.raise_for_status()

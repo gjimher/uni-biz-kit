@@ -21,16 +21,16 @@ def smtp_server():
 
 def pytest_collection_modifyitems(config, items):
     """Enforce test file execution order:
-    1. test_app_backend   — resets DB, seeds users (must run first)
-    2. test_app_frontend  — checks generated frontend files
-    3. test_app_api_auth  — API integration tests (needs seeded DB)
-    4. test_app_e2e       — browser E2E tests (needs running app + seeded DB)
+    1. test_backend   — resets DB, seeds users (must run first)
+    2. test_frontend  — checks generated frontend files
+    3. test_api_auth  — API integration tests (needs seeded DB)
+    4. test_e2e       — browser E2E tests (needs running app + seeded DB)
     """
     FILE_ORDER = [
-        "test_app_backend",
-        "test_app_frontend",
-        "test_app_api_auth",
-        "test_app_e2e",
+        "test_backend",
+        "test_frontend",
+        "test_api_auth",
+        "test_e2e",
     ]
 
     def file_rank(item):

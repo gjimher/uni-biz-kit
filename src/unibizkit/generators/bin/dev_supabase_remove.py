@@ -1,14 +1,18 @@
 from pathlib import Path
+from .dev_supabase_start import SUPABASE_CLI_VERSION
 
 
 def generate(bin_dir: Path):
     script = bin_dir / "dev-supabase-remove.py"
     with open(script, 'w', encoding='utf-8') as f:
-        f.write("""\
+        f.write(f"""\
 #!/usr/bin/python3
 \"\"\"Stop and remove the local Supabase instance (no backup).\"\"\"
 import sys
 from pathlib import Path
+
+SUPABASE_CLI_VERSION = "{SUPABASE_CLI_VERSION}"
+
 if sys.prefix == sys.base_prefix:
     sys.exit(
         f"Error: run this script with the project's virtual environment Python.\\n"
@@ -40,7 +44,7 @@ if not args.force:
 
 os.chdir(backend_dir)
 
-result = subprocess.run(['npx', 'supabase', 'stop', '--no-backup'],
+result = subprocess.run(['npx', f'supabase@{{SUPABASE_CLI_VERSION}}', 'stop', '--no-backup'],
                         stdout=sys.stdout, stderr=sys.stderr)
 if result.returncode != 0:
     sys.exit(result.returncode)

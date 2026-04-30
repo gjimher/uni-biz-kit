@@ -381,12 +381,12 @@ def test_order_document_owner_isolation():
     import requests as req
 
     load_dotenv("test-app/backend/.env")
-    load_dotenv("test-app/frontend/.env")
+    load_dotenv("test-app/frontend/.env.development")
     db_url = os.getenv("DB_URL")
     supabase_url = os.getenv("SUPABASE_URL")
-    anon_key = os.getenv("REACT_APP_SUPABASE_KEY")
+    anon_key = os.getenv("VITE_SUPABASE_KEY")
     if not db_url or not supabase_url or not anon_key:
-        pytest.skip("Missing DB_URL / SUPABASE_URL / REACT_APP_SUPABASE_KEY.")
+        pytest.skip("Missing DB_URL / SUPABASE_URL / VITE_SUPABASE_KEY.")
 
     # --- Sign in as user1 and user2 via Auth API to get real JWTs ---
     def sign_in(email, password):
@@ -510,13 +510,13 @@ def test_order_document_upload_authorization():
     import requests as req
 
     load_dotenv("test-app/backend/.env")
-    load_dotenv("test-app/frontend/.env")
+    load_dotenv("test-app/frontend/.env.development")
     db_url = os.getenv("DB_URL")
     supabase_url = os.getenv("SUPABASE_URL")
-    anon_key = os.getenv("REACT_APP_SUPABASE_KEY")
+    anon_key = os.getenv("VITE_SUPABASE_KEY")
     service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     if not db_url or not supabase_url or not anon_key:
-        pytest.skip("Missing DB_URL / SUPABASE_URL / REACT_APP_SUPABASE_KEY.")
+        pytest.skip("Missing DB_URL / SUPABASE_URL / VITE_SUPABASE_KEY.")
 
     def sign_in(email, password):
         resp = req.post(
@@ -1194,13 +1194,13 @@ def test_order_lifecycle_via_api():
     import requests as req
 
     load_dotenv("test-app/backend/.env")
-    load_dotenv("test-app/frontend/.env")
+    load_dotenv("test-app/frontend/.env.development")
     db_url = os.getenv("DB_URL")
     supabase_url = os.getenv("SUPABASE_URL")
-    anon_key = os.getenv("REACT_APP_SUPABASE_KEY")
+    anon_key = os.getenv("VITE_SUPABASE_KEY")
     service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     if not db_url or not supabase_url or not anon_key:
-        pytest.skip("Missing DB_URL / SUPABASE_URL / REACT_APP_SUPABASE_KEY.")
+        pytest.skip("Missing DB_URL / SUPABASE_URL / VITE_SUPABASE_KEY.")
 
     def sign_in(email, password):
         resp = req.post(

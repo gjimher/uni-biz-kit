@@ -13,6 +13,11 @@ from playwright.sync_api import Page, expect
 from xprocess import ProcessStarter
 from smtp_mock import smtp_emails as _smtp_emails, smtp_lock as _smtp_lock, extract_links as _extract_links
 
+_env_num = int(os.environ.get('UBK_DEV_ENV_NUM', '0'))
+_base = 3000 + 100 * _env_num
+_FRONTEND_PORT = _base + 0
+_PREVIEW_PORT = _base + 1
+
 
 @pytest.fixture(scope="module")
 def app_server(xprocess, request):
@@ -25,7 +30,7 @@ def app_server(xprocess, request):
     # emotion/MUI pre-bundling in dev mode; the production build works correctly)
     import subprocess
     result = subprocess.run(
-        ["npm", "run", "build", "--prefix", frontend_dir],
+        ["npm", "run", "build", "--prefix", frontend_dir, "--", "--mode", "development"],
         capture_output=True, text=True, cwd=frontend_dir
     )
     if result.returncode != 0:
@@ -34,7 +39,7 @@ def app_server(xprocess, request):
     class Starter(ProcessStarter):
         pattern = "Local:"
         env = os.environ.copy()
-        args = ["npm", "--prefix", frontend_dir, "run", "preview", "--", "--port", "3005"]
+        args = ["npm", "--prefix", frontend_dir, "run", "preview", "--", "--port", str(_PREVIEW_PORT)]
         cwd = frontend_dir
         timeout = 30
 
@@ -45,7 +50,7 @@ def app_server(xprocess, request):
         pass
 
     xprocess.ensure("app_server_pure", Starter)
-    yield "http://localhost:3005"
+    yield f"http://localhost:{_PREVIEW_PORT}"
     xprocess.getinfo("app_server_pure").terminate()
 
 
@@ -175,8 +180,8 @@ def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):
     # Intercept and rewrite port so the SPA receives the recovery tokens.
     test_port = app_server.split(":")[-1].rstrip("/")
     page.route(
-        "http://localhost:3000/**",
-        lambda route: route.continue_(url=route.request.url.replace("localhost:3000", f"localhost:{test_port}"))
+        f"http://localhost:{_FRONTEND_PORT}/**",
+        lambda route: route.continue_(url=route.request.url.replace(f"localhost:{_FRONTEND_PORT}", f"localhost:{test_port}"))
     )
 
     # -- 1. Ensure we land on the login page.
@@ -283,8 +288,8 @@ def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):
         import requests
         from dotenv import load_dotenv
         load_dotenv("test-app/backend/.env")
-        load_dotenv("test-app/frontend/.env")
-        api_url = os.getenv("REACT_APP_SUPABASE_URL")
+        load_dotenv("test-app/frontend/.env.development")
+        api_url = os.getenv("VITE_SUPABASE_URL")
         service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         
         if api_url and service_role_key:

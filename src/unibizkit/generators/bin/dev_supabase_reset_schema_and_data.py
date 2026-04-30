@@ -33,7 +33,7 @@ frontend_dir = root_dir / 'frontend'
 supabase_dir = backend_dir / 'supabase'
 
 if not supabase_dir.exists():
-    sys.exit("Error: backend/supabase does not exist. Run dev-supabase-create.py first.")
+    sys.exit("Error: backend/supabase does not exist. Run dev-supabase-start.py first.")
 
 if not args.force:
     answer = input("This will wipe all data and reload schema + seed. Are you sure? [y/N] ")
@@ -74,8 +74,8 @@ if not db_url:
     sys.exit("Error: DB_URL not found in backend/.env")
 
 service_role_key = backend_env.get('SUPABASE_SERVICE_ROLE_KEY')
-frontend_env = parse_env(frontend_dir / '.env') if (frontend_dir / '.env').exists() else {}
-api_url = frontend_env.get('REACT_APP_SUPABASE_URL')
+frontend_env = parse_env(frontend_dir / '.env.development')
+api_url = frontend_env.get('VITE_SUPABASE_URL')
 
 conn = psycopg2.connect(db_url)
 conn.autocommit = True

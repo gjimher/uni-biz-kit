@@ -7,10 +7,12 @@ Usage:
     from smtp_mock import smtp_emails, smtp_lock, extract_links, SMTP_PORT
 """
 
+import os
 import re
 import threading
 
-SMTP_PORT = 3010
+_env_num = int(os.environ.get('UBK_DEV_ENV_NUM', '0'))
+SMTP_PORT = 3000 + 100 * _env_num + 10
 
 smtp_emails: list[dict] = []
 smtp_lock = threading.Lock()
