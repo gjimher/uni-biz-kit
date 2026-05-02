@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Seed Data Schema",
+  "description": "Schema for model-defined seed database rows, document uploads and development test data settings",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "include_test_data": {
+      "type": "boolean",
+      "description": "Whether development seed SQL should include generated test data in addition to model-defined seed records.",
+      "default": true
+    },
+    "records": {
+      "type": "object",
+      "description": "Initial rows grouped by concept name. Field values are placed directly in each row. The optional id is a model-local alias used only to resolve initial-data relations and documents.",
+      "default": {},
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "id": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "string",
+                  "minLength": 1
+                }
+              ],
+              "description": "Optional model-local alias. It is not inserted as the database primary key."
+            },
+            "documents": {
+              "type": "array",
+              "description": "Initial document uploads for this row.",
+              "default": [],
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "tag": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "content_base64": {
+                    "type": "string",
+                    "contentEncoding": "base64"
+                  },
+                  "content_type": {
+                    "type": "string",
+                    "default": "application/octet-stream"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 1
+                  }
+                },
+                "required": ["tag", "name", "content_base64"]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

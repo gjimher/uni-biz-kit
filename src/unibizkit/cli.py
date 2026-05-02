@@ -498,6 +498,14 @@ Examples:
         schema_loader.security_config = processor.security_extended
         schema_loader.system_config = processor.system_extended
 
+        seed_dump_path = output_dir / "seed_data_extended.json"
+        with open(seed_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(schema_loader.seed_data_config, f, indent=2)
+        logger.info(f"Seed data saved to: {seed_dump_path}")
+        legacy_initial_dump_path = output_dir / "initial_data_extended.json"
+        if legacy_initial_dump_path.exists():
+            legacy_initial_dump_path.unlink()
+
         # Generate Supabase schema
         if not args.skip_backend:
             logger.info("Generating Supabase database schema...")
@@ -512,11 +520,14 @@ Examples:
             with open(sql_file, 'w', encoding='utf-8') as f:
                 f.write(sql_schema)
             
-            # Write sample data
-            sample_data = supabase_generator.generate_sample_data_sql()
-            sample_data_file = backend_dir / "supabase_sample_data.sql"
-            with open(sample_data_file, 'w', encoding='utf-8') as f:
-                f.write(sample_data)
+            # Write development seed data
+            seed_data_dev = supabase_generator.generate_seed_data_dev_sql()
+            seed_data_dev_file = backend_dir / "supabase_seed_data_dev.sql"
+            with open(seed_data_dev_file, 'w', encoding='utf-8') as f:
+                f.write(seed_data_dev)
+            legacy_sample_data_file = backend_dir / "supabase_sample_data.sql"
+            if legacy_sample_data_file.exists():
+                legacy_sample_data_file.unlink()
 
             # Write dev Supabase config (complete config.toml for local dev)
             supabase_config = supabase_generator.generate_supabase_config()
@@ -525,7 +536,7 @@ Examples:
                 f.write(supabase_config)
 
             logger.info(f"Supabase schema generated: {sql_file}")
-            logger.info(f"Sample data generated: {sample_data_file}")
+            logger.info(f"Development seed data generated: {seed_data_dev_file}")
             logger.info(f"Supabase dev config generated: {supabase_config_file}")
 
             # Generate bin/ scripts

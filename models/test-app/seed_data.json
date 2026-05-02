@@ -1,0 +1,38 @@
+{
+  "$schema": "../../schemas/seed_data_schema.json",
+  "include_test_data": true,
+  "records": {
+    "category": [
+      {
+        "id": "accessories",
+        "parent": null,
+        "name": "Seeded Accessories",
+        "description": "Category loaded from seed_data.json",
+        "slug": "seeded-accessories"
+      }
+    ],
+    "product": [
+      {
+        "id": "keyboard",
+        "name": "Seeded Keyboard",
+        "description": "Product loaded from seed_data.json",
+        "price": 49.99,
+        "stock_quantity": 25,
+        "admin_field": "initial admin note",
+        "sku": "SEED-KBD-001",
+        "status": "published",
+        "is_featured": true,
+        "categories": ["accessories"],
+        "documents": [
+          {
+            "tag": "datasheet",
+            "name": "seeded-keyboard.txt",
+            "content_type": "text/plain",
+            "version": 1,
+            "content_base64": "SW5pdGlhbCBwcm9kdWN0IGRhdGFzaGVldAo="
+          }
+        ]
+      }
+    ]
+  }
+}

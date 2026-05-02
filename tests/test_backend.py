@@ -10,6 +10,8 @@ import sys
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
+import psycopg2
+from dotenv import load_dotenv
 from unibizkit.cli import CLI
 
 
@@ -33,7 +35,7 @@ class TestAppBackend:
 
         This integration test:
         1. Generates a complete app application from schema
-        2. Sets up Supabase database with schema and sample data
+        2. Sets up Supabase database with schema and development seed data
         3. Verifies the database setup is successful
 
         Note: This test may take several minutes to run.
@@ -66,6 +68,25 @@ class TestAppBackend:
             reset_script = output_dir / 'bin' / 'dev-supabase-reset-schema-and-data.py'
             result = _run([sys.executable, str(reset_script), '--force'], timeout=120)
             assert result.returncode == 0, f"dev-supabase-reset-schema-and-data.py failed with code {result.returncode}"
+
+            load_dotenv(backend_dir / '.env')
+            db_url = os.getenv("DB_URL")
+            assert db_url, "DB_URL must be present in test-app/backend/.env"
+
+            conn = psycopg2.connect(db_url)
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT p.name, c.name
+                        FROM "product" p
+                        JOIN "category_product" cp ON cp.product_id = p.id
+                        JOIN "category" c ON c.id = cp.category_id
+                        WHERE p.sku = 'SEED-KBD-001'
+                          AND c.slug = 'seeded-accessories';
+                    """)
+                    assert cur.fetchone() == ('Seeded Keyboard', 'Seeded Accessories')
+            finally:
+                conn.close()
 
         finally:
             os.chdir(original_cwd)

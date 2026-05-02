@@ -136,7 +136,7 @@ class TestCLI:
                 
                 # Check that SQL files were generated
                 assert (output_dir / 'backend' / 'supabase_schema.sql').exists()
-                assert (output_dir / 'backend' / 'supabase_sample_data.sql').exists()
+                assert (output_dir / 'backend' / 'supabase_seed_data_dev.sql').exists()
                 
                 # Check that frontend was generated
                 assert (output_dir / 'frontend').exists()

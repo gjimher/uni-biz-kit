@@ -54,11 +54,13 @@ class SchemaLoader:
         self.security_config = None
         self.workflow_config = None
         self.system_config = None
+        self.seed_data_config = None
         self.validation_schema = self._load_validation_schema("concepts_schema.json")
         self.presentation_validation_schema = self._load_validation_schema("presentation_schema.json")
         self.security_validation_schema = self._load_validation_schema("security_schema.json")
         self.workflow_validation_schema = self._load_validation_schema("workflow_schema.json")
         self.system_validation_schema = self._load_validation_schema("system_schema.json")
+        self.seed_data_validation_schema = self._load_validation_schema("seed_data_schema.json")
     
     def _load_validation_schema(self, schema_name: str) -> Dict[str, Any]:
         """Load a validation schema from the schemas directory."""
@@ -123,6 +125,13 @@ class SchemaLoader:
                 self.system_config = {}
                 DefaultValidatingDraft7Validator(self.system_validation_schema).validate(self.system_config)
 
+            # Try to load seed_data.json (optional)
+            seed_data_path = Path(path).parent / "seed_data.json"
+            if seed_data_path.exists():
+                self.load_seed_data(str(seed_data_path))
+            else:
+                self.seed_data_config = {"include_test_data": True, "records": {}}
+
             # Apply special defaults before main validation/default injection
             self._apply_special_defaults(business_schema)
             
@@ -130,6 +139,8 @@ class SchemaLoader:
             # This will now also apply defaults (like separator and show in id_presentation) 
             # to the injected authentication concepts.
             DefaultValidatingDraft7Validator(self.validation_schema).validate(business_schema)
+
+            self._validate_seed_data_against_business_schema(business_schema)
             
             logger.info(f"Successfully loaded and validated schema: {path}")
             self.business_schema = business_schema
@@ -202,6 +213,18 @@ class SchemaLoader:
 
         self.system_config = system_config
         logger.info(f"Successfully loaded and validated system settings: {system_path}")
+
+    def load_seed_data(self, seed_data_path: str):
+        """
+        Load and validate the optional seed data settings.
+        """
+        with open(seed_data_path, 'r', encoding='utf-8') as f:
+            seed_data_config = json.load(f)
+
+        DefaultValidatingDraft7Validator(self.seed_data_validation_schema).validate(seed_data_config)
+
+        self.seed_data_config = seed_data_config
+        logger.info(f"Successfully loaded and validated seed data settings: {seed_data_path}")
     
     def _apply_special_defaults(self, data: Dict[str, Any]):
         """
@@ -222,6 +245,85 @@ class SchemaLoader:
                         # Self-reference usually implies nullable root in a hierarchy
                         if field["target"] != concept["name"]:
                             field["required"] = True
+
+    def _validate_seed_data_against_business_schema(self, business_schema: Dict[str, Any]):
+        """
+        Validate seed data references against concepts, fields and document tags.
+        """
+        seed_data = self.seed_data_config or {"include_test_data": True, "records": {}}
+        concept_map = {concept["name"]: concept for concept in business_schema["concepts"]}
+        seed_ids = {
+            concept_name: {
+                str(record["id"])
+                for record in records
+                if "id" in record
+            }
+            for concept_name, records in seed_data["records"].items()
+        }
+
+        for concept_name, records in seed_data["records"].items():
+            if concept_name not in concept_map:
+                raise SchemaValidationError(f"Seed data references unknown concept '{concept_name}'")
+
+            concept = concept_map[concept_name]
+            field_map = {field["name"]: field for field in concept["fields"]}
+            seen_ids = set()
+
+            for record in records:
+                if "id" in record:
+                    seed_id = str(record["id"])
+                    if seed_id in seen_ids:
+                        raise SchemaValidationError(f"Seed data has duplicate id '{seed_id}' for concept '{concept_name}'")
+                    seen_ids.add(seed_id)
+
+                for field_name, value in record.items():
+                    if field_name in ("id", "documents"):
+                        continue
+                    if field_name not in field_map:
+                        raise SchemaValidationError(
+                            f"Seed data references unknown field '{concept_name}.{field_name}'"
+                        )
+                    field = field_map[field_name]
+                    if field["type"] == "relation_to_many" and value is not None and not isinstance(value, list):
+                        raise SchemaValidationError(
+                            f"Seed data field '{concept_name}.{field_name}' must be a list of ids"
+                        )
+                    if field["type"] == "relation_to_one" and value is not None:
+                        self._validate_seed_relation_reference(
+                            concept_name, field_name, field["target"], value, seed_ids
+                        )
+                    if field["type"] == "relation_to_many" and value is not None:
+                        for target_id in value:
+                            self._validate_seed_relation_reference(
+                                concept_name, field_name, field["target"], target_id, seed_ids
+                            )
+
+                for document in record.get("documents", []):
+                    self._validate_seed_document(concept, document)
+
+    def _validate_seed_document(self, concept: Dict[str, Any], document: Dict[str, Any]):
+        concept_name = concept["name"]
+        docs = concept["documents"]
+        if not docs["enabled"]:
+            raise SchemaValidationError(f"Seed document concept '{concept_name}' does not have documents enabled")
+        if document["tag"] not in docs["tags"]:
+            raise SchemaValidationError(
+                f"Seed document tag '{document['tag']}' is not allowed for concept '{concept_name}'"
+            )
+
+    def _validate_seed_relation_reference(
+        self,
+        concept_name: str,
+        field_name: str,
+        target_concept: str,
+        target_id: Any,
+        seed_ids: Dict[str, Any],
+    ):
+        if str(target_id) not in seed_ids.get(target_concept, set()):
+            raise SchemaValidationError(
+                f"Seed data field '{concept_name}.{field_name}' references unknown seed id "
+                f"'{target_id}' for concept '{target_concept}'"
+            )
     
     def get_concept_by_name(self, name: str) -> Dict[str, Any]:
         """

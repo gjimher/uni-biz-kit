@@ -20,8 +20,10 @@ import argparse
 import json
 import os
 import shutil
+import base64
 import urllib.request
 import urllib.error
+import urllib.parse
 
 parser = argparse.ArgumentParser(description="Reset local Supabase database.")
 parser.add_argument('-f', '--force', action='store_true', help="Skip confirmation prompt")
@@ -61,11 +63,11 @@ if not migration_files:
 shutil.copy(schema_file, migration_files[0])
 print(f"Copied schema -> {migration_files[0].name}")
 
-# Copy sample data to seed file
-sample_data_file = backend_dir / 'supabase_sample_data.sql'
+# Copy development seed data to seed file
+seed_data_dev_file = backend_dir / 'supabase_seed_data_dev.sql'
 seed_file = supabase_dir / 'seed.sql'
-shutil.copy(sample_data_file, seed_file)
-print("Copied sample data -> supabase/seed.sql")
+shutil.copy(seed_data_dev_file, seed_file)
+print("Copied development seed data -> supabase/seed.sql")
 
 # Connect and reset DB
 backend_env = parse_env(backend_dir / '.env')
@@ -122,6 +124,80 @@ with conn.cursor() as cur:
 
     print("Loading seed data...")
     cur.execute(seed_file.read_text())
+
+# Upload seed documents through the Storage API so binary content is stored
+# and document metadata is created by the database trigger.
+seed_data_file = root_dir / 'seed_data_extended.json'
+if seed_data_file.exists() and service_role_key and api_url:
+    seed_data = json.loads(seed_data_file.read_text())
+    concepts_file = root_dir / 'concepts_extended.json'
+    concept_docs = {}
+    if concepts_file.exists():
+        concepts_data = json.loads(concepts_file.read_text())
+        concept_docs = {
+            c['name']: c.get('documents', {})
+            for c in concepts_data.get('concepts', [])
+        }
+    seed_documents = []
+    with conn.cursor() as cur:
+        for concept, records in seed_data.get('records', {}).items():
+            for index, record in enumerate(records, start=1):
+                seed_key = str(record.get('id', f"__{concept}_{index}"))
+                documents = record.get('documents', [])
+                if not documents:
+                    continue
+                cur.execute(
+                    "SELECT db_id FROM unibizkit_seed_data_ids WHERE concept = %s AND seed_key = %s",
+                    (concept, seed_key),
+                )
+                row = cur.fetchone()
+                if not row:
+                    print(f"  Warning: could not resolve seed document owner {concept}/{seed_key}")
+                    continue
+                for document in documents:
+                    seed_documents.append({
+                        **document,
+                        'concept': concept,
+                        'record_id': row[0],
+                    })
+    print(f"Uploading {len(seed_documents)} seed document(s)...")
+    for doc in seed_documents:
+        concept = doc['concept']
+        bucket_id = f"{concept}-documents"
+        record_id = doc['record_id']
+        tag = doc['tag']
+        name = doc['name']
+        version = doc.get('version', 1)
+        content_type = doc.get('content_type', 'application/octet-stream')
+        bucket_versioned = concept_docs.get(concept, {}).get('versioned', False)
+        path_parts = [str(record_id), tag]
+        if bucket_versioned:
+            path_parts.append(f"v{version}")
+        path_parts.append(name)
+        object_path = '/'.join(path_parts)
+        quoted_path = urllib.parse.quote(object_path, safe='/')
+        try:
+            content = base64.b64decode(doc['content_base64'])
+        except Exception as e:
+            print(f"  Error decoding {concept}/{record_id}/{name}: {e}")
+            continue
+        req = urllib.request.Request(
+            f"{api_url}/storage/v1/object/{bucket_id}/{quoted_path}",
+            data=content,
+            headers={
+                'Authorization': f'Bearer {service_role_key}',
+                'Content-Type': content_type,
+                'apikey': service_role_key,
+                'x-upsert': 'true',
+            },
+            method='POST',
+        )
+        try:
+            with urllib.request.urlopen(req):
+                print(f"  Uploaded: {bucket_id}/{object_path}")
+        except urllib.error.HTTPError as e:
+            body = e.read().decode('utf-8')
+            print(f"  Error uploading {bucket_id}/{object_path}: {e.code} {body}")
 
 conn.close()
 

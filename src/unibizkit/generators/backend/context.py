@@ -9,3 +9,4 @@ class Context:
     security_config: Dict[str, Any]
     business_schema: Dict[str, Any]
     system_config: Dict[str, Any]
+    seed_data_config: Dict[str, Any]
