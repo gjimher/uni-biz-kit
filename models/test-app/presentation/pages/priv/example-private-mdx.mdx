@@ -1,0 +1,25 @@
+---
+layout: sidebar-left
+title: Private concepts
+---
+
+export function PrivateConceptList({ items }) {
+  return (
+    <ul>
+      {items.map(c => (
+        <li key={c.name}>
+          <strong>{c.name}</strong>
+          {c.description && <span> — {c.description}</span>}
+          {' '}
+          <a href={`#/admin/${c.name}`}>View in Admin &rarr;</a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+This MDX page lives under `pages/priv`, so it requires login.
+
+The model defines **{props.model.concepts.length}** concepts:
+
+<PrivateConceptList items={props.model.concepts} />

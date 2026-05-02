@@ -37,7 +37,7 @@ const SsoButton = ({ onStart, loading }) => {
             await supabaseClient.auth.signInWithOAuth({
                 provider: 'keycloak',
                 options: {
-                    redirectTo: BASE_URL,
+                    redirectTo: buildSsoRedirectTo(),
                     scopes: 'openid profile email',
                 },
             });
@@ -83,7 +83,7 @@ const SsoButton = ({ onStart, loading }) => {
             await supabaseClient.auth.signInWithOAuth({
                 provider: 'keycloak',
                 options: {
-                    redirectTo: BASE_URL,
+                    redirectTo: buildSsoRedirectTo(),
                     scopes: 'openid profile email',
                 },
             });
@@ -163,6 +163,35 @@ import {{ supabaseClient }} from '../supabaseClient';
 import {{ Box, Tab, Tabs, Button, TextField, CircularProgress, Alert{divider_import} }} from '@mui/material';
 
 const BASE_URL = import.meta.env.VITE_BASE_URL || window.location.origin;
+const SSO_REDIRECT_PARAM = 'sso_redirect';
+const POST_LOGIN_REDIRECT_KEY = 'unibizkit_post_login_redirect';
+
+const readRedirectTo = () => {{
+    const searchRedirect = new URLSearchParams(window.location.search).get('redirectTo');
+    if (searchRedirect) return searchRedirect;
+
+    const queryStart = window.location.hash.indexOf('?');
+    if (queryStart === -1) return localStorage.getItem(POST_LOGIN_REDIRECT_KEY) || '';
+
+    return (
+        new URLSearchParams(window.location.hash.slice(queryStart + 1)).get('redirectTo') ||
+        localStorage.getItem(POST_LOGIN_REDIRECT_KEY) ||
+        ''
+    );
+}};
+
+const toHashPath = (target) => {{
+    if (!target) return '#/admin';
+    if (target.startsWith('#/')) return target;
+    if (target.startsWith('/')) return `#${{target}}`;
+    return `#/${{target}}`;
+}};
+
+const buildSsoRedirectTo = () => {{
+    const url = new URL(BASE_URL, window.location.origin);
+    url.searchParams.set(SSO_REDIRECT_PARAM, toHashPath(readRedirectTo()));
+    return url.toString();
+}};
 
 const RegisterForm = () => {{
     const notify = useNotify();
@@ -278,6 +307,11 @@ const LoginWithTabs = (props) => {{
     return (
         <Box>
 {tabs}            {tab_body}
+            <Box sx={{{{ px: 2, pb: 2, textAlign: 'center' }}}}>
+                <Button href="#/" variant="text" size="small">
+                    Back to home
+                </Button>
+            </Box>
         </Box>
     );
 }};

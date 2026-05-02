@@ -1,0 +1,23 @@
+---
+layout: sidebar-left
+title: Model concepts
+---
+
+export function ConceptList({ items }) {
+  return (
+    <ul>
+      {items.map(c => (
+        <li key={c.name}>
+          <strong>{c.name}</strong>
+          {c.description && <span> — {c.description}</span>}
+          {' '}
+          <a href={`#/admin/${c.name}`}>View in Admin &rarr;</a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+This model defines **{props.model.concepts.length}** concepts:
+
+<ConceptList items={props.model.concepts} />

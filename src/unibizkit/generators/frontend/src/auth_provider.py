@@ -57,8 +57,19 @@ const buildPermissions = (user) => {{
     return permissions;
 }};
 
+const baseAuthProvider = supabaseAuthProvider(supabaseClient, {{}});
+
 export const authProvider = {{
-    ...supabaseAuthProvider(supabaseClient, {{}}),
+    ...baseAuthProvider,
+
+    checkAuth: async (params) => {{
+        try {{
+            await baseAuthProvider.checkAuth(params);
+        }} catch (error) {{
+            if (error?.redirectTo) throw error;
+            throw {{ message: false, redirectTo: '/login' }};
+        }}
+    }},
 
     // ra-supabase-core swallows getUser() errors (deleted user, invalid session) by returning
     // undefined instead of throwing. We override both methods to propagate the AuthError so that
@@ -82,9 +93,10 @@ export const authProvider = {{
 
     logout: async () => {{
         // ra-supabase throws if signOut returns a server error (e.g. deleted user / expired
-        // session), which prevents useLogout's .then() from running and blocks navigation to
-        // /login. Supabase JS always clears the local session regardless of server errors.
+        // session), which prevents useLogout's .then() from running and blocks post-logout
+        // navigation. Supabase JS always clears the local session regardless of server errors.
         await supabaseClient.auth.signOut();
+        return '/';
     }},
 }};
 """

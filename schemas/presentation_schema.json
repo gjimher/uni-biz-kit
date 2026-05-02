@@ -30,6 +30,16 @@
         "$ref": "#/definitions/menuItem"
       }
     },
+    "authenticated_pages": {
+      "type": "array",
+      "description": "Presentation page file patterns that require authentication. Patterns are relative to the presentation directory, such as 'pages/priv/**' or 'pages/report.jsx'.",
+      "default": [
+        "pages/priv/**"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "list_field_rules_level_1": {
       "type": "object",
       "description": "Base rules for field selection and ordering in list views. Keys can be concept names, 'prefix*', or '*'. Values are comma-separated rules applied to a pool of available fields (including 'id_presentation' and concept fields). Syntax: '*' (all pool fields), 'field' (add/move to end), 'prefix*' (add/move matches), '!field' (exclude), '!prefix*' (exclude matches). Range operators based on pool order: '>', '>=', '<', '<=' (include range), and negated '!>', '!>=', '!<', '!<=' (exclude range). Ordering: 'name[0]' (move to start), 'name[-1]' (move to end), 'name[prev]' (place after 'prev'). Cumulative Levels: L1 + L2 + L3. Defaults to {'*': '*,!id_presentation,!_*'}",

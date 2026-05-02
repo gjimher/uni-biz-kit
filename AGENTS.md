@@ -64,6 +64,9 @@ To run all tests:
 pytest
 ```
 
+**Testing Guidance:**
+*   Do not add trivial tests whose only purpose is to confirm that a simple implementation works. Add tests for behavior with enough complexity or regression risk that future changes could realistically break it.
+
 **Commit Messages:**
 *   Write in English.
 *   Keep them concise and focused on the *why* and *what*.

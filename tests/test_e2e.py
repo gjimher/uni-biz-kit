@@ -63,7 +63,7 @@ def test_create_product_as_user(page: Page, app_server):
         admin_user = next(u for u in json.load(f)["users"] if "admin" in u["roles"])
 
     page.set_default_timeout(10000)
-    page.goto(app_server)
+    page.goto(app_server + "/#/admin")
     page.wait_for_timeout(3000)
 
     # Login
@@ -76,7 +76,7 @@ def test_create_product_as_user(page: Page, app_server):
     page.get_by_text("Catalog").click()
     page.get_by_role("menuitem", name="Products").click()
     page.get_by_label("Create").click()
-    page.wait_for_url("**#/product/create**")
+    page.wait_for_url("**#/admin/product/create**")
     page.locator('input[name="name"]').wait_for(state="visible")
 
     # Fill product details
@@ -112,7 +112,7 @@ def test_create_order_and_upload_document_as_user(page: Page, app_server):
     user1 = next(u for u in users if "user" in u["roles"])
 
     page.set_default_timeout(10000)
-    page.goto(app_server)
+    page.goto(app_server + "/#/admin")
     page.wait_for_timeout(2000)
 
     # Login as user1
@@ -125,7 +125,7 @@ def test_create_order_and_upload_document_as_user(page: Page, app_server):
     page.get_by_text("Sales").click()
     page.get_by_role("menuitem", name="Orders").click()
     page.get_by_label("Create").click()
-    page.wait_for_url("**#/order/create**")
+    page.wait_for_url("**#/admin/order/create**")
 
     # Fill the order form
     page.locator('input[name="order_date"]').fill("2024-01-15")
@@ -137,7 +137,7 @@ def test_create_order_and_upload_document_as_user(page: Page, app_server):
 
     page.get_by_label("Save").click()
     # Wait for redirect to the edit page (URL contains a numeric order ID)
-    page.wait_for_url(lambda url: bool(__import__('re').search(r'#/order/\d+', url)), timeout=10000)
+    page.wait_for_url(lambda url: bool(__import__('re').search(r'#/admin/order/\d+', url)), timeout=10000)
     page.wait_for_load_state("networkidle")
 
     # Go to Documents tab
@@ -187,7 +187,7 @@ def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):
     # -- 1. Ensure we land on the login page.
     # The previous test may have left the user logged in; if so, log out via the
     # user menu so the session is clean before the forgot-password flow starts.
-    page.goto(app_server)
+    page.goto(app_server + "/#/admin")
     page.set_default_timeout(10000)
     page.wait_for_load_state("networkidle")
     # Use a more flexible selector for the user menu button
@@ -252,7 +252,7 @@ def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):
         # -- 6. Navigate to Products and assert data is accessible immediately
         page.get_by_text("Catalog").click()
         page.get_by_role("menuitem", name="Products").click()
-        page.wait_for_url("**#/product**")
+        page.wait_for_url("**#/admin/product**")
         data_rows = page.locator("tbody tr")
         data_rows.first.wait_for(state="visible", timeout=10000)
         count = data_rows.count()

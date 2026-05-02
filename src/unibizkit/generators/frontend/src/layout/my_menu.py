@@ -17,7 +17,8 @@ import {{
     Security as SecurityIcon,
     People as UserIcon,
     VerifiedUser as RoleIcon,
-    HelpOutline as HelpOutlineIcon
+    HelpOutline as HelpOutlineIcon,
+    Home as HomeIcon,
 }} from '@mui/icons-material';
 
 const menuItems = {menu_items_json};
@@ -100,6 +101,12 @@ export const MyMenu = () => {{
 
     return (
         <Menu>
+            <ListItemButton component="a" href="#/" sx={{{{ pl: 2, py: 1 }}}}>
+                <ListItemIcon sx={{{{ minWidth: 40 }}}}>
+                    <HomeIcon />
+                </ListItemIcon>
+                <ListItemText primary="Home" />
+            </ListItemButton>
              <RenderMenu items={{menuItems}} state={{state}} handleToggle={{handleToggle}} />
         </Menu>
     );

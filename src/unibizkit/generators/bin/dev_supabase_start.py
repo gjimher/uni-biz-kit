@@ -102,13 +102,25 @@ def _dict_contains(config, delta):
     return True
 
 
-def _delta_is_applied(config_path, delta_path):
-    """Return True if all values from delta_path are already present in config_path."""
+def _deep_merge(base, override):
+    result = dict(base)
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = _deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
+
+
+def _merged_deltas_applied(config_path, delta_paths):
+    """Return True if the merged result of all deltas (later overrides earlier) is in config."""
     with open(config_path, 'rb') as f:
         config_data = tomllib.load(f)
-    with open(delta_path, 'rb') as f:
-        delta_data = tomllib.load(f)
-    return _dict_contains(config_data, delta_data)
+    merged = {}
+    for delta_path in delta_paths:
+        with open(delta_path, 'rb') as f:
+            merged = _deep_merge(merged, tomllib.load(f))
+    return _dict_contains(config_data, merged)
 
 
 def _upsert_env(path, values):
@@ -131,7 +143,7 @@ def _upsert_env(path, values):
 delta_files = [delta_toml] + ([sso_delta_toml] if sso_delta_toml.exists() else [])
 
 if supabase_dir.exists():
-    if not all(_delta_is_applied(config_toml, d) for d in delta_files):
+    if not _merged_deltas_applied(config_toml, delta_files):
         print("Config has changes — stopping Supabase, applying config, restarting...")
         result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'stop'],
                                 stdout=sys.stdout, stderr=sys.stderr)

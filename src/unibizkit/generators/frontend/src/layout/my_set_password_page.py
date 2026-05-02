@@ -12,7 +12,7 @@ const MySetPasswordForm = () => {
         // Hard reload so the Supabase client re-initialises its session from
         // storage — a SPA navigation leaves the recovery token in memory and
         // PostgREST rejects subsequent API calls with that stale token.
-        onSuccess: () => window.location.replace('/'),
+        onSuccess: () => window.location.replace('/#/admin'),
     });
 
     const validate = (values) => {

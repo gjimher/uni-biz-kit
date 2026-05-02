@@ -1,5 +1,6 @@
 import os
 import logging
+import shutil
 from pathlib import Path
 
 from .context import Context
@@ -14,6 +15,7 @@ from .src.components import (
     custom_edit_toolbar, document_tab, workflow_selector, field_help_icon
 )
 from .src.resources import resource
+from .src.presentation import model_js, router, custom_page
 from .. import dev_ports
 
 logger = logging.getLogger(__name__)
@@ -63,6 +65,8 @@ class ReactAdminGenerator:
             business_schema=schema_loader.business_schema,
             output_dir=self.output_dir,
         )
+
+        model_dir = Path(schema_loader.schema_path).parent
 
         self._create_directory_structure(ctx)
 
@@ -115,7 +119,53 @@ class ReactAdminGenerator:
             resource_dir.mkdir(exist_ok=True)
             _write(resource_dir / f"{concept['name']}.jsx", resource.generate(ctx, concept))
 
+        # Presentation system
+        self._generate_presentation_system(ctx, model_dir)
+
         logger.info("React-Admin frontend generation completed")
+
+    def _generate_presentation_system(self, ctx: Context, model_dir: Path):
+        presentation_src = model_dir / "presentation"
+        pres_dir = ctx.output_dir / "src" / "presentation"
+
+        _write(pres_dir / "model.js", model_js.generate(ctx))
+        _write(pres_dir / "PresentationRouter.jsx", router.generate(ctx))
+        _write(pres_dir / "CustomPage.jsx", custom_page.generate())
+
+        # Auto-generate default layouts from presentation.json menu
+        layouts_dir = pres_dir / "layouts"
+        layouts_dir.mkdir(exist_ok=True)
+        _write(layouts_dir / "sidebar-left.jsx", _generate_sidebar_layout())
+
+        # Copy model pages
+        pages_src = presentation_src / "pages"
+        pages_dst = pres_dir / "pages"
+        pages_dst.mkdir(exist_ok=True)
+        if pages_src.exists():
+            for page_file in pages_src.rglob("*"):
+                if page_file.is_file():
+                    target = pages_dst / page_file.relative_to(pages_src)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(page_file, target)
+
+        # Copy custom layouts (override auto-generated)
+        layouts_src = presentation_src / "layouts"
+        if layouts_src.exists():
+            for layout_file in layouts_src.iterdir():
+                if layout_file.is_file():
+                    shutil.copy2(layout_file, layouts_dir / layout_file.name)
+
+        # Copy assets to public/presentation/ (served at /presentation/*)
+        assets_src = presentation_src / "assets"
+        if assets_src.exists():
+            assets_dst = ctx.output_dir / "public" / "assets"
+            assets_dst.mkdir(parents=True, exist_ok=True)
+            for asset_file in assets_src.rglob("*"):
+                if asset_file.is_file():
+                    rel = asset_file.relative_to(assets_src)
+                    dest = assets_dst / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(asset_file, dest)
 
     def _create_directory_structure(self, ctx: Context):
         ctx.output_dir.mkdir(exist_ok=True)
@@ -132,8 +182,67 @@ class ReactAdminGenerator:
         (src_dir / "components").mkdir(exist_ok=True)
         (src_dir / "utils").mkdir(exist_ok=True)
         (src_dir / "layout").mkdir(exist_ok=True)
+        (src_dir / "presentation").mkdir(exist_ok=True)
+        (src_dir / "presentation" / "pages").mkdir(exist_ok=True)
+        (src_dir / "presentation" / "layouts").mkdir(exist_ok=True)
 
         self._generate_index_html(ctx)
 
     def _generate_index_html(self, ctx: Context):
         _write(ctx.output_dir / "index.html", index_html.generate(ctx))
+
+
+def _generate_sidebar_layout() -> str:
+    return """import React from 'react';
+import { Link } from 'react-router-dom';
+import { model } from '../model';
+
+export default function SidebarLeft({ frontmatter, children }) {
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+      <nav style={{
+        width: 220,
+        borderRight: '1px solid #e0e0e0',
+        padding: '16px 12px',
+        background: '#fafafa',
+        flexShrink: 0,
+      }}>
+        <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: '1rem' }}>{model.appName}</h3>
+        </Link>
+        {model.menu.map(group => (
+          <div key={group.label} style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#999', textTransform: 'uppercase', marginBottom: 4 }}>
+              {group.label}
+            </div>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {(group.children ?? []).map(item => (
+                <li key={item.label} style={{ marginBottom: 2 }}>
+                  {item.concept ? (
+                    <a href={`#/admin/${item.concept}`} style={{ color: '#1976d2', textDecoration: 'none', fontSize: '0.9rem' }}>
+                      {item.label}
+                    </a>
+                  ) : (
+                    <span style={{ color: '#333', fontSize: '0.9rem' }}>{item.label}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        <div style={{ marginTop: 16, borderTop: '1px solid #e0e0e0', paddingTop: 12 }}>
+          <a href="#/admin" style={{ color: '#555', fontSize: '0.9rem', textDecoration: 'none' }}>
+            ⚙ Panel de Admin
+          </a>
+        </div>
+      </nav>
+      <main style={{ flex: 1, padding: 24, minWidth: 0 }}>
+        {frontmatter?.title && (
+          <h1 style={{ marginTop: 0, fontSize: '1.5rem' }}>{frontmatter.title}</h1>
+        )}
+        {children}
+      </main>
+    </div>
+  );
+}
+"""

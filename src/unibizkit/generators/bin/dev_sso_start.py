@@ -429,14 +429,11 @@ run([*COMPOSE, '-p', COMPOSE_PROJECT, 'up', '-d'], cwd=sso_dir, stdout=sys.stdou
 wait_for_keycloak()
 client_secret = configure_keycloak()
 print("Writing SSO config delta...")
-sso_delta_changed = write_sso_delta(client_secret)
-if sso_delta_changed:
-    print("Starting/updating Supabase...")
-    result = subprocess.run([sys.executable, str(root_dir / 'bin' / 'dev-supabase-start.py')],
-                            stdout=sys.stdout, stderr=sys.stderr)
-    if result.returncode != 0:
-        sys.exit(f"dev-supabase-start.py failed with code {result.returncode}")
-else:
-    print("Supabase config unchanged; skipping Supabase restart.")
+write_sso_delta(client_secret)
+print("Starting/updating Supabase...")
+result = subprocess.run([sys.executable, str(root_dir / 'bin' / 'dev-supabase-start.py')],
+                        stdout=sys.stdout, stderr=sys.stderr)
+if result.returncode != 0:
+    sys.exit(f"dev-supabase-start.py failed with code {result.returncode}")
 print_instructions(client_secret)
 """

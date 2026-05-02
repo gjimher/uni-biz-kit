@@ -26,7 +26,7 @@ from playwright.sync_api import sync_playwright, expect, TimeoutError as Playwri
 _env_num = int(os.environ.get('UBK_DEV_ENV_NUM', '0'))
 _base = 3000 + 100 * _env_num
 CDP_PORT = _base + 2
-APP_URL = f"http://localhost:{_base}"
+APP_URL = f"http://localhost:{_base}/#/admin"
 BIN_DIR = Path(__file__).parent.parent / "test-app" / "bin"
 
 
