@@ -386,6 +386,15 @@ class SchemaProcessor:
         if "rules_level_3" not in self.security_extended:
             self.security_extended["rules_level_3"] = []
 
+        # Validate _anon rules: only read access is allowed
+        for level_key in ["rules_level_1", "rules_level_2", "rules_level_3"]:
+            for rule in self.security_extended.get(level_key, []):
+                if rule["role"] == "_anon" and rule["access"] != "read":
+                    raise ValueError(
+                        f"Role '_anon' only supports 'read' access, got '{rule['access']}' "
+                        f"for concept '{rule['concept']}' in {level_key}"
+                    )
+
         # Map: parent concept name -> [child concept names] (via relation_to_one FK)
         child_concepts_map: Dict[str, list] = {}
         for concept in self.concepts:
@@ -462,24 +471,26 @@ class SchemaProcessor:
         # Build _acl structure: concept -> { _main: {role: access}, _fields: {field: {role: access}} }
         _acl = {}
         role_names = [r["name"] for r in self.security_extended["roles"]]
-        
+        # _anon is a built-in role (not in the roles list) handled separately
+        acl_role_names = role_names + ["_anon"]
+
         for concept in self.concepts:
             concept_name = concept["name"]
             concept_acl = {"_main": {}, "_fields": {}}
-            
+
             # 1. Main access (concept-level)
-            for role_name in role_names:
+            for role_name in acl_role_names:
                 access = rules_map.get((concept_name, "*", role_name))
                 if access:
                     concept_acl["_main"][role_name] = access
-            
+
             # 2. Field-level access (explicit for all fields)
             for field in concept["fields"]:
                 field_name = field["name"]
                 field_rules = {}
 
                 # Check each role for this field
-                for role_name in role_names:
+                for role_name in acl_role_names:
                     # Specific field rule overrides concept rule
                     access = rules_map.get((concept_name, field_name, role_name))
                     if not access:
@@ -495,7 +506,7 @@ class SchemaProcessor:
             # 3. Virtual _documents field (controls access to the concept's document table)
             if concept["documents"]["enabled"]:
                 docs_field_rules = {}
-                for role_name in role_names:
+                for role_name in acl_role_names:
                     access = rules_map.get((concept_name, "_documents", role_name))
                     if not access:
                         access = concept_acl["_main"].get(role_name)

@@ -7,9 +7,18 @@ title: Home
 
 Welcome to the management portal.
 
-## Example pages
+## Public pages
 
-- [Model concepts](/example-mdx) - MDX that accesses the injected model
-- [Data with RA hooks](/priv/example-data) - Plain JSX with `useGetList`
-- [RA components](/priv/example-admin) - JSX with React-Admin components via `CustomPage`
-- [Private MDX](/priv/example-private-mdx) - MDX protected by `authenticated_pages`
+Accessible to anyone, including unauthenticated users. Data is fetched via the Supabase `anon` role.
+
+- [Model concepts](/example-mdx) — MDX page listing all model concepts
+- [Product list — hooks](/example-data) — plain JSX using `useGetList`
+- [Product list — RA components](/example-admin) — JSX with a React-Admin `Datagrid`
+
+## Authenticated pages
+
+These pages require login. The content is the same, but access is enforced via the `authenticated` Supabase role and the `<Authenticated>` wrapper.
+
+- [Private MDX](/priv/example-private-mdx) — same concept list, requires auth
+- [Product list — hooks (auth)](/priv/example-data) — same data, auth-only
+- [Product list — RA components (auth)](/priv/example-admin) — same Datagrid, auth-only

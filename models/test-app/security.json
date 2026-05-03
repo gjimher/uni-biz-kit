@@ -30,6 +30,18 @@
   ],
   "rules_level_2": [
     {
+      "role": "_anon",
+      "concept": "product",
+      "field": "*",
+      "access": "read"
+    },
+    {
+      "role": "_anon",
+      "concept": "category",
+      "field": "*",
+      "access": "read"
+    },
+    {
       "role": "user",
       "concept": "product",
       "field": "*",

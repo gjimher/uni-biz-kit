@@ -1,8 +1,25 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { model } from '../model';
+import { supabaseClient } from '../../supabaseClient';
 
 export default function SidebarLeft({ frontmatter, children }) {
+  const [userInfo, setUserInfo] = useState(undefined);
+
+  useEffect(() => {
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      setUserInfo(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+      setUserInfo(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const roles = userInfo?.app_metadata?.roles ?? [];
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'sans-serif' }}>
       <nav style={{
@@ -41,6 +58,17 @@ export default function SidebarLeft({ frontmatter, children }) {
           <a href="#/admin" style={{ color: '#555', fontSize: '0.9rem', textDecoration: 'none' }}>
             ⚙ Admin panel
           </a>
+        </div>
+
+        <div style={{ marginTop: 12, borderTop: '1px solid #e0e0e0', paddingTop: 12 }}>
+          {userInfo === undefined ? null : userInfo === null ? (
+            <div style={{ fontSize: '0.8rem', color: '#999' }}>Not authenticated</div>
+          ) : (
+            <div style={{ fontSize: '0.8rem' }}>
+              <div style={{ color: '#333', fontWeight: 'bold', wordBreak: 'break-all' }}>{userInfo.email}</div>
+              <div style={{ color: '#666', marginTop: 2 }}>{roles.length ? roles.join(', ') : 'no roles'}</div>
+            </div>
+          )}
         </div>
       </nav>
 

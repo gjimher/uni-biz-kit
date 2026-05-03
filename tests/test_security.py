@@ -5,6 +5,68 @@ import json
 import psycopg2
 from dotenv import load_dotenv
 
+_MINIMAL_CONCEPT = {
+    "name": "item",
+    "plural_name": "items",
+    "fields": [{"name": "f1", "type": "string", "size": "s", "required": False}],
+    "id_presentation": {"fields": []},
+}
+
+def _make_processor(rules_level_2=None, roles=None):
+    security_config = {
+        "authentication_required": True,
+        "rules_level_1": [
+            {"role": "admin", "concept": "*", "access": "write"},
+            {"role": "user",  "concept": "*", "access": "read"},
+        ],
+        "rules_level_2": rules_level_2 or [],
+    }
+    if roles:
+        security_config["roles"] = roles
+    schema = {"concepts": [_MINIMAL_CONCEPT]}
+    return SchemaProcessor(schema, security_config=security_config)
+
+
+def test_anon_read_appears_in_acl():
+    """_anon with read access should appear in _acl._main for the target concept."""
+    processor = _make_processor(
+        rules_level_2=[{"role": "_anon", "concept": "item", "access": "read"}]
+    )
+    processor.process()
+    acl = processor.security_extended["_acl"]
+    assert acl.get("item", {}).get("_main", {}).get("_anon") == "read"
+
+
+def test_anon_write_raises_error():
+    """_anon with write access must raise ValueError at process time."""
+    processor = _make_processor(
+        rules_level_2=[{"role": "_anon", "concept": "item", "access": "write"}]
+    )
+    with pytest.raises(ValueError, match="_anon"):
+        processor.process()
+
+
+def test_anon_owner_write_raises_error():
+    """_anon with owner_write access must raise ValueError at process time."""
+    processor = _make_processor(
+        rules_level_2=[{"role": "_anon", "concept": "item", "access": "owner_write"}]
+    )
+    with pytest.raises(ValueError, match="_anon"):
+        processor.process()
+
+
+def test_anon_not_required_in_roles_list():
+    """_anon does not need to be declared in the roles list."""
+    processor = _make_processor(
+        rules_level_2=[{"role": "_anon", "concept": "item", "access": "read"}],
+        roles=[{"name": "admin"}, {"name": "user"}],
+    )
+    processor.process()
+    role_names = [r["name"] for r in processor.security_extended["roles"]]
+    assert "_anon" not in role_names  # not polluted into the roles list
+    acl = processor.security_extended["_acl"]
+    assert acl["item"]["_main"].get("_anon") == "read"
+
 def test_security_rules_merging():
     schema = {
         "concepts": [
@@ -1319,3 +1381,83 @@ def test_order_lifecycle_via_api():
                 json={"prefixes": [storage_path]},
                 timeout=10,
             )
+
+
+@pytest.mark.integration
+def test_anon_can_read_category():
+    """anon role can SELECT from category (has _anon read RLS policy)."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    category_id = None
+
+    with conn.cursor() as cur:
+        try:
+            cur.execute(
+                "INSERT INTO category (name, slug) VALUES ('_test_anon_read', '_test-anon-read') RETURNING id;"
+            )
+            category_id = cur.fetchone()[0]
+
+            cur.execute("BEGIN;")
+            try:
+                cur.execute("SET LOCAL ROLE anon;")
+                cur.execute(f'SELECT id FROM "category" WHERE id = {category_id};')
+                assert cur.fetchone() is not None, "anon role should be able to read category rows"
+            finally:
+                cur.execute("ROLLBACK;")
+        finally:
+            if category_id:
+                cur.execute(f"DELETE FROM category WHERE id = {category_id};")
+
+
+@pytest.mark.integration
+def test_anon_cannot_write_category():
+    """anon role cannot INSERT into category (no write RLS policy for anon)."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+
+    with conn.cursor() as cur:
+        blocked = False
+        cur.execute("BEGIN;")
+        try:
+            cur.execute("SET LOCAL ROLE anon;")
+            cur.execute(
+                "INSERT INTO category (name, slug) VALUES ('_anon_write_attempt', '_anon-write') RETURNING id;"
+            )
+            if cur.fetchone() is None:
+                blocked = True
+        except psycopg2.Error:
+            blocked = True
+        finally:
+            cur.execute("ROLLBACK;")
+        assert blocked, "anon role should NOT be able to insert into category"
+
+
+@pytest.mark.integration
+def test_anon_cannot_read_customer():
+    """anon role cannot SELECT from customer (only has allow_all_authenticated policy)."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+
+    with conn.cursor() as cur:
+        cur.execute("BEGIN;")
+        try:
+            cur.execute("SET LOCAL ROLE anon;")
+            cur.execute('SELECT id FROM "customer" LIMIT 1;')
+            assert cur.fetchone() is None, "anon role should NOT be able to read customer rows"
+        finally:
+            cur.execute("ROLLBACK;")

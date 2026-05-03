@@ -55,6 +55,49 @@ This compiled `_acl` is then automatically translated into Row Level Security (R
 
 ---
 
+## The `_anon` Built-in Role
+
+UniBizKit includes a special built-in role named `_anon` that represents **unauthenticated users** — anyone accessing the application without a login session. It maps directly to the `anon` PostgreSQL role that Supabase exposes for requests made without a JWT.
+
+### How it works
+
+When a request reaches Supabase without a valid JWT (or with only the public anon API key), Supabase sets the PostgreSQL session role to `anon`. Row Level Security then evaluates policies against that role. By adding `_anon` rules in your security configuration, you can opt specific concepts into public read access.
+
+### Usage
+
+Use `_anon` as the `role` in any security rule, with `access: "read"`:
+
+```json
+{
+  "rules_level_2": [
+    { "concept": "product", "role": "_anon", "access": "read", "field": "*" }
+  ]
+}
+```
+
+This generates the following RLS policy:
+
+```sql
+CREATE POLICY "anon_read_product" ON "product"
+FOR SELECT
+TO anon
+USING (true);
+```
+
+### Constraints
+
+- **`_anon` is read-only.** Using `write` or `owner_write` with `_anon` raises a generation error. There is no stable user identity for anonymous sessions, so writes would be unattributable and untraceable.
+- **`_anon` does not need to be declared in the `roles` list.** It is a built-in — declaring it there has no effect and is not required.
+- **Rule propagation applies normally.** A `_anon read` rule on a parent concept (e.g. `product`) propagates to its child concepts (e.g. `order_item`) following the same logic as other roles. Override with a higher-priority rule if needed.
+
+### Frontend behavior
+
+The React frontend uses a single shared Supabase client for all pages (both public and authenticated). The client automatically includes the JWT when a session is active, and omits it when there is none. Supabase selects the correct set of RLS policies (`anon` vs `authenticated`) server-side, so the dataProvider requires no special configuration for public pages.
+
+Public pages (those not matching the `authenticated_pages` patterns in `presentation.json`) are rendered without the React Admin `<Authenticated>` wrapper and are therefore accessible without login.
+
+---
+
 ## Backend Implementation: Role Lifecycle
 
 This section covers how roles are stored, assigned, and enforced at the database level. The frontend has **no security enforcement**; all access control is implemented exclusively in the backend.

@@ -292,6 +292,10 @@ EXECUTE FUNCTION "{trigger_name}_func"();
         for role in all_role_names:
             role_table_access[role] = main_rules.get(role, "none")
 
+        # Include _anon if present in main rules (not in all_role_names)
+        if "_anon" in main_rules:
+            role_table_access["_anon"] = main_rules["_anon"]
+
         for field_name, field_rules in concept_acl["_fields"].items():
             for role, access in field_rules.items():
                 current = role_table_access.get(role, "none")
@@ -303,6 +307,16 @@ EXECUTE FUNCTION "{trigger_name}_func"();
                     role_table_access[role] = "read"
 
         for role, access in role_table_access.items():
+            if role == "_anon":
+                if access == "read":
+                    policies.append(f"""
+CREATE POLICY "anon_read_{table}" ON "{table}"
+FOR SELECT
+TO anon
+USING (true);
+""")
+                continue
+
             role_condition = f"auth.jwt() -> 'app_metadata' -> 'roles' ? '{role}'"
 
             if access == "read":
@@ -391,10 +405,24 @@ WITH CHECK (true);
         main_acl = concept_acl["_main"]
 
         fk_col = f"{owner_name}_id"
-        for role in all_role_names:
+        doc_roles = list(all_role_names)
+        if "_anon" in main_acl or "_anon" in docs_field_acl:
+            doc_roles.append("_anon")
+        for role in doc_roles:
             access = docs_field_acl.get(role) or main_acl.get(role, "none")
             if access == "none":
                 continue
+
+            if role == "_anon":
+                if access == "read":
+                    policies.append(f"""
+CREATE POLICY "anon_read_{doc_table}" ON "{doc_table}"
+FOR SELECT
+TO anon
+USING (true);
+""")
+                continue
+
             role_condition = f"auth.jwt() -> 'app_metadata' -> 'roles' ? '{role}'"
 
             if access == "owner_write":
