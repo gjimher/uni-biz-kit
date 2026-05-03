@@ -126,9 +126,6 @@ def _generate_sample_data_for_concept(concept: Dict[str, Any], ctx: Context) -> 
             field_names.append(field_name)
             field_values.append(value)
 
-        field_names.extend(['_created_at', '_updated_at'])
-        field_values.extend(["'2023-01-01T10:00:00Z'", "'2023-01-01T10:00:00Z'"])
-
         fields_str = ', '.join([f'"{field_name}"' for field_name in field_names])
         values_str = ', '.join(field_values)
         sample_records.append(f"({values_str})")

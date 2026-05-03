@@ -20,23 +20,14 @@ def generate_table_sql(concept: Dict[str, Any]) -> str:
     elif presentation_mode == "trigger":
         sql_lines.append(f'  "id_presentation" TEXT,')
 
-    sql_lines.append('  "_created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,')
-    sql_lines.append('  "_updated_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP')
+    sql_lines.append('  "_created_at" TIMESTAMP WITH TIME ZONE,')
+    sql_lines.append('  "_updated_at" TIMESTAMP WITH TIME ZONE')
     sql_lines.append(');')
 
     checks = concept.get('checks', [])
     for i, check_expr in enumerate(checks):
         constraint_name = f"{table_name}_check_{i}"
         sql_lines.append(f'ALTER TABLE "{table_name}" ADD CONSTRAINT "{constraint_name}" CHECK ({check_expr});')
-
-    trigger_name = f"{table_name}_update_updated_at"
-    sql_lines.append(f"""
-CREATE TRIGGER "{trigger_name}"
-BEFORE UPDATE ON "{table_name}"
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
-"""
-)
 
     unique_fields = [field for field in concept["fields"] if field["unique"]]
     for field in unique_fields:

@@ -5,6 +5,7 @@
 ## Critical Instructions
 
 *   **Python Command:** ALWAYS use `python` to execute python scripts or commands. NEVER use `python3`. The system is configured such that `python` is the correct executable.
+*   **Plan Approval:** Before making code, schema, test, documentation, or generated-output changes, present a concrete plan and wait until the user accepts it. Do not edit files before the plan is accepted.
 
 ## Project Architecture
 
@@ -70,6 +71,15 @@ pytest
 **Commit Messages:**
 *   Write in English.
 *   Keep them concise and focused on the *why* and *what*.
+*   Follow the recent commit style: one short summary line describing the improvement, then a blank line, then several detail lines as bullet points using `-`.
+*   Example:
+    ```text
+    Protect trigger-controlled internal columns
+
+    - Generate early per-table triggers for `_...` columns.
+    - Reject user-supplied internal values on insert and update.
+    - Add regression coverage for table-name-independent protection.
+    ```
 
 ## Design Principles
 

@@ -190,6 +190,17 @@ WITH CHECK (
 
 Field-level restrictions are enforced by `BEFORE INSERT OR UPDATE` triggers that raise `insufficient_privilege` if a caller without the required role attempts to write a protected field.
 
+### Internal Columns
+
+Columns whose name starts with `_` are reserved for UniBizKit internals. A model cannot define fields with this prefix.
+
+All generated tables include two standard triggers for internal columns:
+
+- `00_protect_internal_columns_trigger` rejects `INSERT` values for `_...` columns and rejects any `UPDATE` that changes them.
+- `01_set_system_timestamps_trigger` assigns `_created_at` and `_updated_at` after the protection trigger has validated the user-supplied row.
+
+This means the UI cannot create or modify internal columns. If a request sends `_created_at`, `_updated_at`, or any other `_...` column, the database rejects it.
+
 ### Bypass for Database Seeding
 
 Triggers and security functions check whether a JWT is present in the current request context:
@@ -203,3 +214,5 @@ END IF;
 ```
 
 This allows seed scripts run via the service role (which bypass the PostgREST JWT layer) to populate data without triggering permission errors.
+
+This bypass applies to permission and ACL enforcement triggers. There is no bypass for `00_protect_internal_columns_trigger` or `01_set_system_timestamps_trigger`; internal columns remain database-controlled during seeding as well.

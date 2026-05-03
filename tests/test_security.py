@@ -4,6 +4,10 @@ import os
 import json
 import psycopg2
 from dotenv import load_dotenv
+from unibizkit.generators.backend.schema_parts.internal_columns import (
+    generate_internal_column_protection,
+    generate_system_timestamp_triggers,
+)
 
 _MINIMAL_CONCEPT = {
     "name": "item",
@@ -430,6 +434,177 @@ def test_timestamps_cannot_be_forged_on_insert():
             pass
         finally:
             cur.execute("ROLLBACK;")
+
+
+@pytest.mark.integration
+def test_internal_column_protection_is_table_name_independent():
+    """A generated 00_ trigger must protect any _ column on any table name."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+
+    table_name = "internal_column_probe"
+    concept = {
+        "name": table_name,
+        "fields": [],
+    }
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, email FROM auth.users")
+        user_ids = {email: uid for uid, email in cur.fetchall()}
+        user_id = user_ids.get("user1@test.com")
+        if not user_id:
+            pytest.skip(f"Required users not found. Found: {user_ids}")
+
+        try:
+            cur.execute(f'DROP TABLE IF EXISTS "{table_name}";')
+            cur.execute(f"""
+                CREATE TABLE "{table_name}" (
+                    "id" INTEGER PRIMARY KEY,
+                    "_xxx" TEXT,
+                    "_created_at" TIMESTAMP WITH TIME ZONE,
+                    "_updated_at" TIMESTAMP WITH TIME ZONE
+                );
+            """)
+            for sql in generate_internal_column_protection([concept]):
+                cur.execute(sql)
+            for sql in generate_system_timestamp_triggers([concept]):
+                cur.execute(sql)
+            cur.execute(f'GRANT SELECT, INSERT, UPDATE ON "{table_name}" TO authenticated;')
+
+            user_claims = f'{{"sub": "{user_id}", "app_metadata": {{"roles": ["user"]}}}}'
+            cur.execute("SET ROLE authenticated;")
+            cur.execute(f"SELECT set_config('request.jwt.claims', '{user_claims}', false);")
+
+            with pytest.raises(psycopg2.Error):
+                cur.execute(f'INSERT INTO "{table_name}" ("id", "_xxx") VALUES (1, \'user value\');')
+
+            cur.execute(f'INSERT INTO "{table_name}" ("id") VALUES (2);')
+            cur.execute(f'SELECT "_xxx", "_created_at", "_updated_at" FROM "{table_name}" WHERE "id" = 2;')
+            xxx, created_at, updated_at = cur.fetchone()
+            assert xxx is None
+            assert created_at is not None
+            assert updated_at is not None
+
+            with pytest.raises(psycopg2.Error):
+                cur.execute(f'UPDATE "{table_name}" SET "_xxx" = \'user value\' WHERE "id" = 2;')
+        finally:
+            cur.execute("RESET ROLE;")
+            cur.execute("SELECT set_config('request.jwt.claims', '', false);")
+            cur.execute(f'DROP TABLE IF EXISTS "{table_name}";')
+            conn.close()
+
+
+@pytest.mark.integration
+def test_join_tables_use_standard_internal_column_triggers():
+    """Join tables have _updated_at and reject user-supplied internal values."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'category_product'
+              AND column_name IN ('_created_at', '_updated_at');
+        """)
+        assert {row[0] for row in cur.fetchall()} == {"_created_at", "_updated_at"}
+
+        with pytest.raises(psycopg2.Error):
+            cur.execute("""
+                INSERT INTO "category_product" ("category_id", "product_id", "_created_at")
+                VALUES (-1, -1, '2020-01-01T00:00:00Z');
+            """)
+
+        cur.execute("""
+            SELECT c.id, p.id
+            FROM "category" c
+            CROSS JOIN "product" p
+            WHERE NOT EXISTS (
+                SELECT 1 FROM "category_product" cp
+                WHERE cp.category_id = c.id AND cp.product_id = p.id
+            )
+            LIMIT 1;
+        """)
+        row = cur.fetchone()
+        if not row:
+            pytest.skip("No free category/product pair available for join timestamp test.")
+
+        category_id, product_id = row
+        cur.execute("BEGIN;")
+        try:
+            cur.execute("""
+                INSERT INTO "category_product" ("category_id", "product_id")
+                VALUES (%s, %s)
+                RETURNING "_created_at", "_updated_at";
+            """, (category_id, product_id))
+            created_at, updated_at = cur.fetchone()
+            assert created_at is not None
+            assert updated_at is not None
+        finally:
+            cur.execute("ROLLBACK;")
+            conn.close()
+
+
+@pytest.mark.integration
+def test_document_tables_use_standard_internal_column_triggers():
+    """Document tables reject internal timestamp values and fill them by trigger."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'product_document'
+              AND column_name IN ('_created_at', '_updated_at');
+        """)
+        assert {row[0] for row in cur.fetchall()} == {"_created_at", "_updated_at"}
+
+        cur.execute('SELECT id FROM "product" LIMIT 1;')
+        product_id = cur.fetchone()[0]
+        cur.execute("""
+            SELECT COALESCE(MAX("version"), 0) + 1
+            FROM "product_document"
+            WHERE "product_id" = %s AND "tag" = 'datasheet';
+        """, (product_id,))
+        next_version = cur.fetchone()[0]
+
+        with pytest.raises(psycopg2.Error):
+            cur.execute("""
+                INSERT INTO "product_document" ("product_id", "tag", "storage_path", "_updated_at")
+                VALUES (%s, 'datasheet', 'test/forged.pdf', '2020-01-01T00:00:00Z');
+            """, (product_id,))
+
+        cur.execute("BEGIN;")
+        try:
+            cur.execute("""
+                INSERT INTO "product_document" ("product_id", "tag", "version", "storage_path")
+                VALUES (%s, 'datasheet', %s, 'test/valid-trigger.pdf')
+                RETURNING "_created_at", "_updated_at";
+            """, (product_id, next_version))
+            created_at, updated_at = cur.fetchone()
+            assert created_at is not None
+            assert updated_at is not None
+        finally:
+            cur.execute("ROLLBACK;")
+            conn.close()
 
 
 @pytest.mark.integration

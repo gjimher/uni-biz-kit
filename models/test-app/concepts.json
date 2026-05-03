@@ -302,7 +302,7 @@
           "description": "Total price for this order item"
         },
         {
-          "name": "_internal_note",
+          "name": "internal_note",
           "type": "string",
           "required": false,
           "description": "Internal note not shown to users"

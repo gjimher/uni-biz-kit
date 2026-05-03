@@ -26,8 +26,8 @@ def generate_document_tables(concepts: List[Dict[str, Any]], security_config: Di
             cols.append('  "version" INTEGER NOT NULL DEFAULT 1,')
             cols.append('  "is_current" BOOLEAN NOT NULL DEFAULT TRUE,')
         cols.append('  "storage_path" TEXT NOT NULL,')
-        cols.append('  "_created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,')
-        cols.append('  "_updated_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,')
+        cols.append('  "_created_at" TIMESTAMP WITH TIME ZONE,')
+        cols.append('  "_updated_at" TIMESTAMP WITH TIME ZONE,')
         cols.append(f'  CONSTRAINT "{table_name}_tag_check" CHECK ("tag" IN ({tags_sql})),')
         if versioned:
             cols.append(f'  UNIQUE ("{fk_col}", "tag", "version")')
@@ -36,10 +36,6 @@ def generate_document_tables(concepts: List[Dict[str, Any]], security_config: Di
 
         create_sql = f'CREATE TABLE "{table_name}" (\n' + '\n'.join(cols) + '\n);'
         sql_parts.append(create_sql)
-
-        sql_parts.append(f"""CREATE TRIGGER "{table_name}_updated_at_trigger"
-  BEFORE UPDATE ON "{table_name}"
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();""")
 
         if versioned:
             sql_parts.append(f"""CREATE OR REPLACE FUNCTION "{table_name}_manage_current_func"()

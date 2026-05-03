@@ -29,7 +29,8 @@ def generate_join_tables(concepts: List[Dict[str, Any]], concept_map: Dict[str, 
 CREATE TABLE "{join_table_name}" (
   "{table1}_id" INTEGER NOT NULL,
   "{table2}_id" INTEGER NOT NULL,
-  "_created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  "_created_at" TIMESTAMP WITH TIME ZONE,
+  "_updated_at" TIMESTAMP WITH TIME ZONE,
   PRIMARY KEY ("{table1}_id", "{table2}_id"),
   FOREIGN KEY ("{table1}_id") REFERENCES "{table1}"("id") ON DELETE CASCADE,
   FOREIGN KEY ("{table2}_id") REFERENCES "{table2}"("id") ON DELETE CASCADE

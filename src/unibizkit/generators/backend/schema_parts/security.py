@@ -221,15 +221,6 @@ WITH CHECK (true);
         END IF;
     END IF;""")
 
-            trigger_checks.append("""
-    -- System timestamps are immutable / system-controlled
-    IF (TG_OP = 'INSERT') THEN
-        NEW."_created_at" := CURRENT_TIMESTAMP;
-        NEW."_updated_at" := CURRENT_TIMESTAMP;
-    ELSIF (TG_OP = 'UPDATE' AND NEW."_created_at" IS DISTINCT FROM OLD."_created_at") THEN
-        RAISE EXCEPTION 'Permission denied: _created_at is immutable' USING ERRCODE = 'insufficient_privilege';
-    END IF;""")
-
             has_security_owner_id = any(f["name"] == "security_owner_id" for f in concept["fields"])
             if has_security_owner_id:
                 trigger_checks.append("""

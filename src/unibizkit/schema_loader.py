@@ -140,6 +140,7 @@ class SchemaLoader:
             # to the injected authentication concepts.
             DefaultValidatingDraft7Validator(self.validation_schema).validate(business_schema)
 
+            self._validate_reserved_field_names(business_schema)
             self._validate_seed_data_against_business_schema(business_schema)
             
             logger.info(f"Successfully loaded and validated schema: {path}")
@@ -300,6 +301,17 @@ class SchemaLoader:
 
                 for document in record.get("documents", []):
                     self._validate_seed_document(concept, document)
+
+    def _validate_reserved_field_names(self, business_schema: Dict[str, Any]):
+        """
+        Reserve underscore-prefixed columns for UniBizKit generated internals.
+        """
+        for concept in business_schema["concepts"]:
+            for field in concept["fields"]:
+                if field["name"].startswith("_"):
+                    raise SchemaValidationError(
+                        f"Field '{concept['name']}.{field['name']}' uses reserved '_' prefix"
+                    )
 
     def _validate_seed_document(self, concept: Dict[str, Any], document: Dict[str, Any]):
         concept_name = concept["name"]
