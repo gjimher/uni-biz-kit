@@ -215,4 +215,8 @@ END IF;
 
 This allows seed scripts run via the service role (which bypass the PostgREST JWT layer) to populate data without triggering permission errors.
 
-This bypass applies to permission and ACL enforcement triggers. There is no bypass for `00_protect_internal_columns_trigger` or `01_set_system_timestamps_trigger`; internal columns remain database-controlled during seeding as well.
+This bypass applies to permission and ACL enforcement triggers, including `00_protect_internal_columns_trigger`. 
+Direct database seed and migration scripts may therefore populate `_...` columns when they run without a PostgREST user JWT. 
+Requests made through the application with a user JWT still cannot create or modify internal columns.
+
+`01_set_system_timestamps_trigger` always runs; system timestamps remain database-controlled even during seeding.

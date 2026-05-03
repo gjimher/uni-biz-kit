@@ -22,6 +22,10 @@ DECLARE
     old_row JSONB;
     column_name TEXT;
 BEGIN
+    IF current_setting('request.jwt.claims', true) IS NULL OR current_setting('request.jwt.claims', true) = '' THEN
+        RETURN NEW;
+    END IF;
+
     new_row := to_jsonb(NEW);
 
     IF TG_OP = 'INSERT' THEN

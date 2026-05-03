@@ -292,7 +292,7 @@ def test_owner_write_rls():
 
 @pytest.mark.integration
 def test_security_owner_id_is_not_updatable():
-    """Test that security_owner_id cannot be updated by admin or user1."""
+    """Test that _security_owner_id cannot be updated by admin or user1."""
     load_dotenv("test-app/backend/.env")
     db_url = os.getenv("DB_URL")
     if not db_url:
@@ -333,12 +333,12 @@ def test_security_owner_id_is_not_updatable():
             try:
                 cur.execute("SET LOCAL ROLE authenticated;")
                 cur.execute(f"SELECT set_config('request.jwt.claims', '{jwt_claims}', true);")
-                cur.execute(f"UPDATE \"order\" SET security_owner_id = '{admin_id}' WHERE id = {order_id};")
-                cur.execute(f'SELECT security_owner_id FROM "order" WHERE id = {order_id};')
+                cur.execute(f"UPDATE \"order\" SET _security_owner_id = '{admin_id}' WHERE id = {order_id};")
+                cur.execute(f'SELECT _security_owner_id FROM "order" WHERE id = {order_id};')
                 row = cur.fetchone()
                 # If UPDATE succeeded without error, check value didn't change
                 assert row is not None and str(row[0]) == str(user1_id), \
-                    f"{role_label} should NOT be able to change security_owner_id, but it changed to {row[0] if row else 'N/A'}"
+                    f"{role_label} should NOT be able to change _security_owner_id, but it changed to {row[0] if row else 'N/A'}"
             except psycopg2.Error:
                 # UPDATE was blocked by REVOKE — this is the expected outcome
                 pass
@@ -621,7 +621,7 @@ def test_order_document_owner_isolation():
     """Test that user2 cannot access user1's order document via DB table or Storage API.
 
     Verifies two layers of protection:
-    1. DB RLS: the order_document table enforces ownership via JOIN on order.security_owner_id
+    1. DB RLS: the order_document table enforces ownership via JOIN on order._security_owner_id
     2. Storage RLS: the storage bucket enforces ownership via the same JOIN
     """
     import requests as req

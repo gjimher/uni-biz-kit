@@ -90,12 +90,12 @@ CREATE TRIGGER "{table_name}_manage_current_trigger"
             f'EXISTS (SELECT 1 FROM "{table_name}" od '
             f'JOIN "{owner_name}" o ON o.id = od."{fk_col}" '
             f'WHERE od."storage_path" = objects.name '
-            f'AND o."security_owner_id" = auth.uid()::text)'
+            f'AND o."_security_owner_id" = auth.uid()::text)'
         )
         owner_insert_join = (
             f'EXISTS (SELECT 1 FROM "{owner_name}" o '
             f'WHERE o.id::text = (storage.foldername(objects.name))[1] '
-            f'AND o."security_owner_id" = auth.uid()::text)'
+            f'AND o."_security_owner_id" = auth.uid()::text)'
         )
 
         bucket_clause = f"bucket_id = '{bucket_name}'"
@@ -129,13 +129,13 @@ ON CONFLICT (id) DO NOTHING;"""]
                             f'EXISTS (SELECT 1 FROM "{table_name}" od '
                             f'JOIN "{owner_name}" o ON o.id = od."{fk_col}" '
                             f'WHERE od."storage_path" = objects.name '
-                            f'AND o."security_owner_id" = auth.uid()::text '
+                            f'AND o."_security_owner_id" = auth.uid()::text '
                             f'AND o."state" IN ({states_sql}))'
                         )
                         role_write_join_insert = (
                             f'EXISTS (SELECT 1 FROM "{owner_name}" o '
                             f'WHERE o.id::text = (storage.foldername(objects.name))[1] '
-                            f'AND o."security_owner_id" = auth.uid()::text '
+                            f'AND o."_security_owner_id" = auth.uid()::text '
                             f'AND o."state" IN ({states_sql}))'
                         )
                 storage_sql.append(f"""CREATE POLICY "{role}_select_{bucket_name}" ON storage.objects

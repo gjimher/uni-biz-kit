@@ -112,6 +112,29 @@ CREATE TRIGGER on_auth_user_roles_sync
 """
 
 
+def _generate_security_owner_triggers(owner_tables: List[str]) -> str:
+    trigger_sql = ["""
+CREATE OR REPLACE FUNCTION "02_set_security_owner_id_trigger_function"()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW."_security_owner_id" := auth.uid()::text;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+"""]
+
+    for table in owner_tables:
+        trigger_sql.append(f"""
+DROP TRIGGER IF EXISTS "02_set_security_owner_id_trigger" ON "{table}";
+CREATE TRIGGER "02_set_security_owner_id_trigger"
+BEFORE INSERT ON "{table}"
+FOR EACH ROW
+EXECUTE FUNCTION "02_set_security_owner_id_trigger_function"();
+""")
+
+    return "\n".join(trigger_sql)
+
+
 def generate_security_policies(
     concepts: List[Dict[str, Any]],
     concept_map: Dict[str, Any],
@@ -132,6 +155,13 @@ def generate_security_policies(
     _acl = security_config["_acl"]
     roles = security_config["roles"]
     all_role_names = set(r["name"] for r in roles)
+    owner_tables = [
+        concept["name"]
+        for concept in concepts
+        if any(f["name"] == "_security_owner_id" for f in concept["fields"])
+    ]
+    if owner_tables:
+        policies.append(_generate_security_owner_triggers(owner_tables))
 
     join_tables = []
     for concept in concepts:
@@ -221,19 +251,9 @@ WITH CHECK (true);
         END IF;
     END IF;""")
 
-            has_security_owner_id = any(f["name"] == "security_owner_id" for f in concept["fields"])
-            if has_security_owner_id:
-                trigger_checks.append("""
-    -- security_owner_id must be auth.uid() on insert, and is immutable after that
-    IF (TG_OP = 'INSERT' AND NEW."security_owner_id" IS DISTINCT FROM auth.uid()::text) THEN
-        RAISE EXCEPTION 'Permission denied: security_owner_id must be auth.uid()' USING ERRCODE = 'insufficient_privilege';
-    ELSIF (TG_OP = 'UPDATE' AND NEW."security_owner_id" IS DISTINCT FROM OLD."security_owner_id") THEN
-        RAISE EXCEPTION 'Permission denied: security_owner_id is immutable' USING ERRCODE = 'insufficient_privilege';
-    END IF;""")
-
             for field in concept["fields"]:
                 field_name = field["name"]
-                if field_name == "security_owner_id":
+                if field_name.startswith("_"):
                     continue
                 field_rules = concept_acl["_fields"].get(field_name, {})
 
@@ -345,7 +365,7 @@ USING ({role_condition});
 """)
             elif access == "owner_write":
                 parent_state_cond = build_parent_state_condition(table, role)
-                owner_cond = f'{role_condition} AND "security_owner_id" = auth.uid()::text'
+                owner_cond = f'{role_condition} AND "_security_owner_id" = auth.uid()::text'
                 policies.append(f"""
 CREATE POLICY "{role}_owner_select_{table}" ON "{table}"
 FOR SELECT
@@ -420,7 +440,7 @@ USING (true);
                 owner_condition = (
                     f'EXISTS (SELECT 1 FROM "{owner_name}" '
                     f'WHERE "{owner_name}"."id" = "{doc_table}"."{fk_col}" '
-                    f'AND "{owner_name}"."security_owner_id" = auth.uid()::text)'
+                    f'AND "{owner_name}"."_security_owner_id" = auth.uid()::text)'
                 )
                 # Add workflow state check for write operations
                 doc_workflow = concept_workflows.get(owner_name)

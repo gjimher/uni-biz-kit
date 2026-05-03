@@ -235,15 +235,14 @@ class SchemaProcessor:
         # We need to iterate by index to modify the list in place with a reordered dict
         for idx, concept in enumerate(self.concepts):
             if concept["name"] in owner_write_concepts:
-                if not any(f["name"] == "security_owner_id" for f in concept["fields"]):
+                if not any(f["name"] == "_security_owner_id" for f in concept["fields"]):
                     concept["fields"].append({
-                        "name": "security_owner_id",
+                        "name": "_security_owner_id",
                         "type": "string",
                         "size": "l",
                         "description": "ID of the user who owns this record",
                         "required": False,
                         "unique": False,
-                        "default": "auth.uid()::text"
                     })
 
             # Process basics returns a NEW dict with reordered keys
@@ -723,7 +722,7 @@ class SchemaProcessor:
         if field["name"] == "state_info":
             return 'internal'
 
-        if field["name"] == "security_owner_id":
+        if field["name"].startswith("_"):
             return 'internal'
 
         return 'editable'
