@@ -185,7 +185,8 @@ class SchemaLoader:
         
         # Validate and inject defaults
         DefaultValidatingDraft7Validator(self.security_validation_schema).validate(security_config)
-        
+        self._validate_reserved_role_names(security_config)
+
         self.security_config = security_config
         logger.info(f"Successfully loaded and validated security settings: {security_path}")
 
@@ -301,6 +302,13 @@ class SchemaLoader:
 
                 for document in record.get("documents", []):
                     self._validate_seed_document(concept, document)
+
+    def _validate_reserved_role_names(self, security_config: Dict[str, Any]):
+        for role in security_config.get("roles", []):
+            if role["name"].startswith("_"):
+                raise SchemaValidationError(
+                    f"Role '{role['name']}' uses reserved '_' prefix"
+                )
 
     def _validate_reserved_field_names(self, business_schema: Dict[str, Any]):
         """

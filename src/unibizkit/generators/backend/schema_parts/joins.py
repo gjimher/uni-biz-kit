@@ -1,31 +1,39 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, Generator, List, Tuple
+
+
+def _join_table_pairs(
+    concepts: List[Dict[str, Any]], concept_map: Dict[str, Any]
+) -> Generator[Tuple[str, str, str], None, None]:
+    """Yield (join_table_name, table1, table2) for each many-to-many join, deduplicated."""
+    seen: set = set()
+    for concept in concepts:
+        for field in concept["fields"]:
+            if field["type"] != "relation_to_many":
+                continue
+            target_concept = concept_map.get(field["target"])
+            if not target_concept:
+                continue
+            is_one_to_many = any(
+                f["type"] == "relation_to_one" and f["target"] == concept["name"]
+                for f in target_concept["fields"]
+            )
+            if not is_one_to_many:
+                table1 = concept["name"]
+                table2 = field["target"]
+                join_table_name = f"{min(table1, table2)}_{max(table1, table2)}"
+                if join_table_name not in seen:
+                    seen.add(join_table_name)
+                    yield join_table_name, table1, table2
+
+
+def get_join_table_names(concepts: List[Dict[str, Any]], concept_map: Dict[str, Any]) -> List[str]:
+    return [name for name, _, _ in _join_table_pairs(concepts, concept_map)]
 
 
 def generate_join_tables(concepts: List[Dict[str, Any]], concept_map: Dict[str, Any]) -> List[str]:
     join_tables = []
-
-    for concept in concepts:
-        for field in concept["fields"]:
-            if field["type"] == "relation_to_many":
-                target_concept_name = field["target"]
-                target_concept = concept_map.get(target_concept_name)
-
-                if not target_concept:
-                    continue
-
-                is_one_to_many = False
-                for target_field in target_concept["fields"]:
-                    if target_field["type"] == "relation_to_one" and target_field["target"] == concept["name"]:
-                        is_one_to_many = True
-                        break
-
-                if not is_one_to_many:
-                    table1 = concept["name"]
-                    table2 = target_concept_name
-                    join_table_name = f"{min(table1, table2)}_{max(table1, table2)}"
-
-                    if join_table_name not in [jt.split('(')[0].strip() for jt in join_tables]:
-                        sql = f"""
+    for join_table_name, table1, table2 in _join_table_pairs(concepts, concept_map):
+        join_tables.append(f"""
 CREATE TABLE "{join_table_name}" (
   "{table1}_id" INTEGER NOT NULL,
   "{table2}_id" INTEGER NOT NULL,
@@ -35,9 +43,7 @@ CREATE TABLE "{join_table_name}" (
   FOREIGN KEY ("{table1}_id") REFERENCES "{table1}"("id") ON DELETE CASCADE,
   FOREIGN KEY ("{table2}_id") REFERENCES "{table2}"("id") ON DELETE CASCADE
 );
-"""
-                        join_tables.append(sql)
-
+""")
     return join_tables
 
 

@@ -2,7 +2,7 @@ import pytest
 import json
 import tempfile
 from pathlib import Path
-from unibizkit.schema_loader import SchemaLoader
+from unibizkit.schema_loader import SchemaLoader, SchemaValidationError
 
 def test_defaults_population():
     """
@@ -109,7 +109,44 @@ def test_special_required_default():
             assert field['name'] == 'order'
             assert 'required' in field, "required should be populated"
             assert field['required'] is True, "required should default to True for part_of relations"
-            
+
         finally:
             # TemporaryDirectory handles cleanup
             pass
+
+
+_MINIMAL_CONCEPTS = {
+    "version": "1.0.0",
+    "name": "Test App",
+    "concepts": [{"name": "item", "fields": [{"name": "f1", "type": "string"}], "id_presentation": {"fields": ["f1"]}}],
+}
+
+
+def test_underscore_role_name_raises_error():
+    """Role names starting with '_' are reserved and must be rejected at load time."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "concepts.json"
+        with open(temp_path, 'w') as f:
+            json.dump(_MINIMAL_CONCEPTS, f)
+        with open(Path(temp_dir) / "presentation.json", 'w') as f:
+            json.dump({}, f)
+        with open(Path(temp_dir) / "security.json", 'w') as f:
+            json.dump({"authentication_required": True, "roles": [{"name": "_secret"}]}, f)
+
+        with pytest.raises(SchemaValidationError, match="_secret"):
+            SchemaLoader().load_and_validate(str(temp_path))
+
+
+def test_anon_role_name_raises_error():
+    """'_anon' declared explicitly in the roles list must be rejected."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "concepts.json"
+        with open(temp_path, 'w') as f:
+            json.dump(_MINIMAL_CONCEPTS, f)
+        with open(Path(temp_dir) / "presentation.json", 'w') as f:
+            json.dump({}, f)
+        with open(Path(temp_dir) / "security.json", 'w') as f:
+            json.dump({"authentication_required": True, "roles": [{"name": "_anon"}]}, f)
+
+        with pytest.raises(SchemaValidationError, match="_anon"):
+            SchemaLoader().load_and_validate(str(temp_path))

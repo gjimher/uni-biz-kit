@@ -386,13 +386,20 @@ class SchemaProcessor:
         if "rules_level_3" not in self.security_extended:
             self.security_extended["rules_level_3"] = []
 
-        # Validate _anon rules: only read access is allowed
+        # Validate _anon rules: only concept-level read is allowed
         for level_key in ["rules_level_1", "rules_level_2", "rules_level_3"]:
             for rule in self.security_extended.get(level_key, []):
-                if rule["role"] == "_anon" and rule["access"] != "read":
+                if rule["role"] != "_anon":
+                    continue
+                if rule["access"] != "read":
                     raise ValueError(
                         f"Role '_anon' only supports 'read' access, got '{rule['access']}' "
                         f"for concept '{rule['concept']}' in {level_key}"
+                    )
+                if rule.get("field", "*") != "*":
+                    raise ValueError(
+                        f"Role '_anon' only supports concept-level access (field '*'), "
+                        f"got field '{rule['field']}' for concept '{rule['concept']}' in {level_key}"
                     )
 
         # Map: parent concept name -> [child concept names] (via relation_to_one FK)

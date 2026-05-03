@@ -59,6 +59,15 @@ def test_anon_owner_write_raises_error():
         processor.process()
 
 
+def test_anon_field_level_rule_raises_error():
+    """_anon with a specific field rule (not '*') must raise ValueError."""
+    processor = _make_processor(
+        rules_level_2=[{"role": "_anon", "concept": "item", "access": "read", "field": "f1"}]
+    )
+    with pytest.raises(ValueError, match="_anon"):
+        processor.process()
+
+
 def test_anon_not_required_in_roles_list():
     """_anon does not need to be declared in the roles list."""
     processor = _make_processor(
@@ -1636,3 +1645,44 @@ def test_anon_cannot_read_customer():
             assert cur.fetchone() is None, "anon role should NOT be able to read customer rows"
         finally:
             cur.execute("ROLLBACK;")
+
+
+@pytest.mark.integration
+def test_anon_can_read_document_of_anon_readable_concept():
+    """anon role can SELECT from category_document but not from order_document."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    category_id = None
+
+    with conn.cursor() as cur:
+        try:
+            cur.execute(
+                "INSERT INTO category (name, slug) VALUES ('_test_anon_doc', '_test-anon-doc') RETURNING id;"
+            )
+            category_id = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO category_document (category_id, tag, storage_path) VALUES (%s, 'img_s', 'test/anon-doc.jpg') RETURNING id;",
+                (category_id,),
+            )
+            doc_id = cur.fetchone()[0]
+
+            cur.execute("BEGIN;")
+            try:
+                cur.execute("SET LOCAL ROLE anon;")
+
+                cur.execute('SELECT id FROM "category_document" WHERE id = %s;', (doc_id,))
+                assert cur.fetchone() is not None, "anon should be able to read category_document rows"
+
+                cur.execute('SELECT id FROM "order_document" LIMIT 1;')
+                assert cur.fetchone() is None, "anon should NOT be able to read order_document rows"
+            finally:
+                cur.execute("ROLLBACK;")
+        finally:
+            if category_id:
+                cur.execute("DELETE FROM category WHERE id = %s;", (category_id,))
+            conn.close()
