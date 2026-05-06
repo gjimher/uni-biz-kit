@@ -19,6 +19,16 @@ const extractRoles = (user) => normalizeRoles(user.app_metadata?.roles);
 
 const isMissingSessionError = (error) => error?.name === 'AuthSessionMissingError';
 
+const redirectToLogin = {{ message: false, redirectTo: '/login' }};
+
+const clearLocalSession = async () => {{
+    try {{
+        await supabaseClient.auth.signOut();
+    }} catch {{
+        // signOut clears the local session even when the server rejects the stale token.
+    }}
+}};
+
 const buildPermissions = (user) => {{
     const roles = extractRoles(user);
     const permissions = {{}};
@@ -65,9 +75,14 @@ export const authProvider = {{
     checkAuth: async (params) => {{
         try {{
             await baseAuthProvider.checkAuth(params);
+            const {{ data, error }} = await supabaseClient.auth.getUser();
+            if (error || !data.user) {{
+                await clearLocalSession();
+                throw redirectToLogin;
+            }}
         }} catch (error) {{
             if (error?.redirectTo) throw error;
-            throw {{ message: false, redirectTo: '/login' }};
+            throw redirectToLogin;
         }}
     }},
 

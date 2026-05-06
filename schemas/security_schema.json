@@ -40,7 +40,11 @@
         "type": "object",
         "properties": {
           "name": { "type": "string" },
-          "description": { "type": "string" }
+          "description": { "type": "string" },
+          "profile_concept": {
+            "type": "string",
+            "description": "Business concept used as the per-user profile for this role. The generator links profile rows to auth users at login."
+          }
         },
         "required": ["name"]
       }

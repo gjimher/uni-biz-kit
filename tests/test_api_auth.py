@@ -532,9 +532,33 @@ def test_seeded_users_login_and_rls():
             with urllib.request.urlopen(req) as response:
                 res_body = json.loads(response.read().decode("utf-8"))
                 access_token = res_body["access_token"]
+                user_id = res_body["user"]["id"]
                 assert access_token
                 assert res_body["user"]["email"] == email
                 print(f"  Login successful for {email}")
+
+                if email == "user1@test.com":
+                    customer_url = (
+                        f"{api_url}/rest/v1/customer"
+                        f"?select=_user,_user_email,_user_pending_link,email&_user=eq.{urllib.parse.quote(user_id)}"
+                    )
+                    customer_req = urllib.request.Request(
+                        customer_url,
+                        headers={
+                            "apikey": anon_key,
+                            "Authorization": f"Bearer {access_token}",
+                            "Accept": "application/json",
+                        },
+                        method="GET",
+                    )
+                    with urllib.request.urlopen(customer_req) as customer_response:
+                        customer_rows = json.loads(customer_response.read().decode("utf-8"))
+
+                    assert customer_rows, "user1 login should link a customer profile"
+                    assert customer_rows[0]["_user"] == user_id
+                    assert customer_rows[0]["_user_email"] == email
+                    assert customer_rows[0]["email"] == email
+                    assert customer_rows[0]["_user_pending_link"] is None
 
                 insert_url = f"{api_url}/rest/v1/product"
                 base_headers = {

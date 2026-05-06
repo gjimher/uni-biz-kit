@@ -11,6 +11,17 @@
     "role_claim": "roles",
     "default_role": "user"
   },
+  "roles": [
+    {
+      "name": "admin",
+      "description": "System Administrator"
+    },
+    {
+      "name": "user",
+      "description": "Standard User",
+      "profile_concept": "customer"
+    }
+  ],
   "users": [
     {
       "email": "admin@test.com",

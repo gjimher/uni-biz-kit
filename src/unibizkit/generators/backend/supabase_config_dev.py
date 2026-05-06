@@ -23,8 +23,6 @@ def generate(ctx: Context) -> str:
     allow_registration = registration['allow']
     enable_signup = 'true' if allow_registration else 'false'
 
-    sso_enabled = ctx.security_config["sso"]["enabled"]
-
     app_name = ctx.business_schema.get('name', 'app')
     project_id = re.sub(r'[^a-z0-9]+', '_', app_name.lower()).strip('_')
     project_id = f"{project_id}_{dev_ports.ENV_NUM:02d}"
@@ -87,8 +85,8 @@ enabled = true
 client_id = "supabase"
 secret = "REPLACE_WITH_DEV_SSO_SECRET"
 url = "http://keycloak.dev.local:{dev_ports.KC_PORT}/realms/{REALM_NAME}"
-
+""" if ctx.security_config["sso"]["enabled"] else "") + """
 [auth.hook.custom_access_token]
 enabled = true
 uri = "pg-functions://postgres/public/custom_access_token_hook"
-""" if sso_enabled else "")
+"""

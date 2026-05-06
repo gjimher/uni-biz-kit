@@ -59,6 +59,7 @@ def _launch_chrome(user=None):
     if result.returncode != 0:
         pytest.fail(f"dev-sso-chrome.py failed:\n{result.stderr.strip()}")
     time.sleep(3)
+    print("[sso] chrome launched")
 
 
 def _close_chrome():
@@ -72,6 +73,7 @@ def _close_chrome():
         print("[sso] Chrome process killed.")
     else:
         print("[sso] No Chrome process found to kill.")
+    print("[sso] chrome closed")
 
 
 def _find_real_page(browser):
@@ -97,7 +99,9 @@ def _sso_login_and_verify_role(browser, email, expected_role, print_reminder=Fal
 
     if print_reminder:
         print(f"\n[sso] REMINDER: npm start must be running on {APP_URL}")
+
     page.goto(APP_URL)
+    print(f"[sso] Gone to {APP_URL}")
 
     user_label = page.locator("header").get_by_text(email)
     try:
@@ -105,6 +109,8 @@ def _sso_login_and_verify_role(browser, email, expected_role, print_reminder=Fal
         print(f"[sso] Already logged in as {email}")
     except PlaywrightTimeoutError:
         page.get_by_role("button", name="Login with SSO").click()
+        print(f"[sso] Clicked Login with SSO")
+        time.sleep(2)
         user_label.wait_for(state="visible", timeout=30000)
         print(f"[sso] Logged in via SSO. {email} visible in header.")
 

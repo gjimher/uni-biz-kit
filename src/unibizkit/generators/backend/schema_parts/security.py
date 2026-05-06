@@ -1,66 +1,12 @@
 from typing import Any, Dict, List
 
 
-def _generate_sso_hook(sso_config: Dict[str, Any]) -> str:
-    role_claim = sso_config.get('role_claim', 'roles')
-    default_role = sso_config.get('default_role', 'user')
-    allowed_roles = ", ".join(f"'{role['name']}'" for role in sso_config["_all_roles"])
-    return f"""
--- SSO access token hook: maps the SSO JWT roles claim to app_metadata.roles.
--- Email/password users keep their existing app_metadata.roles unchanged.
-CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
-RETURNS jsonb
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-AS $$
-DECLARE
-  claims jsonb;
-  sso_roles jsonb;
-  filtered_sso_roles jsonb;
-BEGIN
-  claims := event -> 'claims';
+def _sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
 
-  SELECT coalesce(
-    identity_data -> '{role_claim}',
-    identity_data -> 'custom_claims' -> '{role_claim}',
-    identity_data -> 'realm_access' -> 'roles'
-  )
-  INTO sso_roles
-  FROM auth.identities
-  WHERE user_id = (event ->> 'user_id')::uuid
-    AND provider != 'email'
-  LIMIT 1;
 
-  IF sso_roles IS NOT NULL AND jsonb_typeof(sso_roles) = 'array' THEN
-    SELECT coalesce(jsonb_agg(to_jsonb(role_name)), '[]'::jsonb)
-    INTO filtered_sso_roles
-    FROM (
-      SELECT DISTINCT role_name
-      FROM jsonb_array_elements_text(sso_roles) AS role_name
-      WHERE role_name IN ({allowed_roles})
-    ) valid_roles;
-  ELSE
-    filtered_sso_roles := NULL;
-  END IF;
-
-  IF filtered_sso_roles IS NOT NULL AND jsonb_array_length(filtered_sso_roles) > 0 THEN
-    claims := jsonb_set(claims, '{{app_metadata}}',
-      coalesce(claims -> 'app_metadata', '{{}}'::jsonb) ||
-      jsonb_build_object('roles', filtered_sso_roles));
-  ELSIF sso_roles IS NOT NULL THEN
-    claims := jsonb_set(claims, '{{app_metadata}}',
-      coalesce(claims -> 'app_metadata', '{{}}'::jsonb) ||
-      jsonb_build_object('roles', to_jsonb(array['{default_role}'])));
-  END IF;
-
-  RETURN jsonb_set(event, '{{claims}}', claims);
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.custom_access_token_hook TO supabase_auth_admin;
-REVOKE EXECUTE ON FUNCTION public.custom_access_token_hook FROM authenticated, anon, public;
-"""
+def _quote_ident(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
 
 
 def _generate_auth_user_roles_trigger(security_config: Dict[str, Any]) -> str:
@@ -112,6 +58,200 @@ CREATE TRIGGER on_auth_user_roles_sync
 """
 
 
+def _profile_insert_columns(concept: Dict[str, Any]) -> List[str]:
+    columns = ["_user", "_user_email"]
+    for field in concept["fields"]:
+        if field["name"] in ("_user", "_user_email", "_user_pending_link"):
+            continue
+        if field["type"] == "relation_to_many":
+            continue
+        if "calculated" in field or field["_be_sql_type"] == "SERIAL":
+            continue
+        if field["required"] and "default" in field:
+            continue
+        if field["required"]:
+            raise ValueError(
+                f"Profile concept '{concept['name']}' cannot be auto-created because "
+                f"required field '{field['name']}' has no default"
+            )
+    return columns
+
+
+def _generate_profile_user_foreign_keys(security_config: Dict[str, Any]) -> str:
+    constraints = []
+    for mapping in security_config["_profile_concepts"]:
+        concept_name = mapping["concept"]
+        constraint_name = f"{concept_name}__user_auth_user_fk"
+        constraints.append(f"""
+ALTER TABLE {_quote_ident(concept_name)}
+  ADD CONSTRAINT {_quote_ident(constraint_name)}
+  FOREIGN KEY ("_user") REFERENCES auth.users(id) ON DELETE CASCADE;""")
+    return "\n".join(constraints)
+
+
+def _generate_profile_sync_function(
+    concept_map: Dict[str, Any],
+    security_config: Dict[str, Any],
+) -> str:
+    sync_parts = []
+    for mapping in security_config["_profile_concepts"]:
+        role_name = mapping["role"]
+        concept_name = mapping["concept"]
+        concept = concept_map[concept_name]
+        table_sql = _quote_ident(concept_name)
+        role_sql = _sql_literal(role_name)
+        insert_columns = _profile_insert_columns(concept)
+        insert_columns_sql = ", ".join(_quote_ident(column) for column in insert_columns)
+        insert_values_sql = ", ".join(
+            "target_user_id" if column == "_user" else "NULL"
+            if column != "_user_email" else "target_email"
+            for column in insert_columns
+        )
+
+        sync_parts.append(f"""
+  -- Sync {role_name} profiles in {concept_name}.
+  UPDATE {table_sql} AS profile
+  SET "_user" = NULL,
+      "_user_email" = NULL,
+      "_user_pending_link" = auth_user.email
+  FROM auth.users AS auth_user
+  WHERE profile."_user" = auth_user.id
+    AND NOT (coalesce(auth_user.raw_app_meta_data -> 'roles', '[]'::jsonb) ? {role_sql});
+
+  IF target_roles ? {role_sql} THEN
+    IF NOT EXISTS (SELECT 1 FROM {table_sql} WHERE "_user" = target_user_id) THEN
+      UPDATE {table_sql}
+      SET "_user" = target_user_id,
+          "_user_email" = target_email,
+          "_user_pending_link" = NULL
+      WHERE "id" = (
+        SELECT "id"
+        FROM {table_sql}
+        WHERE "_user_pending_link" = target_email AND "_user" IS NULL
+        ORDER BY "id"
+        LIMIT 1
+      );
+    END IF;
+
+    INSERT INTO {table_sql} ({insert_columns_sql})
+    SELECT {insert_values_sql}
+    WHERE NOT EXISTS (SELECT 1 FROM {table_sql} WHERE "_user" = target_user_id);
+  ELSE
+    UPDATE {table_sql}
+    SET "_user" = NULL,
+        "_user_email" = NULL,
+        "_user_pending_link" = target_email
+    WHERE "_user" = target_user_id;
+  END IF;""")
+
+    sync_sql = "\n".join(sync_parts)
+    return f"""
+-- Keep role profile concepts linked to the current auth state.
+CREATE OR REPLACE FUNCTION public.sync_role_profiles(target_user_id uuid, target_email text, target_roles jsonb)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+BEGIN
+  IF target_user_id IS NULL OR target_email IS NULL THEN
+    RETURN;
+  END IF;
+
+  target_roles := coalesce(target_roles, '[]'::jsonb);
+  PERFORM set_config('request.jwt.claims', '', true);
+{sync_sql}
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.sync_role_profiles(uuid, text, jsonb) TO supabase_auth_admin;
+REVOKE EXECUTE ON FUNCTION public.sync_role_profiles(uuid, text, jsonb) FROM authenticated, anon, public;
+"""
+
+
+def _generate_access_token_hook(security_config: Dict[str, Any]) -> str:
+    sso_config = security_config["sso"]
+    role_claim = sso_config.get('role_claim', 'roles')
+    default_role = sso_config.get('default_role', 'user')
+    sso_enabled = "TRUE" if sso_config["enabled"] else "FALSE"
+    allowed_roles = ", ".join(f"'{role['name']}'" for role in security_config["roles"])
+    sync_profiles_sql = ""
+    if security_config["_profile_concepts"]:
+        sync_profiles_sql = """
+  PERFORM public.sync_role_profiles(current_user_id, current_email, effective_roles);
+"""
+
+    return f"""
+-- Access token hook: resolves final roles and synchronizes role profile concepts.
+CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+AS $$
+DECLARE
+  claims jsonb;
+  sso_roles jsonb;
+  filtered_sso_roles jsonb;
+  effective_roles jsonb;
+  current_user_id uuid;
+  current_email text;
+BEGIN
+  current_user_id := (event ->> 'user_id')::uuid;
+  claims := event -> 'claims';
+  effective_roles := coalesce(claims -> 'app_metadata' -> 'roles', '[]'::jsonb);
+
+  IF {sso_enabled} THEN
+    SELECT coalesce(
+      identity_data -> '{role_claim}',
+      identity_data -> 'custom_claims' -> '{role_claim}',
+      identity_data -> 'realm_access' -> 'roles'
+    )
+    INTO sso_roles
+    FROM auth.identities
+    WHERE user_id = current_user_id
+      AND provider != 'email'
+    LIMIT 1;
+
+    IF sso_roles IS NOT NULL AND jsonb_typeof(sso_roles) = 'array' THEN
+      SELECT coalesce(jsonb_agg(to_jsonb(role_name)), '[]'::jsonb)
+      INTO filtered_sso_roles
+      FROM (
+        SELECT DISTINCT role_name
+        FROM jsonb_array_elements_text(sso_roles) AS role_name
+        WHERE role_name IN ({allowed_roles})
+      ) valid_roles;
+    ELSE
+      filtered_sso_roles := NULL;
+    END IF;
+
+    IF filtered_sso_roles IS NOT NULL AND jsonb_array_length(filtered_sso_roles) > 0 THEN
+      effective_roles := filtered_sso_roles;
+      claims := jsonb_set(claims, '{{app_metadata}}',
+        coalesce(claims -> 'app_metadata', '{{}}'::jsonb) ||
+        jsonb_build_object('roles', filtered_sso_roles));
+    ELSIF sso_roles IS NOT NULL THEN
+      effective_roles := to_jsonb(array['{default_role}']);
+      claims := jsonb_set(claims, '{{app_metadata}}',
+        coalesce(claims -> 'app_metadata', '{{}}'::jsonb) ||
+        jsonb_build_object('roles', effective_roles));
+    END IF;
+  END IF;
+
+  SELECT email
+  INTO current_email
+  FROM auth.users
+  WHERE id = current_user_id;
+{sync_profiles_sql}
+  RETURN jsonb_set(event, '{{claims}}', claims);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.custom_access_token_hook TO supabase_auth_admin;
+REVOKE EXECUTE ON FUNCTION public.custom_access_token_hook FROM authenticated, anon, public;
+"""
+
+
 def _generate_security_owner_triggers(owner_tables: List[str]) -> str:
     trigger_sql = ["""
 CREATE OR REPLACE FUNCTION "02_set_security_owner_id_trigger_function"()
@@ -143,10 +283,11 @@ def generate_security_policies(
 ) -> List[str]:
     policies = []
 
-    sso_config = security_config["sso"]
-    if sso_config["enabled"]:
-        sso_config = {**sso_config, "_all_roles": security_config["roles"]}
-        policies.append(_generate_sso_hook(sso_config))
+    if security_config["_profile_concepts"]:
+        policies.append(_generate_profile_user_foreign_keys(security_config))
+        policies.append(_generate_profile_sync_function(concept_map, security_config))
+
+    policies.append(_generate_access_token_hook(security_config))
 
     registration = security_config["registration"]
     if registration["allow"]:

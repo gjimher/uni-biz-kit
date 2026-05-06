@@ -25,11 +25,45 @@ def generate(ctx: Context) -> str:
 
     if ctx.seed_data_config["include_test_data"]:
         for concept in sorted_concepts:
+            profile_seed_data = _generate_profile_seed_data_for_concept(concept, ctx)
+            if profile_seed_data:
+                sql_parts.append(profile_seed_data)
+
             sample_data = _generate_sample_data_for_concept(concept, ctx)
             if sample_data:
                 sql_parts.append(sample_data)
 
     return '\n\n'.join(sql_parts)
+
+
+def _profile_role_for_concept(concept_name: str, ctx: Context) -> str:
+    for mapping in ctx.security_config["_profile_concepts"]:
+        if mapping["concept"] == concept_name:
+            return mapping["role"]
+    return ""
+
+
+def _generate_profile_seed_data_for_concept(concept: Dict[str, Any], ctx: Context) -> str:
+    role_name = _profile_role_for_concept(concept["name"], ctx)
+    if not role_name:
+        return ""
+
+    users = [
+        user for user in ctx.security_config["users"]
+        if role_name in user["roles"]
+    ]
+    if not users:
+        return ""
+
+    rows = [
+        f"({_sql_literal(user['email'])})"
+        for user in users
+    ]
+    return (
+        f'INSERT INTO "{concept["name"]}" ("_user_pending_link") VALUES\n'
+        + ",\n".join(rows)
+        + '\nON CONFLICT ("_user_pending_link") DO NOTHING;'
+    )
 
 
 def _generate_sample_data_for_concept(concept: Dict[str, Any], ctx: Context) -> str:
@@ -47,6 +81,9 @@ def _generate_sample_data_for_concept(concept: Dict[str, Any], ctx: Context) -> 
         for field in concept["fields"]:
             field_name = field["name"]
             field_type = field["type"]
+
+            if field_name.startswith("_"):
+                continue
 
             if 'calculated' in field or field["_be_sql_type"] == "SERIAL":
                 continue

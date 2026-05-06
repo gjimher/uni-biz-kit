@@ -364,6 +364,8 @@ class SchemaProcessor:
                 {"email": "user@test.com", "password": "useruser", "roles": ["user"]}
             ]
 
+        self._enrich_profile_concepts()
+
         if not self.security_extended["authentication_required"]:
             # Set default empty _acl even if auth is disabled for schema consistency
             self.security_extended["_acl"] = {}
@@ -526,6 +528,88 @@ class SchemaProcessor:
                 
         self.security_extended["_acl"] = _acl
 
+    def _enrich_profile_concepts(self):
+        """Resolve roles[].profile_concept and inject generated profile link fields."""
+        profile_mappings = []
+        used_concepts = {}
+
+        for role in self.security_extended["roles"]:
+            profile_concept = role.get("profile_concept")
+            if not profile_concept:
+                continue
+
+            role_name = role["name"]
+            concept = self.concept_map.get(profile_concept)
+            if concept is None:
+                raise ValueError(
+                    f"Role '{role_name}' references unknown profile_concept '{profile_concept}'"
+                )
+
+            previous_role = used_concepts.get(profile_concept)
+            if previous_role:
+                raise ValueError(
+                    f"Profile concept '{profile_concept}' is used by both roles "
+                    f"'{previous_role}' and '{role_name}'"
+                )
+            used_concepts[profile_concept] = role_name
+
+            self._inject_profile_fields(concept)
+            self._validate_profile_autocreate_defaults(concept, role_name)
+            profile_mappings.append({"role": role_name, "concept": profile_concept})
+
+        self.security_extended["_profile_concepts"] = profile_mappings
+
+    def _inject_profile_fields(self, concept: Dict[str, Any]):
+        existing_field_names = {field["name"] for field in concept["fields"]}
+
+        if "_user" not in existing_field_names:
+            concept["fields"].append({
+                "name": "_user",
+                "type": "string",
+                "size": "s",
+                "description": "Auth user id linked to this profile",
+                "required": False,
+                "unique": True,
+            })
+
+        if "_user_email" not in existing_field_names:
+            concept["fields"].append({
+                "name": "_user_email",
+                "type": "string",
+                "size": "s",
+                "description": "Auth user email linked to this profile",
+                "required": False,
+                "unique": False,
+            })
+
+        if "_user_pending_link" not in existing_field_names:
+            concept["fields"].append({
+                "name": "_user_pending_link",
+                "type": "string",
+                "size": "s",
+                "description": "Email waiting to be linked to an auth user",
+                "required": False,
+                "unique": True,
+            })
+
+    def _validate_profile_autocreate_defaults(self, concept: Dict[str, Any], role_name: str):
+        for field in concept["fields"]:
+            field_name = field["name"]
+            if field_name in ("_user", "_user_email", "_user_pending_link"):
+                continue
+            if field["type"] == "relation_to_many":
+                continue
+            if "calculated" in field:
+                continue
+            if not field["required"]:
+                continue
+            if "default" in field:
+                continue
+            raise ValueError(
+                f"Profile concept '{concept['name']}' for role '{role_name}' cannot be "
+                f"auto-created because required field '{field_name}' has no default"
+            )
+
     def _process_concept_basics(self, concept: Dict[str, Any]) -> Dict[str, Any]:
         """
         Add basic concept-level metadata and reorder keys.
@@ -675,6 +759,9 @@ class SchemaProcessor:
             
         if field_name == "state_info":
             return "JSONB"
+
+        if field_name == "_user":
+            return "UUID"
 
         if field_type == "relation_to_many":
             return "" # Handled via join tables

@@ -1,5 +1,9 @@
 import pytest
 from unibizkit.schema_processor import SchemaProcessor
+from unibizkit.generators.backend.context import Context as BackendContext
+from unibizkit.generators.backend.schema_parts.security import generate_security_policies
+from unibizkit.generators.backend.supabase_schema import generate as generate_schema_sql
+from unibizkit.generators.backend.supabase_seed_data_dev import generate as generate_seed_data_dev
 import os
 import json
 import psycopg2
@@ -79,6 +83,125 @@ def test_anon_not_required_in_roles_list():
     assert "_anon" not in role_names  # not polluted into the roles list
     acl = processor.security_extended["_acl"]
     assert acl["item"]["_main"].get("_anon") == "read"
+
+
+def test_role_profile_concept_injects_user_link_fields():
+    schema = {
+        "concepts": [
+                {
+                    "name": "employee_profile",
+                    "plural_name": "employee_profiles",
+                    "data_size": "s",
+                    "fields": [
+                    {
+                        "name": "display_name",
+                        "type": "string",
+                        "size": "s",
+                        "required": True,
+                        "default": "pending",
+                    }
+                ],
+                "id_presentation": {"fields": ["display_name"], "separator": " "},
+            }
+        ]
+    }
+    security_config = {
+        "authentication_required": True,
+        "roles": [{"name": "employee", "profile_concept": "employee_profile"}],
+        "registration": {"allow": False, "role": "employee"},
+        "sso": {"enabled": False, "role_claim": "roles", "default_role": "employee"},
+        "users": [{"email": "employee@test.com", "password": "password", "roles": ["employee"]}],
+    }
+
+    processor = SchemaProcessor(schema, security_config=security_config)
+    processor.process()
+
+    profile = processor.concept_map["employee_profile"]
+    fields = {field["name"]: field for field in profile["fields"]}
+    assert processor.security_extended["_profile_concepts"] == [
+        {"role": "employee", "concept": "employee_profile"}
+    ]
+    assert fields["_user"]["unique"] is True
+    assert fields["_user"]["_be_sql_type"] == "UUID"
+    assert fields["_user_email"]["unique"] is False
+    assert fields["_user_email"]["_be_sql_type"] == "VARCHAR(255)"
+    assert fields["_user_email"]["_fe_visibility"] == "internal"
+    assert fields["_user_pending_link"]["unique"] is True
+    assert fields["_user_pending_link"]["_fe_visibility"] == "internal"
+
+
+def test_role_profile_concept_requires_defaults_for_autocreated_required_fields():
+    schema = {
+        "concepts": [
+            {
+                "name": "employee_profile",
+                "plural_name": "employee_profiles",
+                "data_size": "s",
+                "fields": [
+                    {"name": "display_name", "type": "string", "size": "s", "required": True}
+                ],
+                "id_presentation": {"fields": ["display_name"], "separator": " "},
+            }
+        ]
+    }
+    security_config = {
+        "authentication_required": True,
+        "roles": [{"name": "employee", "profile_concept": "employee_profile"}],
+    }
+
+    processor = SchemaProcessor(schema, security_config=security_config)
+    with pytest.raises(ValueError, match="required field 'display_name' has no default"):
+        processor.process()
+
+def test_profile_dev_seed_uses_pending_email_records():
+    schema = {
+        "concepts": [
+            {
+                "name": "employee_profile",
+                "plural_name": "employee_profiles",
+                "data_size": "s",
+                "fields": [
+                    {
+                        "name": "display_name",
+                        "type": "string",
+                        "size": "s",
+                        "required": True,
+                        "default": "pending",
+                    }
+                ],
+                "id_presentation": {"fields": ["display_name"], "separator": " "},
+            }
+        ],
+    }
+    security_config = {
+        "authentication_required": True,
+        "roles": [
+            {"name": "employee", "profile_concept": "employee_profile"},
+            {"name": "admin"},
+        ],
+        "registration": {"allow": False, "role": "employee"},
+        "sso": {"enabled": False, "role_claim": "roles", "default_role": "employee"},
+        "users": [
+            {"email": "employee@test.com", "password": "password", "roles": ["employee"]},
+            {"email": "admin@test.com", "password": "password", "roles": ["admin"]},
+        ],
+    }
+    processor = SchemaProcessor(schema, security_config=security_config)
+    processed = processor.process()
+    ctx = BackendContext(
+        concepts=processor.concepts,
+        concept_map=processor.concept_map,
+        security_config=processor.security_extended,
+        business_schema=processed,
+        system_config={},
+        seed_data_config={"include_test_data": True, "records": {}},
+    )
+
+    sql = generate_seed_data_dev(ctx)
+
+    assert 'INSERT INTO "employee_profile" ("_user_pending_link") VALUES' in sql
+    assert "('employee@test.com')" in sql
+    assert "admin@test.com" not in sql
 
 def test_security_rules_merging():
     schema = {

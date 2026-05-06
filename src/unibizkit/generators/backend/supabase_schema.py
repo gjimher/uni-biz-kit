@@ -27,7 +27,7 @@ def generate(ctx: Context) -> str:
         sql_parts.append(generate_table_sql(concept))
 
     sql_parts.extend(generate_join_tables(ctx.concepts, ctx.concept_map))
-    sql_parts.extend(generate_foreign_key_constraints(ctx.concepts))
+    sql_parts.extend(generate_foreign_key_constraints(ctx.concepts, ctx.security_config))
     sql_parts.extend(generate_document_tables(ctx.concepts, ctx.security_config, ctx.business_schema.get("_concept_workflow", {})))
 
     generated_table_names = _generated_table_names(ctx)

@@ -155,6 +155,7 @@
           "name": "first_name",
           "type": "string",
           "required": true,
+          "default": "Pending",
           "min_length": 1,
           "max_length": 50,
           "description": "Customer's first name"
@@ -163,6 +164,7 @@
           "name": "last_name",
           "type": "string",
           "required": true,
+          "default": "Profile",
           "min_length": 1,
           "max_length": 50,
           "description": "Customer's last name"
@@ -170,7 +172,8 @@
         {
           "name": "email",
           "type": "string",
-          "required": true,
+          "calculated": "\"_user_email\"",
+          "required": false,
           "unique": true,
           "min_length": 5,
           "max_length": 100,
@@ -212,7 +215,7 @@
           "subtype": "related_to",
           "target": "customer",
 
-          "required": true,
+          "required": false,
           "description": "Customer who placed the order"
         },
         {

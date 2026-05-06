@@ -29,7 +29,20 @@
         },
         "required": ["_main", "_fields"]
       }
+    },
+    "_profile_concepts": {
+      "type": "array",
+      "description": "Resolved role-to-profile concept mappings",
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": { "type": "string" },
+          "concept": { "type": "string" }
+        },
+        "required": ["role", "concept"],
+        "additionalProperties": false
+      }
     }
   },
-  "required": ["_acl", "roles", "users"]
+  "required": ["_acl", "_profile_concepts", "roles", "users"]
 }

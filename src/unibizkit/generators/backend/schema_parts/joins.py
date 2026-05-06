@@ -47,8 +47,16 @@ CREATE TABLE "{join_table_name}" (
     return join_tables
 
 
-def generate_foreign_key_constraints(concepts: List[Dict[str, Any]]) -> List[str]:
+def _profile_concept_names(security_config: Dict[str, Any]) -> set[str]:
+    return {mapping["concept"] for mapping in security_config["_profile_concepts"]}
+
+
+def generate_foreign_key_constraints(
+    concepts: List[Dict[str, Any]],
+    security_config: Dict[str, Any],
+) -> List[str]:
     fk_constraints = []
+    profile_concepts = _profile_concept_names(security_config)
 
     for concept in concepts:
         table_name = concept["name"]
@@ -57,10 +65,18 @@ def generate_foreign_key_constraints(concepts: List[Dict[str, Any]]) -> List[str
                 target_table = field["target"]
                 field_name = field["name"]
                 constraint_name = f"fk_{table_name}_{field_name}"
+                on_delete = "CASCADE" if field["required"] else "SET NULL"
+                if on_delete == "CASCADE" and target_table in profile_concepts:
+                    raise ValueError(
+                        f'Concept "{table_name}" has required relation "{field_name}" '
+                        f'to profile concept "{target_table}". Required relations use '
+                        "ON DELETE CASCADE, which would prevent safe auth user deletion. "
+                        "Make the relation optional or do not target a profile concept."
+                    )
                 fk_sql = f"""
 ALTER TABLE "{table_name}"
   ADD CONSTRAINT "{constraint_name}"
-  FOREIGN KEY ("{field_name}") REFERENCES "{target_table}"("id");"""
+  FOREIGN KEY ("{field_name}") REFERENCES "{target_table}"("id") ON DELETE {on_delete};"""
                 fk_constraints.append(fk_sql)
 
     return fk_constraints
