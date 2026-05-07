@@ -127,12 +127,9 @@ def test_create_order_and_upload_document_as_user(page: Page, app_server):
     page.get_by_label("Create").click()
     page.wait_for_url("**#/admin/order/create**")
 
-    # Fill the order form (total_amount is a rollup field — read-only, no input)
+    # Fill the order form (total_amount is rollup read-only; customer is copy_logged_on_insert — auto-set)
     page.locator('input[name="order_date"]').fill("2024-01-15")
     page.locator('input[name="shipping_address"]').fill("_E2E Test Order Address")
-    # Select first available customer from the MUI Select dropdown
-    page.get_by_role("combobox", name="Customer").click()
-    page.get_by_role("option").first.click()
 
     page.get_by_label("Save").click()
     # Wait for redirect to the edit page (URL contains a numeric order ID)

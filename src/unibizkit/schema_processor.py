@@ -738,7 +738,12 @@ class SchemaProcessor:
 
     def _process_field(self, field: Dict[str, Any], concept: Dict[str, Any]):
         """Enrich a single field."""
-        
+        if 'calculated' in field and 'default' in field:
+            raise ValueError(
+                f"Field '{field['name']}' in concept '{concept['name']}' has both "
+                f"'calculated' and 'default' set. Calculated fields cannot have defaults."
+            )
+
         # 1. Backend Processing
         field["_be_sql_type"] = self._determine_sql_type(field)
         field["_be_not_null"] = field["required"]

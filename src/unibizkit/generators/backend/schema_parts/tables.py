@@ -51,8 +51,9 @@ def generate_field_sql(field: Dict[str, Any], concept: Dict[str, Any]) -> str:
             field_parts = [f'"{field_name}" {sql_type}']
             if field["_be_not_null"]:
                 field_parts.append("NOT NULL")
-            field_parts.append("DEFAULT 0")
             return ' '.join(field_parts)
+        if expr.startswith('copy(') or expr.startswith('copy_logged_on_insert('):
+            return f'"{field_name}" {sql_type}'
         sql_parts = [f'"{field_name}" {sql_type} GENERATED ALWAYS AS ({expr}) STORED']
         return ' '.join(sql_parts)
 

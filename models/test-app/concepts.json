@@ -214,8 +214,8 @@
           "type": "relation_to_one",
           "subtype": "related_to",
           "target": "customer",
-
           "required": false,
+          "calculated": "copy_logged_on_insert(customer)",
           "description": "Customer who placed the order"
         },
         {
@@ -292,6 +292,7 @@
           "precision": 10,
           "scale": 2,
           "min": 0,
+          "calculated": "copy(product,price,state_initial)",
           "description": "Price per unit at time of purchase"
         },
         {
