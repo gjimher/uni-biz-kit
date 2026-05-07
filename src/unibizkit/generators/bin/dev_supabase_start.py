@@ -157,7 +157,19 @@ if supabase_dir.exists():
             sys.exit(f"supabase start failed with code {result.returncode}")
         print("Supabase restarted with updated config.")
     else:
-        print("Config is up to date. Nothing to do.")
+        status_check = subprocess.run(
+            ['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'status', '-o', 'json'],
+            capture_output=True, text=True,
+        )
+        if status_check.returncode != 0:
+            print("Config is up to date but Supabase is not running — starting...")
+            result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'start'],
+                                    stdout=sys.stdout, stderr=sys.stderr)
+            if result.returncode != 0:
+                sys.exit(f"supabase start failed with code {result.returncode}")
+            print("Supabase started.")
+        else:
+            print("Config is up to date and Supabase is running. Nothing to do.")
     sys.exit(0)
 
 print("Initializing Supabase...")

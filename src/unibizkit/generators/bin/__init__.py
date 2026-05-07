@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Any, Dict
 from .. import dev_sso
 from . import (
-    dev_supabase_start, dev_supabase_remove, dev_supabase_reset_schema_and_data,
+    dev_supabase_start, dev_supabase_stop, dev_supabase_remove, dev_supabase_reset_schema_and_data,
     dev_sso_start, dev_sso_chrome, dev_sso_stop, dev_sso_remove,
     dev_smtp_mock,
 )
@@ -10,6 +10,7 @@ from . import (
 
 def generate(bin_dir: Path, security_config: Dict[str, Any]):
     dev_supabase_start.generate(bin_dir)
+    dev_supabase_stop.generate(bin_dir)
     dev_supabase_remove.generate(bin_dir)
     dev_supabase_reset_schema_and_data.generate(bin_dir)
     dev_smtp_mock.generate(bin_dir)
