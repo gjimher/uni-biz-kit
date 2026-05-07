@@ -229,6 +229,7 @@
           "precision": 10,
           "scale": 2,
           "min": 0,
+          "calculated": "rollup(sum,order_item,total_price)",
           "description": "Total order amount"
         },
         {

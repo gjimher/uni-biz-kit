@@ -90,3 +90,47 @@ class TestAppBackend:
 
         finally:
             os.chdir(original_cwd)
+
+    @pytest.mark.integration
+    @pytest.mark.timeout(60)
+    def test_rollup_total_amount(self):
+        """Verify that order.total_amount is updated by the rollup trigger when order_items are inserted."""
+        load_dotenv(Path('test-app/backend/.env'))
+        db_url = os.getenv("DB_URL")
+        assert db_url, "DB_URL must be present in test-app/backend/.env"
+
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute('SELECT "id" FROM "customer" LIMIT 1;')
+                row = cur.fetchone()
+                assert row, "No customer found — run the full backend test first to seed data"
+                customer_id = row[0]
+
+                cur.execute(
+                    'INSERT INTO "order" ("customer", "order_date", "shipping_address") '
+                    "VALUES (%s, NOW(), 'Test Street 1') RETURNING id;",
+                    (customer_id,),
+                )
+                order_id = cur.fetchone()[0]
+
+                # item 1: 2 × 10.00 = 20.00
+                cur.execute(
+                    'INSERT INTO "order_item" ("order", "quantity", "unit_price") '
+                    "VALUES (%s, 2, 10.00);",
+                    (order_id,),
+                )
+                # item 2: 3 × 5.00 = 15.00
+                cur.execute(
+                    'INSERT INTO "order_item" ("order", "quantity", "unit_price") '
+                    "VALUES (%s, 3, 5.00);",
+                    (order_id,),
+                )
+
+                cur.execute('SELECT "total_amount" FROM "order" WHERE "id" = %s;', (order_id,))
+                total = cur.fetchone()[0]
+                assert float(total) == 35.00, f"Expected 35.00, got {total}"
+
+            conn.rollback()
+        finally:
+            conn.close()

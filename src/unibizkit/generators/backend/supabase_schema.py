@@ -3,7 +3,7 @@ from .schema_parts.tables import generate_table_sql
 from .schema_parts.joins import generate_join_tables, generate_foreign_key_constraints, get_join_table_names
 from .schema_parts.documents import generate_document_tables
 from .schema_parts.internal_columns import generate_internal_column_protection, generate_system_timestamp_triggers
-from .schema_parts.triggers import generate_presentation_triggers
+from .schema_parts.triggers import generate_presentation_triggers, generate_rollup_triggers
 from .schema_parts.security import generate_security_policies
 
 
@@ -34,6 +34,7 @@ def generate(ctx: Context) -> str:
     sql_parts.extend(generate_internal_column_protection(generated_table_names))
     sql_parts.extend(generate_system_timestamp_triggers(generated_table_names))
 
+    sql_parts.extend(generate_rollup_triggers(ctx.concepts, ctx.concept_map))
     sql_parts.extend(generate_presentation_triggers(ctx.concepts))
 
     if ctx.security_config["authentication_required"]:
