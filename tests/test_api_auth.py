@@ -498,8 +498,8 @@ def test_forgot_password_flow(smtp_server):
 def test_seeded_users_login_and_rls():
     """
     Verify that seeded users can login and that RLS + field-level security
-    is enforced correctly: all users can insert into product, but only admins
-    can write the admin_field column.
+    is enforced correctly: only admins can insert into product, and only admins
+    can write admin_* fields (customer.admin_field).
     """
     frontend_dir = os.path.abspath("test-app/frontend")
     security_extended_file = os.path.abspath("test-app/security_extended.json")
@@ -512,6 +512,10 @@ def test_seeded_users_login_and_rls():
     api_url = os.getenv("VITE_SUPABASE_URL")
     anon_key = os.getenv("VITE_SUPABASE_KEY")
     assert api_url and anon_key, "VITE_SUPABASE_URL / VITE_SUPABASE_KEY not found in frontend .env.development"
+
+    user1_customer_id = None
+    user1_auth_headers = None
+    admin_auth_headers = None
 
     for user in auth_users:
         email = user["email"]
@@ -537,10 +541,20 @@ def test_seeded_users_login_and_rls():
                 assert res_body["user"]["email"] == email
                 print(f"  Login successful for {email}")
 
+                auth_headers = {
+                    "apikey": anon_key,
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal",
+                }
+
+                if role == "admin":
+                    admin_auth_headers = auth_headers
+
                 if email == "user1@test.com":
                     customer_url = (
                         f"{api_url}/rest/v1/customer"
-                        f"?select=_user,_user_email,_user_pending_link,email&_user=eq.{urllib.parse.quote(user_id)}"
+                        f"?select=id,_user,_user_email,_user_pending_link,email&_user=eq.{urllib.parse.quote(user_id)}"
                     )
                     customer_req = urllib.request.Request(
                         customer_url,
@@ -559,16 +573,11 @@ def test_seeded_users_login_and_rls():
                     assert customer_rows[0]["_user_email"] == email
                     assert customer_rows[0]["email"] == email
                     assert customer_rows[0]["_user_pending_link"] is None
+                    user1_customer_id = customer_rows[0]["id"]
+                    user1_auth_headers = auth_headers
 
+                # -- Product insert: only admins allowed, users are blocked
                 insert_url = f"{api_url}/rest/v1/product"
-                base_headers = {
-                    "apikey": anon_key,
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal",
-                }
-
-                # -- Regular insert: all users allowed
                 insert_data = json.dumps({
                     "name": f"Test product by {email}",
                     "price": 10.00,
@@ -578,34 +587,43 @@ def test_seeded_users_login_and_rls():
                 }).encode("utf-8")
                 try:
                     with urllib.request.urlopen(
-                        urllib.request.Request(insert_url, data=insert_data, headers=base_headers, method="POST")
-                    ):
-                        print(f"  Insert successful for {email}")
-                except urllib.error.HTTPError as e:
-                    pytest.fail(f"User {email} (role: {role}) failed to insert into product: {e.code} {e.read().decode()}")
-
-                # -- Admin field insert: only admins allowed
-                admin_data = json.dumps({
-                    "name": f"Test product admin field by {email}",
-                    "price": 15.00,
-                    "stock_quantity": 5,
-                    "sku": f"TEST-SKU-ADMIN-{email.split('@')[0]}-{int(time.time())}",
-                    "status": "draft",
-                    "admin_field": "secret",
-                }).encode("utf-8")
-                try:
-                    with urllib.request.urlopen(
-                        urllib.request.Request(insert_url, data=admin_data, headers=base_headers, method="POST")
+                        urllib.request.Request(insert_url, data=insert_data, headers=auth_headers, method="POST")
                     ):
                         if role == "user":
-                            pytest.fail(f"User {email} (role: user) was able to insert admin_field — should be blocked")
-                        else:
-                            print(f"  Admin field insert allowed for {email} (admin)")
+                            pytest.fail(f"User {email} should NOT be able to insert product (read-only for users)")
+                        print(f"  Product insert allowed for {email} (admin)")
                 except urllib.error.HTTPError as e:
                     if role == "admin":
-                        pytest.fail(f"Admin {email} failed to insert admin_field: {e.code} {e.read().decode()}")
-                    else:
-                        print(f"  Admin field correctly blocked for {email} (user): {e.code}")
+                        pytest.fail(f"Admin {email} failed to insert product: {e.code} {e.read().decode()}")
+                    print(f"  Product insert correctly blocked for {email} (user): {e.code}")
 
         except urllib.error.HTTPError as e:
             pytest.fail(f"Login failed for {email}: {e.code} {e.read().decode()}")
+
+    # -- admin_field write restriction: only admins can write customer.admin_field
+    if not (user1_customer_id and user1_auth_headers and admin_auth_headers):
+        pytest.skip("Could not obtain required tokens/ids for admin_field test")
+
+    patch_url = f"{api_url}/rest/v1/customer?id=eq.{user1_customer_id}"
+    admin_field_data = json.dumps({"admin_field": "secret"}).encode("utf-8")
+
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(patch_url, data=admin_field_data, headers=user1_auth_headers, method="PATCH")
+        ):
+            pytest.fail("user1 should NOT be able to update customer.admin_field")
+    except urllib.error.HTTPError as e:
+        print(f"  customer.admin_field update correctly blocked for user1: {e.code}")
+
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(
+                patch_url,
+                data=json.dumps({"admin_field": "admin_value"}).encode("utf-8"),
+                headers=admin_auth_headers,
+                method="PATCH",
+            )
+        ):
+            print("  customer.admin_field update allowed for admin")
+    except urllib.error.HTTPError as e:
+        pytest.fail(f"Admin failed to update customer.admin_field: {e.code} {e.read().decode()}")

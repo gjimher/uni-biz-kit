@@ -129,7 +129,7 @@ def test_create_order_and_upload_document_as_user(page: Page, app_server):
 
     # Fill the order form (total_amount is rollup read-only; customer is copy_logged_on_insert — auto-set)
     page.locator('input[name="order_date"]').fill("2024-01-15")
-    page.locator('input[name="shipping_address"]').fill("_E2E Test Order Address")
+    page.locator('input[name="shipping_address_street"]').fill("_E2E Test Order Address")
 
     page.get_by_label("Save").click()
     # Wait for redirect to the edit page (URL contains a numeric order ID)

@@ -161,21 +161,22 @@ Examples:
         if "fields" in extra_concept_props:
             base_field_items = base_concept_props["fields"]["items"]
             extra_field_items = extra_concept_props["fields"]["items"]
-            
+
             # Merge properties
             base_field_items["properties"].update(extra_field_items["properties"])
-            
-            # Auto-generate required from keys
+
+            # Auto-generate required from keys, respecting optional_properties
             if "required" not in base_field_items:
                 base_field_items["required"] = []
-            
-            # Add all keys from extra properties to required
-            base_field_items["required"].extend(extra_field_items["properties"].keys())
+
+            optional_field_keys = set(extra_field_items.get("optional_properties", []))
+            required_field_keys = [k for k in extra_field_items["properties"].keys() if k not in optional_field_keys]
+            base_field_items["required"].extend(required_field_keys)
             base_field_items["required"] = list(set(base_field_items["required"]))
 
         # 1b. Merge Direct Concept Properties
         for key, value in extra_concept_props.items():
-            if key == "fields":
+            if key in ("fields", "optional_properties"):
                 continue
             base_concept_props[key] = value
 
@@ -184,14 +185,15 @@ Examples:
             "type": "object",
             "description": "Mapping of concept names to their workflow configurations"
         }
-        
+
         # 2. Merge Concept Required (Auto-generate)
         if "required" not in base_concept_items:
              base_concept_items["required"] = []
-        
+
         # Add all keys from extra properties (excluding fields as it is nested container) to required
-        # _workflow is optional and will be removed, so we exclude it from required
-        keys_to_require = [k for k in extra_concept_props.keys() if k not in ("fields", "_workflow")]
+        # _workflow is optional; keys in optional_properties are also excluded from required
+        optional_concept_keys = set(extra_concept_items.get("optional_properties", []))
+        keys_to_require = [k for k in extra_concept_props.keys() if k not in ("fields", "_workflow", "optional_properties") and k not in optional_concept_keys]
         base_concept_items["required"].extend(keys_to_require)
         base_concept_items["required"] = list(set(base_concept_items["required"]))
              

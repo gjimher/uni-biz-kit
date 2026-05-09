@@ -66,7 +66,8 @@ def generate_foreign_key_constraints(
                 field_name = field["name"]
                 constraint_name = f"fk_{table_name}_{field_name}"
                 on_delete = "CASCADE" if field["required"] else "SET NULL"
-                if on_delete == "CASCADE" and target_table in profile_concepts:
+                is_part_of = field.get("subtype") == "part_of"
+                if on_delete == "CASCADE" and target_table in profile_concepts and not is_part_of:
                     raise ValueError(
                         f'Concept "{table_name}" has required relation "{field_name}" '
                         f'to profile concept "{target_table}". Required relations use '

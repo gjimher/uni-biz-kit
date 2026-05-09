@@ -197,6 +197,116 @@ const {edit_comp_name} = ({{ canEditParent = true }}) => {{
     return components
 
 
+def _generate_prefill_component(concept: Dict[str, Any], group: Dict[str, Any]) -> str:
+    group_name = group["name"]
+    comp_name = f"PREFILL_{group_name.upper()}_FOR_{concept['name'].upper()}"
+    source_concept_name = group["source_concept"]
+    parent_fk = group["parent_fk_in_form"]
+    source_part_of_field = group["source_part_of_field"]
+    field_names = group["field_names"]
+    pres_field = group.get("pres_field")
+    prefix = group_name
+
+    # setValue calls when loading from a saved record
+    set_value_lines = []
+    for fn in field_names:
+        sf_name = fn[len(prefix) + 1:]
+        set_value_lines.append(f"      setValue('{fn}', rec.{sf_name});")
+    set_value_calls = "\n".join(set_value_lines)
+
+    # Data object for the save operation
+    save_data_lines = [f"        {source_part_of_field}: parentId,"]
+    if pres_field:
+        save_data_lines.append(f"        {pres_field}: saveName,")
+    for fn in field_names:
+        sf_name = fn[len(prefix) + 1:]
+        if sf_name == pres_field:
+            continue
+        save_data_lines.append(f"        {sf_name}: watch('{fn}'),")
+    save_data_str = "\n".join(save_data_lines)
+
+    # After saving, update the presentation field in the form if it was expanded
+    after_save_set = ""
+    if pres_field and f"{prefix}_{pres_field}" in field_names:
+        after_save_set = f"\n    setValue('{prefix}_{pres_field}', saveName);"
+
+    group_label = group_name.replace("_", " ")
+
+    return f"""
+const {comp_name} = () => {{
+  const {{ watch, setValue }} = useFormContext();
+  const dataProvider = useDataProvider();
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = React.useState('');
+  const [saveOpen, setSaveOpen] = React.useState(false);
+  const [saveName, setSaveName] = React.useState('');
+
+  const parentId = watch('{parent_fk}');
+
+  // Auto-set the parent FK when not yet selected (e.g. for users who own only one record)
+  React.useEffect(() => {{
+    if (parentId) return;
+    dataProvider.getList('{parent_fk}', {{
+      filter: {{}},
+      pagination: {{ page: 1, perPage: 1 }},
+      sort: {{ field: 'id', order: 'ASC' }}
+    }}).then(({{ data }}) => {{
+      if (data.length === 1) setValue('{parent_fk}', data[0].id);
+    }}).catch(() => {{}});
+  }}, [parentId, dataProvider, setValue]);
+
+  const {{ data: records = [] }} = useGetList('{source_concept_name}', {{
+    filter: {{ '{source_part_of_field}': parentId }},
+    pagination: {{ page: 1, perPage: 100 }},
+    sort: {{ field: 'id_presentation', order: 'ASC' }},
+  }}, {{ enabled: !!parentId }});
+
+  const handleSelect = (e) => {{
+    const id = Number(e.target.value);
+    setSelected(id);
+    const rec = records.find(r => r.id === id);
+    if (rec) {{
+{set_value_calls}
+    }}
+  }};
+
+  const handleSave = async () => {{
+    if (!parentId || !saveName) return;
+    const {{ data: created }} = await dataProvider.create('{source_concept_name}', {{
+      data: {{
+{save_data_str}
+      }}
+    }});{after_save_set}
+    setSaveOpen(false);
+    setSaveName('');
+    await queryClient.invalidateQueries({{ queryKey: ['{source_concept_name}'] }});
+    setSelected(created.id);
+  }};
+
+  return (
+    <>
+      <Box display="flex" alignItems="center" gap={{1}} mb={{1}} flexWrap="wrap">
+        <MuiSelect value={{selected}} onChange={{handleSelect}} displayEmpty size="small" sx={{{{ minWidth: 220 }}}}>
+          <MuiMenuItem value="">Load from saved {group_label}...</MuiMenuItem>
+          {{records.map(r => <MuiMenuItem key={{r.id}} value={{r.id}}>{{r.id_presentation}}</MuiMenuItem>)}}
+        </MuiSelect>
+        <Button size="small" variant="outlined" onClick={{() => setSaveOpen(true)}}>Save as new</Button>
+      </Box>
+      <Dialog open={{saveOpen}} onClose={{() => setSaveOpen(false)}} fullWidth maxWidth="xs">
+        <DialogTitle>Save {group_label}</DialogTitle>
+        <DialogContent>
+          <MuiTextField label="Name" value={{saveName}} onChange={{e => setSaveName(e.target.value)}} fullWidth autoFocus margin="dense" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={{() => setSaveOpen(false)}}>Cancel</Button>
+          <Button onClick={{handleSave}} variant="contained" disabled={{!saveName}}>Save</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}};"""
+
+
 def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     resource_name = concept["name"]
     title_desc_prop = f' description="{concept["description"].replace(chr(34), "&quot;")}"' if concept["description"] else ''
@@ -221,11 +331,18 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         concept, ctx.concepts, owned_children, many_to_many_links
     )
 
+    has_prefill = bool(concept.get("_prefill_groups"))
+
     mui_imports = ["Grid"]
     if owned_children or many_to_many_links:
         mui_imports.extend(["Box", "Button", "Dialog", "DialogTitle", "DialogContent", "DialogActions"])
     elif concept_workflow:
         mui_imports.append("Box")
+    if has_prefill:
+        for item in ["Box", "Button", "Dialog", "DialogTitle", "DialogContent", "DialogActions"]:
+            if item not in mui_imports:
+                mui_imports.append(item)
+        mui_imports.extend(["Select as MuiSelect", "MenuItem as MuiMenuItem", "TextField as MuiTextField"])
     mui_imports_str = ", ".join(mui_imports)
 
     child_dialog_components_list = []
@@ -237,6 +354,11 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
             )
 
     child_dialog_components = "\n".join(child_dialog_components_list)
+
+    prefill_components = ""
+    if has_prefill:
+        prefill_parts = [_generate_prefill_component(concept, g) for g in concept["_prefill_groups"]]
+        prefill_components = "\n".join(prefill_parts)
 
     doc_tab = ""
     if has_documents:
@@ -256,6 +378,9 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     if workflow_import:
         component_imports.append(workflow_import)
 
+    if has_prefill:
+        component_imports.append("import { useFormContext } from 'react-hook-form';")
+        component_imports.append("import { useQueryClient } from '@tanstack/react-query';")
     if has_documents:
         component_imports.append(f"import {{ DocumentTab }} from '../../components/document_tab';")
     if "ReorderableDatagrid" in field_components["child_tabs"] or "ReorderableDatagrid" in child_dialog_components:
@@ -347,6 +472,7 @@ import {{ {mui_imports_str} }} from '@mui/material';
 {field_components["imports"]}
 
 {child_dialog_components}
+{prefill_components}
 {edit_inner_component}
 
 const {resource_name}_filters = [

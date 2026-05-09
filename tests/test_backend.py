@@ -206,7 +206,7 @@ class TestAppBackend:
             headers={**user1_headers, "Prefer": "return=representation"},
             body={
                 "order_date": "2026-05-09T12:00:00Z",
-                "shipping_address": "Shipping rule test street",
+                "shipping_address_street": "Shipping rule test street",
             },
         )
         assert status == 201, f"Order creation failed: {status} {created}"
@@ -366,7 +366,7 @@ class TestAppBackend:
 
                 # Insert order in 'ordered' state so the on_change_in_state_initial copy does not fire yet.
                 cur.execute(
-                    'INSERT INTO "order" ("customer", "order_date", "shipping_address", "state") '
+                    'INSERT INTO "order" ("customer", "order_date", "shipping_address_street", "state") '
                     "VALUES (%s, NOW(), 'Test Street 1', 'ordered') RETURNING id;",
                     (customer_id,),
                 )
@@ -432,7 +432,7 @@ class TestAppBackend:
 
                 def make_order(state):
                     cur.execute(
-                        'INSERT INTO "order" ("customer","order_date","shipping_address","state") '
+                        'INSERT INTO "order" ("customer","order_date","shipping_address_street","state") '
                         "VALUES (%s,NOW(),'Test',  %s) RETURNING id;",
                         (customer_id, state),
                     )
@@ -541,7 +541,7 @@ class TestAppBackend:
 
                 # INSERT with an explicit customer value — trigger must override it.
                 cur.execute(
-                    'INSERT INTO "order" ("customer","order_date","shipping_address") '
+                    'INSERT INTO "order" ("customer","order_date","shipping_address_street") '
                     "VALUES (%s,NOW(),'Security Test') RETURNING id,customer;",
                     (customer_id,),
                 )

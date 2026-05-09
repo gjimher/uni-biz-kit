@@ -119,13 +119,13 @@
                     "date",
                     "datetime",
                     "relation_to_one",
-                    "relation_to_many"
+                    "relation_to_many",
+                    "prefill"
                   ]
                 },
                 "subtype": {
                   "type": "string",
-                  "description": "Subtype for fields. 'part_of'/'related_to' for relations, 'money' for decimal.",
-                  "enum": ["part_of", "related_to", "money"]
+                  "description": "Subtype for fields. 'part_of'/'related_to' for relations, 'money' for decimal, '<concept>.<plural_name>' for prefill."
                 },
                 "target": {
                   "type": "string",

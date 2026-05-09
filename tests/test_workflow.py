@@ -69,7 +69,7 @@ def test_workflow_state_permissions():
             cur.execute(f"SELECT set_config('request.jwt.claims', '{{\"sub\": \"{user1_id}\", \"app_metadata\": {{\"roles\": [\"user\"]}}}}', true)")
             
             cur.execute(f"""
-                INSERT INTO "order" (order_date, shipping_address, state)
+                INSERT INTO "order" (order_date, shipping_address_street, state)
                 VALUES (CURRENT_TIMESTAMP, 'Initial Addr', 'initial')
                 RETURNING id;
             """)
@@ -85,28 +85,28 @@ def test_workflow_state_permissions():
             assert returncode == 0, f"user1 should move order to 'ordered': {result}"
             assert result["status"] == 200
 
-            # --- STEP 3: As user1, try to edit 'shipping_address' in 'ordered' state ---
+            # --- STEP 3: As user1, try to edit 'shipping_address_street' in 'ordered' state ---
             # user1 is NOT owner of 'ordered' state, so RLS should block this.
             cur.execute("BEGIN;")
             cur.execute("SET LOCAL ROLE authenticated")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{{\"sub\": \"{user1_id}\", \"app_metadata\": {{\"roles\": [\"user\"]}}}}', true)")
             
             with pytest.raises(psycopg2.errors.InsufficientPrivilege):
-                cur.execute(f"UPDATE \"order\" SET shipping_address = 'User1 Hack Attempt' WHERE id = {order_id}")
+                cur.execute(f"UPDATE \"order\" SET shipping_address_street = 'User1 Hack Attempt' WHERE id = {order_id}")
             
             cur.execute("ROLLBACK;")
 
-            # --- STEP 4: As admin, edit 'shipping_address' in 'ordered' state ---
+            # --- STEP 4: As admin, edit 'shipping_address_street' in 'ordered' state ---
             # admin IS owner of 'ordered' state.
             cur.execute("BEGIN;")
             cur.execute("SET LOCAL ROLE authenticated")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{{\"sub\": \"{admin_id}\", \"app_metadata\": {{\"roles\": [\"admin\"]}}}}', true)")
             
-            cur.execute(f"UPDATE \"order\" SET shipping_address = 'Admin Correction' WHERE id = {order_id}")
+            cur.execute(f"UPDATE \"order\" SET shipping_address_street = 'Admin Correction' WHERE id = {order_id}")
             cur.execute("COMMIT;")
             
             # Verify update worked
-            cur.execute(f"SELECT shipping_address FROM \"order\" WHERE id = {order_id}")
+            cur.execute(f"SELECT shipping_address_street FROM \"order\" WHERE id = {order_id}")
             assert cur.fetchone()[0] == 'Admin Correction'
 
     finally:

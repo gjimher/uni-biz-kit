@@ -54,9 +54,9 @@
     },
     {
       "role": "user",
-      "concept": "product",
+      "concept": "customer",
       "field": "*",
-      "access": "write"
+      "access": "owner_write"
     },
     {
       "role": "user",
@@ -68,7 +68,7 @@
   "rules_level_3": [
     {
       "role": "user",
-      "concept": "product",
+      "concept": "*",
       "field": "admin_*",
       "access": "read"
     }

@@ -18,7 +18,6 @@
         "description": "Product loaded from seed_data.json",
         "price": 49.99,
         "stock_quantity": 25,
-        "admin_field": "initial admin note",
         "sku": "SEED-KBD-001",
         "status": "published",
         "is_featured": true,

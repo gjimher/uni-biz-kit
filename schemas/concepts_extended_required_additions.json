@@ -2,6 +2,7 @@
   "properties": {
     "concepts": {
       "items": {
+        "optional_properties": ["_prefill_groups"],
         "properties": {
           "_type": {
             "type": "string",
@@ -19,19 +20,36 @@
           "_be_presentation_expr": { "type": "string" },
           "_fe_owned_children": { "type": "array" },
           "_meta_m2m_links": { "type": "array" },
-          
+          "_prefill_groups": {
+            "type": "array",
+            "description": "Prefill group metadata for concepts that have prefill fields"
+          },
+
           "fields": {
             "items": {
+              "optional_properties": ["_prefill_group", "_prefill_source_field", "_prefill_is_pres_field"],
               "properties": {
                 "_be_sql_type": { "type": "string" },
                 "_be_not_null": { "type": "boolean" },
-                
+
                 "_fe_component": { "type": "string" },
                 "_fe_list_component": { "type": "string" },
                 "_fe_grid_width": { "type": "integer" },
-                "_fe_visibility": { 
+                "_fe_visibility": {
                     "type": "string",
                     "enum": ["editable", "read_only", "internal"]
+                },
+                "_prefill_group": {
+                  "type": "string",
+                  "description": "Name of the prefill group this field belongs to"
+                },
+                "_prefill_source_field": {
+                  "type": "string",
+                  "description": "Original field name in the source concept"
+                },
+                "_prefill_is_pres_field": {
+                  "type": "boolean",
+                  "description": "True if this field is the presentation field of the prefill group"
                 }
               }
             }

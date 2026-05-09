@@ -60,8 +60,10 @@ CREATE TRIGGER on_auth_user_roles_sync
 
 def _profile_insert_columns(concept: Dict[str, Any]) -> List[str]:
     columns = ["_user", "_user_email"]
+    if any(f["name"] == "_security_owner_id" for f in concept["fields"]):
+        columns.append("_security_owner_id")
     for field in concept["fields"]:
-        if field["name"] in ("_user", "_user_email", "_user_pending_link"):
+        if field["name"] in ("_user", "_user_email", "_user_pending_link", "_security_owner_id"):
             continue
         if field["type"] == "relation_to_many":
             continue
@@ -100,13 +102,19 @@ def _generate_profile_sync_function(
         concept = concept_map[concept_name]
         table_sql = _quote_ident(concept_name)
         role_sql = _sql_literal(role_name)
+        has_security_owner_id = any(f["name"] == "_security_owner_id" for f in concept["fields"])
         insert_columns = _profile_insert_columns(concept)
         insert_columns_sql = ", ".join(_quote_ident(column) for column in insert_columns)
-        insert_values_sql = ", ".join(
-            "target_user_id" if column == "_user" else "NULL"
-            if column != "_user_email" else "target_email"
-            for column in insert_columns
-        )
+        def _col_value(column: str) -> str:
+            if column == "_user":
+                return "target_user_id"
+            if column == "_user_email":
+                return "target_email"
+            if column == "_security_owner_id":
+                return "target_user_id::text"
+            return "NULL"
+        insert_values_sql = ", ".join(_col_value(col) for col in insert_columns)
+        owner_id_set = ',\n          "_security_owner_id" = target_user_id::text' if has_security_owner_id else ""
 
         sync_parts.append(f"""
   -- Sync {role_name} profiles in {concept_name}.
@@ -123,7 +131,7 @@ def _generate_profile_sync_function(
       UPDATE {table_sql}
       SET "_user" = target_user_id,
           "_user_email" = target_email,
-          "_user_pending_link" = NULL
+          "_user_pending_link" = NULL{owner_id_set}
       WHERE "id" = (
         SELECT "id"
         FROM {table_sql}
@@ -257,7 +265,9 @@ def _generate_security_owner_triggers(owner_tables: List[str]) -> str:
 CREATE OR REPLACE FUNCTION "02_set_security_owner_id_trigger_function"()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW."_security_owner_id" := auth.uid()::text;
+    IF auth.uid() IS NOT NULL THEN
+        NEW."_security_owner_id" := auth.uid()::text;
+    END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -404,6 +414,8 @@ WITH CHECK (true);
             for field in concept["fields"]:
                 field_name = field["name"]
                 if field_name.startswith("_"):
+                    continue
+                if field.get("type") == "relation_to_many":
                     continue
                 field_rules = concept_acl["_fields"].get(field_name, {})
 

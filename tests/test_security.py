@@ -406,13 +406,9 @@ def test_owner_write_rls():
             # Simulating user1
             cur.execute(f"SELECT set_config('request.jwt.claims', '{{\"sub\": \"{user1_id}\", \"app_metadata\": {{\"roles\": [\"user\"]}}}}', true);")
             
-            # Need a customer for the order (from sample data, customer 1 should exist, but let's safely select one)
-            cur.execute('SELECT id FROM "customer" LIMIT 1;')
-            customer_id = cur.fetchone()[0]
-            
             # Create an order as user1
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address)
+                INSERT INTO "order" (order_date, state, shipping_address_street)
                 VALUES (CURRENT_TIMESTAMP, 'initial', 'User 1 Address')
                 RETURNING id;
             """)
@@ -464,7 +460,7 @@ def test_security_owner_id_is_not_updatable():
         cur.execute("SET ROLE authenticated;")
         cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
         cur.execute(f"""
-            INSERT INTO "order" (order_date, state, shipping_address)
+            INSERT INTO "order" (order_date, state, shipping_address_street)
             VALUES (CURRENT_TIMESTAMP, 'initial', 'Test Address')
             RETURNING id;
         """)
@@ -569,7 +565,7 @@ def test_timestamps_cannot_be_forged_on_insert():
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user_claims}', true);")
 
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address,
+                INSERT INTO "order" (order_date, state, shipping_address_street,
                     "_created_at", "_updated_at")
                 VALUES (CURRENT_TIMESTAMP, 'initial', 'Test',
                     '{fake_ts}', '{fake_ts}')
@@ -821,7 +817,7 @@ def test_order_document_owner_isolation():
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
 
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address)
+                INSERT INTO "order" (order_date, state, shipping_address_street)
                 VALUES (CURRENT_TIMESTAMP, 'initial', 'User1 Address')
                 RETURNING id;
             """)
@@ -959,7 +955,7 @@ def test_order_document_upload_authorization():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address)
+                INSERT INTO "order" (order_date, state, shipping_address_street)
                 VALUES (CURRENT_TIMESTAMP, 'initial', 'User1 Address')
                 RETURNING id;
             """)
@@ -1035,7 +1031,7 @@ def test_order_item_create_restricted_by_order_state():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address)
+                INSERT INTO "order" (order_date, state, shipping_address_street)
                 VALUES (CURRENT_TIMESTAMP, 'initial', 'Test Address')
                 RETURNING id;
             """)
@@ -1116,7 +1112,7 @@ def test_order_document_create_restricted_by_order_state():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address)
+                INSERT INTO "order" (order_date, state, shipping_address_street)
                 VALUES (CURRENT_TIMESTAMP, 'initial', 'Test Address')
                 RETURNING id;
             """)
@@ -1200,7 +1196,7 @@ def test_order_workflow_state_transitions():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address)
+                INSERT INTO "order" (order_date, state, shipping_address_street)
                 VALUES (CURRENT_TIMESTAMP, 'initial', 'Test')
                 RETURNING id;
             """)
@@ -1292,7 +1288,7 @@ def test_order_item_cross_user_isolation():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address)
+                INSERT INTO "order" (order_date, state, shipping_address_street)
                 VALUES (CURRENT_TIMESTAMP, 'initial', 'Test')
                 RETURNING id;
             """)
@@ -1382,7 +1378,7 @@ def test_order_item_update_delete_restricted_by_order_state():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address)
+                INSERT INTO "order" (order_date, state, shipping_address_street)
                 VALUES (CURRENT_TIMESTAMP, 'initial', 'Test')
                 RETURNING id;
             """)
@@ -1465,7 +1461,7 @@ def test_order_document_update_delete_restricted_by_order_state():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address)
+                INSERT INTO "order" (order_date, state, shipping_address_street)
                 VALUES (CURRENT_TIMESTAMP, 'initial', 'Test')
                 RETURNING id;
             """)
@@ -1522,7 +1518,7 @@ def test_order_document_update_delete_restricted_by_order_state():
 
 @pytest.mark.integration
 def test_admin_field_write_restriction():
-    """Test that user cannot write product.admin_field (field-level trigger), but admin can."""
+    """Test that user cannot write customer.admin_field (field-level trigger), but admin can."""
     load_dotenv("test-app/backend/.env")
     db_url = os.getenv("DB_URL")
     if not db_url:
@@ -1539,31 +1535,34 @@ def test_admin_field_write_restriction():
         if not user1_id or not admin_id:
             pytest.skip(f"Required users not found. Found: {user_ids}")
 
-        cur.execute('SELECT id FROM "product" LIMIT 1;')
-        product_id = cur.fetchone()[0]
+        cur.execute('SELECT id FROM "customer" WHERE "_user" = %s LIMIT 1;', (user1_id,))
+        row = cur.fetchone()
+        if not row:
+            pytest.skip("user1 has no linked customer profile — run test_seeded_users_login_and_rls first")
+        customer_id = row[0]
 
         user1_claims = f'{{"sub": "{user1_id}", "app_metadata": {{"roles": ["user"]}}}}'
         admin_claims = f'{{"sub": "{admin_id}", "app_metadata": {{"roles": ["admin"]}}}}'
 
-        # user1 CANNOT update existing product's admin_field
+        # user1 CANNOT update existing customer's admin_field
         blocked = False
         cur.execute("BEGIN;")
         try:
             cur.execute("SET LOCAL ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', true);")
-            cur.execute(f"UPDATE \"product\" SET admin_field = 'hacked' WHERE id = {product_id};")
+            cur.execute(f"UPDATE \"customer\" SET admin_field = 'hacked' WHERE id = {customer_id};")
         except psycopg2.Error:
             blocked = True
         finally:
             cur.execute("ROLLBACK;")
-        assert blocked, "user1 should NOT be able to update product.admin_field"
+        assert blocked, "user1 should NOT be able to update customer.admin_field"
 
-        # admin CAN update product's admin_field
+        # admin CAN update customer's admin_field
         cur.execute("BEGIN;")
         try:
             cur.execute("SET LOCAL ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{admin_claims}', true);")
-            cur.execute(f"UPDATE \"product\" SET admin_field = 'admin_value' WHERE id = {product_id};")
+            cur.execute(f"UPDATE \"customer\" SET admin_field = 'admin_value' WHERE id = {customer_id};")
         finally:
             cur.execute("ROLLBACK;")
 
@@ -1616,18 +1615,13 @@ def test_order_lifecycle_via_api():
     storage_path = None
 
     # Get a valid customer_id via API as user1
-    r = req.get(f"{supabase_url}/rest/v1/customer?limit=1&select=id",
-                headers=api_headers(user1_token), timeout=10)
-    assert r.status_code == 200 and r.json(), "Could not fetch a customer via API."
-    customer_id = r.json()[0]["id"]
-
     try:
         # 1. user1 creates an order in 'initial' state
         r = req.post(
             f"{supabase_url}/rest/v1/order",
             headers={**api_headers(user1_token), "Prefer": "return=representation"},
             json={"order_date": "2024-01-01", "state": "initial",
-                  "shipping_address": "Lifecycle Test Address"},
+                  "shipping_address_street": "Lifecycle Test Address"},
             timeout=10,
         )
         assert r.status_code in (200, 201), f"user1 failed to create order: {r.status_code} {r.text}"

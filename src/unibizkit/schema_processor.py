@@ -172,13 +172,16 @@ class SchemaProcessor:
         # 0. Enrich Workflow
         self._enrich_workflow()
 
+        # Expand prefill fields before security ACL and list field pool computation
+        self._expand_prefill_fields()
+
         # 0. Enrich Security
         self._enrich_security()
 
         # 0.5 Enrich Presentation
         self._enrich_presentation()
         from .react_admin_generator import ReactAdminGenerator
-        
+
         l1_rules = self.presentation_extended["list_field_rules_level_1"]
         l2_rules = self.presentation_extended["list_field_rules_level_2"]
         l3_rules = self.presentation_extended["list_field_rules_level_3"]
@@ -609,6 +612,119 @@ class SchemaProcessor:
                 f"Profile concept '{concept['name']}' for role '{role_name}' cannot be "
                 f"auto-created because required field '{field_name}' has no default"
             )
+
+    def _expand_prefill_fields(self):
+        """Expand prefill fields into individual sub-fields before field processing.
+
+        Replaces each field with type 'prefill' in a concept with a set of sub-fields
+        copied from the referenced source concept (with a name prefix). Also stores
+        group metadata in concept['_prefill_groups'] for frontend code generation.
+        """
+        for concept in self.concepts:
+            prefill_fields = [f for f in concept["fields"] if f["type"] == "prefill"]
+            if not prefill_fields:
+                continue
+
+            concept_prefill_groups = []
+            new_fields = list(concept["fields"])
+
+            for pfield in prefill_fields:
+                subtype = pfield.get("subtype", "")
+                parts = subtype.split(".")
+                if len(parts) != 2:
+                    raise ValueError(
+                        f"Field '{pfield['name']}' in concept '{concept['name']}': "
+                        f"prefill subtype must be '<concept_name>.<plural_name>', got '{subtype}'"
+                    )
+                parent_concept_name, child_plural_name = parts
+
+                # Find source concept: plural_name matches AND has part_of -> parent
+                source_concept = None
+                source_part_of_field_name = None
+                for c in self.concepts:
+                    if c.get("plural_name") != child_plural_name:
+                        continue
+                    for f in c["fields"]:
+                        if (f["type"] == "relation_to_one"
+                                and f.get("subtype") == "part_of"
+                                and f["target"] == parent_concept_name):
+                            source_concept = c
+                            source_part_of_field_name = f["name"]
+                            break
+                    if source_concept:
+                        break
+
+                if not source_concept:
+                    raise ValueError(
+                        f"Field '{pfield['name']}' in concept '{concept['name']}': "
+                        f"cannot find concept with plural_name='{child_plural_name}' "
+                        f"that is part_of '{parent_concept_name}'"
+                    )
+
+                prefix = pfield["name"]
+
+                # Find the FK in the current concept that points to parent_concept
+                parent_fk_in_form = None
+                for f in concept["fields"]:
+                    if f["type"] == "relation_to_one" and f["target"] == parent_concept_name:
+                        parent_fk_in_form = f["name"]
+                        break
+
+                if not parent_fk_in_form:
+                    raise ValueError(
+                        f"Field '{pfield['name']}' in concept '{concept['name']}': "
+                        f"no relation_to_one field targeting '{parent_concept_name}' found"
+                    )
+
+                # Presentation ID fields of source concept (used for save dialog)
+                pres_fields = source_concept["id_presentation"]["fields"]
+                pres_field = next((f for f in pres_fields if "." not in f), None)
+
+                # Fields excluded from expansion
+                excluded_names = {source_part_of_field_name, "part_of_order", "state", "state_info", "id"}
+
+                # Build expanded fields from source concept fields
+                expanded_fields = []
+                expanded_field_names = []
+                for sf in source_concept["fields"]:
+                    sf_name = sf["name"]
+                    if sf_name in excluded_names or sf_name.startswith("_"):
+                        continue
+                    if sf["type"] in ("relation_to_one", "relation_to_many"):
+                        continue
+                    if "calculated" in sf:
+                        continue
+
+                    new_field = dict(sf)
+                    new_field["name"] = f"{prefix}_{sf_name}"
+                    new_field["required"] = False
+                    new_field["unique"] = False
+                    new_field["_prefill_group"] = prefix
+                    new_field["_prefill_source_field"] = sf_name
+                    new_field["_prefill_is_pres_field"] = (sf_name == pres_field)
+
+                    expanded_fields.append(new_field)
+                    expanded_field_names.append(new_field["name"])
+
+                concept_prefill_groups.append({
+                    "name": prefix,
+                    "source_concept": source_concept["name"],
+                    "source_concept_plural": child_plural_name,
+                    "parent_concept": parent_concept_name,
+                    "parent_fk_in_form": parent_fk_in_form,
+                    "source_part_of_field": source_part_of_field_name,
+                    "presentation_fields": pres_fields,
+                    "pres_field": pres_field,
+                    "field_names": expanded_field_names,
+                })
+
+                # Replace the prefill field with the expanded fields
+                idx = new_fields.index(pfield)
+                new_fields = new_fields[:idx] + expanded_fields + new_fields[idx + 1:]
+
+            concept["fields"] = new_fields
+            if concept_prefill_groups:
+                concept["_prefill_groups"] = concept_prefill_groups
 
     def _process_concept_basics(self, concept: Dict[str, Any]) -> Dict[str, Any]:
         """

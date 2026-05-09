@@ -54,13 +54,6 @@
           "description": "Available stock quantity"
         },
         {
-          "name": "admin_field",
-          "type": "string",
-          "required": false,
-          "size": "s",
-          "description": "A field only admins can edit"
-        },
-        {
           "name": "sku",
           "type": "string",
           "required": true,
@@ -188,12 +181,58 @@
           "description": "Customer's phone number"
         },
         {
-          "name": "address",
+          "name": "admin_field",
           "type": "string",
           "required": false,
+          "size": "s",
+          "description": "A field only admins can edit"
+        }
+      ]
+    },
+    {
+      "name": "address",
+      "plural_name": "addresses",
+      "description": "Saved addresses belonging to a customer",
+      "id_presentation": {
+        "fields": ["label"],
+        "show": true
+      },
+      "fields": [
+        {
+          "name": "customer",
+          "type": "relation_to_one",
+          "subtype": "part_of",
+          "target": "customer",
+          "description": "The customer this address belongs to"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "required": true,
+          "max_length": 100,
+          "description": "Address name (e.g. Home, Office)"
+        },
+        {
+          "name": "street",
+          "type": "string",
+          "required": true,
           "max_length": 200,
           "size": "m",
-          "description": "Customer's shipping address"
+          "description": "Street and number"
+        },
+        {
+          "name": "city",
+          "type": "string",
+          "required": true,
+          "max_length": 100,
+          "description": "City"
+        },
+        {
+          "name": "country",
+          "type": "string",
+          "required": true,
+          "max_length": 100,
+          "description": "Country"
         }
       ]
     },
@@ -237,11 +276,9 @@
         },
         {
           "name": "shipping_address",
-          "type": "string",
-          "required": true,
-          "max_length": 200,
-          "size": "m",
-          "description": "Shipping address for the order"
+          "type": "prefill",
+          "subtype": "customer.addresses",
+          "description": "Shipping address fields prefilled from customer saved addresses"
         },
         {
           "name": "shipping_costs",
@@ -267,11 +304,9 @@
         },
         {
           "name": "billing_address",
-          "type": "string",
-          "required": false,
-          "max_length": 200,
-          "size": "m",
-          "description": "Billing address for the order"
+          "type": "prefill",
+          "subtype": "customer.addresses",
+          "description": "Billing address fields prefilled from customer saved addresses"
         }
       ]
     },

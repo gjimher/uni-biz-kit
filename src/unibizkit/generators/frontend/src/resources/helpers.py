@@ -209,6 +209,9 @@ def get_optimized_react_admin_imports(
     if concept["documents"]["enabled"]:
         needed_components.update(['TabbedForm', 'FormTab'])
 
+    if concept.get("_prefill_groups"):
+        needed_components.update(['useDataProvider', 'useGetList'])
+
     if all_descendants:
         for child in all_descendants:
             for field in child["concept"]["fields"]:
@@ -268,6 +271,9 @@ def generate_field_components(
 
     list_fields.append(("id_presentation", '<TextField source="id_presentation" label="Id" />'))
     show_fields.append('<TextField source="id_presentation" label="Id" />')
+
+    # Track which prefill group headers have been inserted
+    added_prefill_headers = set()
 
     def update_grid(current_pos, width, fields_list):
         if width == 6:
@@ -353,6 +359,17 @@ def generate_field_components(
     for field in concept["fields"]:
         field_name = field["name"]
 
+        # Insert prefill selector header before the first field of each group
+        prefill_group_name = field.get("_prefill_group")
+        if prefill_group_name and prefill_group_name not in added_prefill_headers:
+            comp_name = f"PREFILL_{prefill_group_name.upper()}_FOR_{concept['name'].upper()}"
+            header_item = f"        <Grid item xs={{12}}><{comp_name} /></Grid>"
+            create_fields.append(header_item)
+            edit_fields.append(header_item)
+            create_grid_pos = 0
+            edit_grid_pos = 0
+            added_prefill_headers.add(prefill_group_name)
+
         comp_type = field["_fe_component"]
         list_comp = field["_fe_list_component"]
         width_units = field["_fe_grid_width"]
@@ -360,6 +377,9 @@ def generate_field_components(
         is_required = field["_be_not_null"]
 
         if field_name in exclude_fields:
+            continue
+
+        if field.get("_prefill_is_pres_field"):
             continue
 
         grid_props = f"xs={{12}} sm={{{width_units}}}"
