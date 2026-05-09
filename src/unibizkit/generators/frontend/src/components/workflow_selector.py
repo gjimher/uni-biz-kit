@@ -3,10 +3,9 @@ def generate() -> str:
 import {
     useRecordContext,
     useNotify,
-    useRefresh,
-    useUpdate,
-    useGetIdentity
+    useRefresh
 } from 'react-admin';
+import { supabaseClient } from '../supabaseClient';
 import {
     Box,
     Button,
@@ -36,8 +35,6 @@ export const useWorkflowCanEdit = (workflow, record, identity, identityLoading) 
 
 export const WorkflowSelector = ({ workflow, resource, canEdit }) => {
     const record = useRecordContext();
-    const { data: identity } = useGetIdentity();
-    const [update] = useUpdate();
     const notify = useNotify();
     const refresh = useRefresh();
     const [pendingState, setPendingState] = React.useState(null);
@@ -50,6 +47,14 @@ export const WorkflowSelector = ({ workflow, resource, canEdit }) => {
         let transitions;
         try { transitions = typeof record.state_info === 'string' ? JSON.parse(record.state_info) : record.state_info; }
         catch { return map; }
+        if (transitions?.last_transition) {
+            const t = transitions.last_transition;
+            const note = t.comment ? `
+${t.comment}` : '';
+            map[t.to_state] = `${new Date(t.changed_at).toLocaleString()}${note}`;
+            return map;
+        }
+        if (!Array.isArray(transitions)) return map;
         for (const t of transitions) {
             const note = t.text ? `
 ${t.text}` : '';
@@ -74,30 +79,30 @@ ${t.text}` : '';
     };
 
     const handleConfirm = async () => {
-        const now = new Date().toISOString();
-        const userName = identity?.fullName || 'Unknown';
-
-        let transitions;
-        try { transitions = record.state_info ? (typeof record.state_info === 'string' ? JSON.parse(record.state_info) : record.state_info) : []; }
-        catch { transitions = []; }
-        transitions.push({ from: currentStateName, to: pendingState, user: userName, date: now, text: transitionText });
-        const newStateInfo = JSON.stringify(transitions);
-
         try {
-            await update(resource, {
-                id: record.id,
-                data: { state: pendingState, state_info: newStateInfo },
-                previousData: record
-            }, { mutationMode: 'pessimistic' });
+            const { data, error } = await supabaseClient.functions.invoke('workflow-transition', {
+                body: {
+                    concept: resource,
+                    id: record.id,
+                    to_state: pendingState,
+                    comment: transitionText,
+                },
+            });
+            if (error) {
+                throw error;
+            }
+            if (data?.ok === false) {
+                notify(data.error || 'State change was rejected', { type: 'warning' });
+                return;
+            }
 
             notify('State updated', { type: 'info' });
             handleCancel();
             refresh();
         } catch (error) {
-            notify('Error updating state: ' + error.message, { type: 'warning' });
+            notify('Error updating state: ' + (error.context?.error || error.message), { type: 'warning' });
         }
     };
-
     return (
         <Box sx={{ mb: 2, p: 2, border: '1px solid #ccc', borderRadius: 1, backgroundColor: '#f9f9f9' }}>
             <Typography variant="subtitle2" gutterBottom sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>

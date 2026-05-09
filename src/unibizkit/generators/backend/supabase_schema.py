@@ -5,6 +5,7 @@ from .schema_parts.documents import generate_document_tables
 from .schema_parts.internal_columns import generate_internal_column_protection, generate_system_timestamp_triggers
 from .schema_parts.triggers import generate_presentation_triggers, generate_rollup_triggers, generate_copy_triggers
 from .schema_parts.security import generate_security_policies
+from . import rules
 
 
 def _generated_table_names(ctx: Context) -> list[str]:
@@ -34,7 +35,7 @@ def generate(ctx: Context) -> str:
 
     # Collect trigger-managed calculated columns per table for the 00_protect trigger.
     # SQL GENERATED ALWAYS AS columns are protected by PostgreSQL itself; only
-    # rollup/copy/copy_logged_on_insert need explicit listing.
+    # rollup/copy/copy_logged_on_insert/by_rules need explicit listing.
     trigger_protected_cols: dict[str, list[str]] = {}
     for concept in ctx.concepts:
         cols = [
@@ -43,6 +44,7 @@ def generate(ctx: Context) -> str:
                 f["calculated"].startswith("rollup(")
                 or f["calculated"].startswith("copy(")
                 or f["calculated"].startswith("copy_logged_on_insert(")
+                or f["calculated"] == "by_rules"
             )
         ]
         if cols:
@@ -54,6 +56,7 @@ def generate(ctx: Context) -> str:
     sql_parts.extend(generate_rollup_triggers(ctx.concepts, ctx.concept_map))
     sql_parts.extend(generate_copy_triggers(ctx.concepts, ctx.concept_map, ctx.security_config))
     sql_parts.extend(generate_presentation_triggers(ctx.concepts))
+    sql_parts.extend(rules.generate_async_rule_execution_sql(ctx))
 
     if ctx.security_config["authentication_required"]:
         sql_parts.extend(generate_security_policies(

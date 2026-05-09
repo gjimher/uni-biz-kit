@@ -1,0 +1,36 @@
+{
+  "$schema": "../../schemas/rules_schema.json",
+  "rules": [
+    {
+      "concept": "order",
+      "name": "order-shipping-costs",
+      "feel_expr": "{ shipping_costs: if db.order.total_amount >= 60 then 0 else 6 }",
+      "action": "update",
+      "when_async": ["on_change_in_state_initial"],
+      "when": ["on_state_changed_to_ordered"]
+    },
+    {
+      "concept": "order",
+      "name": "order-save-ordered-total-amount",
+      "feel_expr": "{ ordered_total_amount: db.order.total_amount }",
+      "action": "update",
+      "when": ["on_state_changed_to_ordered"]
+    },
+    {
+      "concept": "order",
+      "name": "order-check-ordered-total-amount",
+      "feel_expr": "if db.order.total_amount = db.order.ordered_total_amount then true else { error: \"Order total has changed since it was ordered\" }",
+      "action": "check",
+      "when": [
+        "on_state_changed_to_accepted",
+        "on_state_changed_to_sent",
+        "on_state_changed_to_delivered"
+      ]
+    },
+    {
+      "name": "current-customer-email",
+      "feel_expr": "auth.customer.email",
+      "action": "return"
+    }
+  ]
+}

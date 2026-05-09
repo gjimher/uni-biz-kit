@@ -244,6 +244,28 @@
           "description": "Shipping address for the order"
         },
         {
+          "name": "shipping_costs",
+          "type": "decimal",
+          "subtype": "money",
+          "required": false,
+          "precision": 10,
+          "scale": 2,
+          "min": 0,
+          "calculated": "by_rules",
+          "description": "Shipping cost calculated by business rules"
+        },
+        {
+          "name": "ordered_total_amount",
+          "type": "decimal",
+          "subtype": "money",
+          "required": false,
+          "precision": 10,
+          "scale": 2,
+          "min": 0,
+          "calculated": "by_rules",
+          "description": "Total order amount captured when the order is placed"
+        },
+        {
           "name": "billing_address",
           "type": "string",
           "required": false,
@@ -292,7 +314,7 @@
           "precision": 10,
           "scale": 2,
           "min": 0,
-          "calculated": "copy(product,price,state_initial)",
+          "calculated": "copy(product,price,on_change_in_state_initial)",
           "description": "Price per unit at time of purchase"
         },
         {

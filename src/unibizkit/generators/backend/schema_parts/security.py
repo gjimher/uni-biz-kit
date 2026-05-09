@@ -375,6 +375,15 @@ WITH CHECK (true);
             trigger_checks = []
 
             if workflow:
+                trigger_checks.append("""
+    IF TG_OP = 'UPDATE'
+       AND (
+           NEW."state" IS DISTINCT FROM OLD."state"
+           OR NEW."state_info" IS DISTINCT FROM OLD."state_info"
+       )
+    THEN
+        RAISE EXCEPTION 'Workflow state can only be changed by workflow-transition' USING ERRCODE = 'insufficient_privilege';
+    END IF;""")
                 for state in workflow["states"]:
                     state_name = state["name"]
                     owners = state["owners"]
@@ -421,10 +430,12 @@ WITH CHECK (true);
 CREATE OR REPLACE FUNCTION "{trigger_name}_func"()
 RETURNS TRIGGER AS $$
 DECLARE
+    claims jsonb := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
     user_roles jsonb := coalesce(auth.jwt() -> 'app_metadata' -> 'roles', '[]'::jsonb);
 BEGIN
     -- Bypass trigger for system operations (like seeding data directly)
-    IF current_setting('request.jwt.claims', true) IS NULL OR current_setting('request.jwt.claims', true) = '' THEN
+    -- Bypass for service_role (edge functions writing by_rules fields)
+    IF claims IS NULL OR claims ->> 'role' = 'service_role' THEN
         IF (TG_OP = 'DELETE') THEN RETURN OLD; ELSE RETURN NEW; END IF;
     END IF;
 {''.join(trigger_checks)}

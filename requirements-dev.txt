@@ -1,6 +1,8 @@
 # Development requirements
 jsonschema>=4.0.0
+py-mini-racer>=0.6.0
 typing-extensions>=4.0.0
+requests
 pytest>=7.0.0
 pytest-cov>=4.0.0
 black>=23.0.0

@@ -1,9 +1,30 @@
 import pytest
 import os
 import psycopg2
+import json
+import subprocess
 from dotenv import load_dotenv
 from pathlib import Path
 import sys
+
+
+def _call_edge_function_script(email, function_name, payload=None):
+    script = Path("test-app/bin/dev-supabase-call-edge-function.py")
+    assert script.exists(), "dev-supabase-call-edge-function.py must be generated"
+    args = [sys.executable, str(script), email, function_name]
+    if payload is not None:
+        args.append(json.dumps(payload))
+    result = subprocess.run(
+        args,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    assert result.stdout, "Edge function caller should print a JSON response"
+    return result.returncode, json.loads(result.stdout)
+
 
 @pytest.mark.integration
 def test_workflow_state_permissions():
@@ -55,14 +76,14 @@ def test_workflow_state_permissions():
             order_id = cur.fetchone()[0]
             cur.execute("COMMIT;")
 
-            # --- STEP 2: As user1, move order to 'ordered' ---
-            # user1 is owner of 'initial' state for 'order', so they can write.
-            cur.execute("BEGIN;")
-            cur.execute("SET LOCAL ROLE authenticated")
-            cur.execute(f"SELECT set_config('request.jwt.claims', '{{\"sub\": \"{user1_id}\", \"app_metadata\": {{\"roles\": [\"user\"]}}}}', true)")
-            
-            cur.execute(f"UPDATE \"order\" SET state = 'ordered' WHERE id = {order_id}")
-            cur.execute("COMMIT;")
+            # --- STEP 2: As user1, move order to 'ordered' through workflow-transition ---
+            returncode, result = _call_edge_function_script(
+                "user1@test.com",
+                "workflow-transition",
+                {"concept": "order", "id": order_id, "to_state": "ordered"},
+            )
+            assert returncode == 0, f"user1 should move order to 'ordered': {result}"
+            assert result["status"] == 200
 
             # --- STEP 3: As user1, try to edit 'shipping_address' in 'ordered' state ---
             # user1 is NOT owner of 'ordered' state, so RLS should block this.

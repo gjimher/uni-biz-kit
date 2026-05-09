@@ -6,12 +6,33 @@ from unibizkit.generators.backend.supabase_schema import generate as generate_sc
 from unibizkit.generators.backend.supabase_seed_data_dev import generate as generate_seed_data_dev
 import os
 import json
+import subprocess
+import sys
+from pathlib import Path
 import psycopg2
 from dotenv import load_dotenv
 from unibizkit.generators.backend.schema_parts.internal_columns import (
     generate_internal_column_protection,
     generate_system_timestamp_triggers,
 )
+
+
+def _call_edge_function_script(email, function_name, payload=None):
+    script = Path("test-app/bin/dev-supabase-call-edge-function.py")
+    assert script.exists(), "dev-supabase-call-edge-function.py must be generated"
+    args = [sys.executable, str(script), email, function_name]
+    if payload is not None:
+        args.append(json.dumps(payload))
+    result = subprocess.run(
+        args,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    assert result.stdout, "Edge function caller should print a JSON response"
+    return result.returncode, json.loads(result.stdout)
 
 _MINIMAL_CONCEPT = {
     "name": "item",
@@ -195,6 +216,7 @@ def test_profile_dev_seed_uses_pending_email_records():
         business_schema=processed,
         system_config={},
         seed_data_config={"include_test_data": True, "records": {}},
+        rules_config={"rules": []},
     )
 
     sql = generate_seed_data_dev(ctx)
@@ -1149,9 +1171,10 @@ def test_order_document_create_restricted_by_order_state():
 @pytest.mark.integration
 def test_order_workflow_state_transitions():
     """Test allowed and blocked state transitions:
-    - user CAN move initial → ordered (placing the order)
-    - user CANNOT move ordered → accepted or back to initial
-    - admin CAN move ordered → accepted
+    - direct database state changes are blocked for user and admin
+    - user CAN move initial → ordered through workflow-transition
+    - user CANNOT move ordered → initial through workflow-transition
+    - admin CAN move ordered → initial through workflow-transition
     """
     load_dotenv("test-app/backend/.env")
     db_url = os.getenv("DB_URL")
@@ -1169,9 +1192,6 @@ def test_order_workflow_state_transitions():
         if not user1_id or not admin_id:
             pytest.skip(f"Required users not found. Found: {user_ids}")
 
-        cur.execute("SELECT id FROM customer LIMIT 1;")
-        customer_id = cur.fetchone()[0]
-
         user1_claims = f'{{"sub": "{user1_id}", "app_metadata": {{"roles": ["user"]}}}}'
         admin_claims = f'{{"sub": "{admin_id}", "app_metadata": {{"roles": ["admin"]}}}}'
 
@@ -1188,55 +1208,52 @@ def test_order_workflow_state_transitions():
             cur.execute("RESET ROLE;")
             cur.execute("SELECT set_config('request.jwt.claims', '', false);")
 
-            # user1 CAN move initial → ordered
+            # user1 cannot bypass workflow-transition with a direct DB state change.
             cur.execute("BEGIN;")
             try:
                 cur.execute("SET LOCAL ROLE authenticated;")
                 cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', true);")
-                cur.execute(f"UPDATE \"order\" SET state = 'ordered' WHERE id = {order_id};")
-                cur.execute(f'SELECT state FROM "order" WHERE id = {order_id};')
-                assert cur.fetchone()[0] == 'ordered', "user1 should be able to move order to 'ordered'"
+                with pytest.raises(psycopg2.errors.InsufficientPrivilege):
+                    cur.execute(f"UPDATE \"order\" SET state = 'ordered' WHERE id = {order_id};")
             finally:
                 cur.execute("ROLLBACK;")
 
-            cur.execute(f"UPDATE \"order\" SET state = 'ordered' WHERE id = {order_id};")
-
-            # user1 CANNOT move ordered → accepted
-            blocked = False
-            cur.execute("BEGIN;")
-            try:
-                cur.execute("SET LOCAL ROLE authenticated;")
-                cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', true);")
-                cur.execute(f"UPDATE \"order\" SET state = 'accepted' WHERE id = {order_id};")
-            except psycopg2.Error:
-                blocked = True
-            finally:
-                cur.execute("ROLLBACK;")
-            assert blocked, "user1 should NOT be able to move order from 'ordered' to 'accepted'"
-
-            # user1 CANNOT move ordered → initial
-            blocked = False
-            cur.execute("BEGIN;")
-            try:
-                cur.execute("SET LOCAL ROLE authenticated;")
-                cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', true);")
-                cur.execute(f"UPDATE \"order\" SET state = 'initial' WHERE id = {order_id};")
-            except psycopg2.Error:
-                blocked = True
-            finally:
-                cur.execute("ROLLBACK;")
-            assert blocked, "user1 should NOT be able to move order back to 'initial' from 'ordered'"
-
-            # admin CAN move ordered → accepted
+            # admin also cannot bypass workflow-transition with a direct DB state change.
             cur.execute("BEGIN;")
             try:
                 cur.execute("SET LOCAL ROLE authenticated;")
                 cur.execute(f"SELECT set_config('request.jwt.claims', '{admin_claims}', true);")
-                cur.execute(f"UPDATE \"order\" SET state = 'accepted' WHERE id = {order_id};")
-                cur.execute(f'SELECT state FROM "order" WHERE id = {order_id};')
-                assert cur.fetchone()[0] == 'accepted', "admin should be able to move order to 'accepted'"
+                with pytest.raises(psycopg2.errors.InsufficientPrivilege):
+                    cur.execute(f"UPDATE \"order\" SET state = 'ordered' WHERE id = {order_id};")
             finally:
                 cur.execute("ROLLBACK;")
+
+            returncode, result = _call_edge_function_script(
+                "user1@test.com",
+                "workflow-transition",
+                {"concept": "order", "id": order_id, "to_state": "ordered"},
+            )
+            assert returncode == 0, f"user1 should move initial → ordered through workflow-transition: {result}"
+            assert result["status"] == 200
+            assert result["body"]["data"]["state"] == "ordered"
+
+            returncode, result = _call_edge_function_script(
+                "user1@test.com",
+                "workflow-transition",
+                {"concept": "order", "id": order_id, "to_state": "initial"},
+            )
+            assert returncode != 0
+            assert result["status"] == 403
+            assert "Insufficient privilege for state ordered" in result["body"]["error"]
+
+            returncode, result = _call_edge_function_script(
+                "admin@test.com",
+                "workflow-transition",
+                {"concept": "order", "id": order_id, "to_state": "initial"},
+            )
+            assert returncode == 0, f"admin should move ordered → initial through workflow-transition: {result}"
+            assert result["status"] == 200
+            assert result["body"]["data"]["state"] == "initial"
 
         finally:
             if order_id:
@@ -1644,14 +1661,19 @@ def test_order_lifecycle_via_api():
         assert r.status_code == 200 and r.json() == [], \
             f"user2 should NOT see user1's order, got: {r.status_code} {r.text}"
 
-        # 3. user1 advances the order to 'ordered'
-        r = req.patch(
-            f"{supabase_url}/rest/v1/order?id=eq.{order_id}",
-            headers={**api_headers(user1_token), "Prefer": "return=representation"},
-            json={"state": "ordered"},
+        # 3. user1 advances the order to 'ordered' through workflow-transition
+        r = req.post(
+            f"{supabase_url}/functions/v1/workflow-transition",
+            headers=api_headers(user1_token),
+            json={
+                "concept": "order",
+                "id": order_id,
+                "to_state": "ordered",
+                "comment": "Lifecycle test order",
+            },
             timeout=10,
         )
-        assert r.status_code in (200, 204), f"user1 failed to advance order state: {r.status_code} {r.text}"
+        assert r.status_code == 200, f"user1 failed to advance order state: {r.status_code} {r.text}"
 
         # 4. user1 downloads the document — should succeed
         r = req.get(

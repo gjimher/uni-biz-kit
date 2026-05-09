@@ -40,6 +40,7 @@ RETURNS TRIGGER AS $$
 DECLARE
     new_row JSONB;
     old_row JSONB;
+    claims JSONB;
     column_name TEXT;
     i INT;
 BEGIN
@@ -48,6 +49,12 @@ BEGIN
        OR current_setting('request.jwt.claims', true) = ''
        OR pg_trigger_depth() > 1
     THEN
+        RETURN NEW;
+    END IF;
+
+    -- Skip for service_role — edge functions write by_rules fields using service_role.
+    claims := current_setting('request.jwt.claims', true)::jsonb;
+    IF claims ->> 'role' = 'service_role' THEN
         RETURN NEW;
     END IF;
 

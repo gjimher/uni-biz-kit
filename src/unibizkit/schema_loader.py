@@ -55,12 +55,14 @@ class SchemaLoader:
         self.workflow_config = None
         self.system_config = None
         self.seed_data_config = None
+        self.rules_config = None
         self.validation_schema = self._load_validation_schema("concepts_schema.json")
         self.presentation_validation_schema = self._load_validation_schema("presentation_schema.json")
         self.security_validation_schema = self._load_validation_schema("security_schema.json")
         self.workflow_validation_schema = self._load_validation_schema("workflow_schema.json")
         self.system_validation_schema = self._load_validation_schema("system_schema.json")
         self.seed_data_validation_schema = self._load_validation_schema("seed_data_schema.json")
+        self.rules_validation_schema = self._load_validation_schema("rules_schema.json")
     
     def _load_validation_schema(self, schema_name: str) -> Dict[str, Any]:
         """Load a validation schema from the schemas directory."""
@@ -131,6 +133,13 @@ class SchemaLoader:
                 self.load_seed_data(str(seed_data_path))
             else:
                 self.seed_data_config = {"include_test_data": True, "records": {}}
+
+            # Try to load rules.json (optional)
+            rules_path = Path(path).parent / "rules.json"
+            if rules_path.exists():
+                self.load_rules(str(rules_path))
+            else:
+                self.rules_config = {"rules": []}
 
             # Apply special defaults before main validation/default injection
             self._apply_special_defaults(business_schema)
@@ -227,6 +236,18 @@ class SchemaLoader:
 
         self.seed_data_config = seed_data_config
         logger.info(f"Successfully loaded and validated seed data settings: {seed_data_path}")
+
+    def load_rules(self, rules_path: str):
+        """
+        Load and validate the optional FEEL business rules.
+        """
+        with open(rules_path, 'r', encoding='utf-8') as f:
+            rules_config = json.load(f)
+
+        DefaultValidatingDraft7Validator(self.rules_validation_schema).validate(rules_config)
+
+        self.rules_config = rules_config
+        logger.info(f"Successfully loaded and validated rules: {rules_path}")
     
     def _apply_special_defaults(self, data: Dict[str, Any]):
         """

@@ -20,6 +20,7 @@ if sys.prefix == sys.base_prefix:
     )
 
 import json
+import hashlib
 import os
 import re
 import subprocess
@@ -140,22 +141,48 @@ def _upsert_env(path, values):
     path.write_text(''.join(f"{key}={existing[key]}\n" for key in dict.fromkeys(order)))
 
 
-delta_files = [delta_toml] + ([sso_delta_toml] if sso_delta_toml.exists() else [])
+def _functions_signature(functions_dir):
+    digest = hashlib.sha256()
+    if not functions_dir.exists():
+        return ''
+    for path in sorted(functions_dir.rglob('*')):
+        if not path.is_file():
+            continue
+        digest.update(str(path.relative_to(functions_dir)).encode())
+        digest.update(b'\0')
+        digest.update(path.read_bytes())
+        digest.update(b'\0')
+    return digest.hexdigest()
 
-if supabase_dir.exists():
-    if not _merged_deltas_applied(config_toml, delta_files):
-        print("Config has changes — stopping Supabase, applying config, restarting...")
+
+def _stored_functions_signature(marker_path):
+    if not marker_path.exists():
+        return None
+    return marker_path.read_text().strip()
+
+
+delta_files = [delta_toml] + ([sso_delta_toml] if sso_delta_toml.exists() else [])
+functions_signature_path = supabase_dir / '.functions_signature'
+current_functions_signature = _functions_signature(supabase_dir / 'functions')
+functions_changed = current_functions_signature != _stored_functions_signature(functions_signature_path)
+
+if config_toml.exists():
+    config_changed = not _merged_deltas_applied(config_toml, delta_files)
+    if config_changed or functions_changed:
+        print("Config or Edge Functions changed — stopping Supabase, applying changes, restarting...")
         result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'stop'],
                                 stdout=sys.stdout, stderr=sys.stderr)
         if result.returncode != 0:
             sys.exit(f"supabase stop failed with code {result.returncode}")
-        for d in delta_files:
-            _apply_delta(config_toml, d)
+        if config_changed:
+            for d in delta_files:
+                _apply_delta(config_toml, d)
         result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'start'],
                                 stdout=sys.stdout, stderr=sys.stderr)
         if result.returncode != 0:
             sys.exit(f"supabase start failed with code {result.returncode}")
-        print("Supabase restarted with updated config.")
+        functions_signature_path.write_text(current_functions_signature)
+        print("Supabase restarted with updated config or Edge Functions.")
     else:
         status_check = subprocess.run(
             ['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'status', '-o', 'json'],
@@ -167,6 +194,7 @@ if supabase_dir.exists():
                                     stdout=sys.stdout, stderr=sys.stderr)
             if result.returncode != 0:
                 sys.exit(f"supabase start failed with code {result.returncode}")
+            functions_signature_path.write_text(current_functions_signature)
             print("Supabase started.")
         else:
             print("Config is up to date and Supabase is running. Nothing to do.")
@@ -187,6 +215,7 @@ result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'start'],
                         stdout=sys.stdout, stderr=sys.stderr)
 if result.returncode != 0:
     sys.exit(f"supabase start failed with code {result.returncode}")
+functions_signature_path.write_text(current_functions_signature)
 
 print("Creating initial migration...")
 result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'migration', 'new', 'init_schema'],

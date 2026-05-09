@@ -10,6 +10,7 @@ import sys
 import os
 import json
 import copy
+import shutil
 from typing import Dict, Any
 from pathlib import Path
 from .schema_loader import SchemaLoader, SchemaValidationError
@@ -534,6 +535,25 @@ Examples:
             supabase_config_file = backend_dir / "supabase_config_dev.toml"
             with open(supabase_config_file, 'w', encoding='utf-8') as f:
                 f.write(supabase_config)
+
+            # Write Supabase Edge Functions for FEEL business rules.
+            supabase_rules = supabase_generator.generate_supabase_rules()
+            rules_dir = backend_dir / "supabase" / "functions"
+            if rules_dir.exists():
+                for item in rules_dir.iterdir():
+                    if item.is_dir():
+                        shutil.rmtree(item)
+                    else:
+                        item.unlink()
+            else:
+                rules_dir.mkdir(parents=True, exist_ok=True)
+            if supabase_rules:
+                for function_name, files in supabase_rules.items():
+                    function_dir = rules_dir / function_name
+                    function_dir.mkdir(parents=True, exist_ok=True)
+                    for filename, content in files.items():
+                        with open(function_dir / filename, 'w', encoding='utf-8') as f:
+                            f.write(content)
 
             logger.info(f"Supabase schema generated: {sql_file}")
             logger.info(f"Development seed data generated: {seed_data_dev_file}")

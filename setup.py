@@ -12,8 +12,12 @@ setup(
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     include_package_data=True,
+    package_data={
+        "unibizkit.generators.backend": ["gen-feelin-umd.js"],
+    },
     install_requires=[
         "jsonschema>=4.0.0",
+        "py-mini-racer>=0.6.0",
         "typing-extensions>=4.0.0",
     ],
     entry_points={

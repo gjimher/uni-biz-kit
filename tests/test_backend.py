@@ -7,7 +7,12 @@ This test generates a complete app application backend and sets up the database.
 import pytest
 import os
 import sys
+import json
 import subprocess
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 import psycopg2
@@ -23,6 +28,102 @@ def _run(cmd, timeout=600):
     if result.stderr:
         print(result.stderr, end='', file=sys.stderr)
     return result
+
+
+def _http_json(method, url, *, headers=None, body=None, timeout=20):
+    data = None if body is None else json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers=headers or {},
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8")
+            return resp.status, json.loads(raw) if raw else None
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode("utf-8")
+        try:
+            parsed = json.loads(raw) if raw else None
+        except json.JSONDecodeError:
+            parsed = raw
+        return e.code, parsed
+
+
+def _api_env():
+    load_dotenv(Path("test-app/frontend/.env.development"), override=True)
+    api_url = os.getenv("VITE_SUPABASE_URL")
+    anon_key = os.getenv("VITE_SUPABASE_KEY")
+    assert api_url and anon_key, "VITE_SUPABASE_URL / VITE_SUPABASE_KEY must be present"
+    return api_url, anon_key
+
+
+def _seed_user_password(email):
+    security_path = Path("test-app/security_extended.json")
+    assert security_path.exists(), "security_extended.json must exist. Run backend generation first."
+    security = json.loads(security_path.read_text(encoding="utf-8"))
+    for user in security["users"]:
+        if user["email"] == email:
+            return user["password"]
+    raise AssertionError(f"Seed user not found: {email}")
+
+
+def _login(api_url, anon_key, email):
+    status, body = _http_json(
+        "POST",
+        f"{api_url}/auth/v1/token?grant_type=password",
+        headers={"apikey": anon_key, "Content-Type": "application/json"},
+        body={"email": email, "password": _seed_user_password(email)},
+    )
+    assert status == 200, f"Login failed for {email}: {status} {body}"
+    assert body["access_token"]
+    return body["access_token"]
+
+
+def _call_edge_function_script(email, function_name, payload=None):
+    script = Path("test-app/bin/dev-supabase-call-edge-function.py")
+    assert script.exists(), "dev-supabase-call-edge-function.py must be generated"
+    args = [
+        sys.executable,
+        str(script),
+        email,
+        function_name,
+    ]
+    if payload is not None:
+        args.append(json.dumps(payload))
+    result = subprocess.run(
+        args,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr)
+    assert result.stdout, "Edge function caller should print a JSON response"
+    return result.returncode, json.loads(result.stdout)
+
+
+def _wait_for_order_values(api_url, anon_key, token, order_id, expected, timeout=5):
+    encoded_filter = urllib.parse.urlencode({
+        "id": f"eq.{order_id}",
+        "select": ",".join(expected.keys()),
+    })
+    deadline = time.monotonic() + timeout
+    last_rows = None
+    time.sleep(0.1)
+    while time.monotonic() < deadline:
+        status, rows = _http_json(
+            "GET",
+            f"{api_url}/rest/v1/order?{encoded_filter}",
+            headers={"apikey": anon_key, "Authorization": f"Bearer {token}"},
+        )
+        assert status == 200
+        last_rows = rows
+        if rows and len(rows) == 1 and all(rows[0].get(key) == value for key, value in expected.items()):
+            return rows
+        time.sleep(0.1)
+    raise AssertionError(f"Expected order values {expected}, got {last_rows}")
 
 
 class TestAppBackend:
@@ -55,14 +156,10 @@ class TestAppBackend:
         original_cwd = os.getcwd()
 
         try:
-            supabase_dir = backend_dir / 'supabase'
-            if not supabase_dir.exists():
-                print("Running dev-supabase-start.py...")
-                create_script = output_dir / 'bin' / 'dev-supabase-start.py'
-                result = _run([sys.executable, str(create_script)], timeout=600)
-                assert result.returncode == 0, f"dev-supabase-start.py failed with code {result.returncode}"
-            else:
-                print("Supabase directory already exists, skipping initialization")
+            print("Running dev-supabase-start.py...")
+            create_script = output_dir / 'bin' / 'dev-supabase-start.py'
+            result = _run([sys.executable, str(create_script)], timeout=600)
+            assert result.returncode == 0, f"dev-supabase-start.py failed with code {result.returncode}"
 
             print("Running dev-supabase-reset-schema-and-data.py...")
             reset_script = output_dir / 'bin' / 'dev-supabase-reset-schema-and-data.py'
@@ -93,11 +190,159 @@ class TestAppBackend:
 
     @pytest.mark.integration
     @pytest.mark.timeout(60)
+    def test_order_shipping_costs_rule_via_supabase_api(self):
+        """Run the FEEL shipping rule through PostgREST + Edge Function APIs."""
+        api_url, anon_key = _api_env()
+        user1_token = _login(api_url, anon_key, "user1@test.com")
+
+        user1_headers = {
+            "apikey": anon_key,
+            "Authorization": f"Bearer {user1_token}",
+            "Content-Type": "application/json",
+        }
+        status, created = _http_json(
+            "POST",
+            f"{api_url}/rest/v1/order",
+            headers={**user1_headers, "Prefer": "return=representation"},
+            body={
+                "order_date": "2026-05-09T12:00:00Z",
+                "shipping_address": "Shipping rule test street",
+            },
+        )
+        assert status == 201, f"Order creation failed: {status} {created}"
+        assert len(created) == 1
+        order_id = created[0]["id"]
+
+        _wait_for_order_values(
+            api_url,
+            anon_key,
+            user1_token,
+            order_id,
+            {"shipping_costs": 6, "total_amount": 0},
+        )
+
+        product_filter = urllib.parse.urlencode({
+            "sku": "eq.product_sku_1",
+            "select": "id",
+        })
+        status, products = _http_json(
+            "GET",
+            f"{api_url}/rest/v1/product?{product_filter}",
+            headers={"apikey": anon_key, "Authorization": f"Bearer {user1_token}"},
+        )
+        assert status == 200
+        assert len(products) == 1
+        product_id = products[0]["id"]
+
+        status, created_items = _http_json(
+            "POST",
+            f"{api_url}/rest/v1/order_item",
+            headers={**user1_headers, "Prefer": "return=representation"},
+            body={
+                "order": order_id,
+                "product": product_id,
+                "quantity": 10,
+            },
+        )
+        assert status == 201, f"Order item creation failed: {status} {created_items}"
+
+        _wait_for_order_values(
+            api_url,
+            anon_key,
+            user1_token,
+            order_id,
+            {"shipping_costs": 0, "total_amount": 100.1},
+        )
+
+        direct_status, direct_body = _http_json(
+            "PATCH",
+            f"{api_url}/rest/v1/order?id=eq.{order_id}",
+            headers={**user1_headers, "Prefer": "return=representation"},
+            body={"state": "ordered"},
+        )
+        assert direct_status >= 400
+        assert "workflow-transition" in json.dumps(direct_body)
+
+        returncode, auth_rule_result = _call_edge_function_script(
+            "user1@test.com",
+            "current-customer-email",
+        )
+        assert returncode == 0, f"Auth rule execution failed for user1: {auth_rule_result}"
+        assert auth_rule_result["status"] == 200
+        assert auth_rule_result["body"] == {"data": "user1@test.com"}
+
+        returncode, transition_result = _call_edge_function_script(
+            "user1@test.com",
+            "workflow-transition",
+            {
+                "concept": "order",
+                "id": order_id,
+                "to_state": "ordered",
+                "comment": "Order confirmed from test",
+            },
+        )
+        assert returncode == 0, f"Workflow transition failed for user1: {transition_result}"
+        assert transition_result["status"] == 200
+        transition_body = transition_result["body"]
+        assert transition_body["rules"] == [
+            "order-shipping-costs",
+            "order-save-ordered-total-amount",
+        ]
+        assert transition_body["data"]["state"] == "ordered"
+        assert transition_body["data"]["ordered_total_amount"] == 100.1
+        assert transition_body["data"]["state_info"]["last_transition"]["comment"] == "Order confirmed from test"
+
+        load_dotenv(Path('test-app/backend/.env'))
+        db_url = os.getenv("DB_URL")
+        assert db_url, "DB_URL must be present in test-app/backend/.env"
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "order" SET "ordered_total_amount" = %s WHERE "id" = %s;',
+                    (0, order_id),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+        returncode, accepted_result = _call_edge_function_script(
+            "admin@test.com",
+            "workflow-transition",
+            {
+                "concept": "order",
+                "id": order_id,
+                "to_state": "accepted",
+                "comment": "Try to accept changed order",
+            },
+        )
+        assert returncode == 0
+        assert accepted_result["status"] == 200
+        assert accepted_result["body"] == {
+            "ok": False,
+            "error": "Order total has changed since it was ordered",
+            "rule": "order-check-ordered-total-amount",
+        }
+
+        returncode, user2_result = _call_edge_function_script(
+            "user2@test.com",
+            "order-shipping-costs",
+            {"id": order_id},
+        )
+        assert returncode != 0
+        assert user2_result["status"] == 403
+        assert user2_result["body"] == {
+            "error": "Expected exactly one accessible record",
+            "count": 0,
+        }
+
+    @pytest.mark.integration
+    @pytest.mark.timeout(60)
     def test_copy_and_rollup_triggers(self):
-        """Verify copy(product,price,state_initial) and rollup(sum,order_item,total_price) triggers.
+        """Verify copy(product,price,on_change_in_state_initial) and rollup(sum,order_item,total_price) triggers.
 
         Flow:
-        1. Insert order in 'ordered' state (skips state_initial copy on creation).
+        1. Insert order in 'ordered' state (skips on_change_in_state_initial copy on creation).
         2. Insert two order_items referencing the seeded product — unit_price stays NULL.
         3. Transition order to 'initial' — copy trigger sets unit_price from product.price.
         4. Verify total_amount rollup reflects the copied prices.
@@ -119,7 +364,7 @@ class TestAppBackend:
                 assert row, "Seeded product not found — run the full backend test first"
                 product_id, product_price = row[0], float(row[1])
 
-                # Insert order in 'ordered' state so the state_initial copy does not fire yet.
+                # Insert order in 'ordered' state so the on_change_in_state_initial copy does not fire yet.
                 cur.execute(
                     'INSERT INTO "order" ("customer", "order_date", "shipping_address", "state") '
                     "VALUES (%s, NOW(), 'Test Street 1', 'ordered') RETURNING id;",
@@ -139,7 +384,7 @@ class TestAppBackend:
 
                 cur.execute('SELECT "unit_price" FROM "order_item" WHERE "order" = %s;', (order_id,))
                 for (up,) in cur.fetchall():
-                    assert up is None, f"unit_price should be NULL before state_initial, got {up}"
+                    assert up is None, f"unit_price should be NULL before on_change_in_state_initial, got {up}"
 
                 # Transition to 'initial' — copy trigger fires and sets unit_price.
                 cur.execute('UPDATE "order" SET "state" = %s WHERE "id" = %s;', ('initial', order_id))
@@ -162,8 +407,8 @@ class TestAppBackend:
 
     @pytest.mark.integration
     @pytest.mark.timeout(60)
-    def test_copy_unit_price_state_initial(self):
-        """copy(product,price,state_initial) on order_item.unit_price.
+    def test_copy_unit_price_on_change_in_state_initial(self):
+        """copy(product,price,on_change_in_state_initial) on order_item.unit_price.
 
         Cases:
         A. INSERT item while order.state='initial'  → unit_price = product.price

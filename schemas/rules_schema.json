@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Rules Schema",
+  "description": "Schema for FEEL business rules",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "rules": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "properties": {
+          "concept": {
+            "type": "string",
+            "description": "Primary concept this rule works on. Optional for callable rules whose context is discovered from auth.<profile_concept>."
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "feel_expr": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "type": "string",
+            "enum": ["return", "update", "check"]
+          },
+          "when": {
+            "type": "array",
+            "description": "Synchronous rule events. Currently supports workflow state changes executed by the workflow-transition edge function.",
+            "default": [],
+            "items": {
+              "type": "string",
+              "pattern": "^on_state_changed_to_[a-zA-Z_][a-zA-Z0-9_]*$"
+            }
+          },
+          "when_async": {
+            "type": "array",
+            "description": "Asynchronous reactive rule events generated from database triggers.",
+            "default": [],
+            "items": {
+              "type": "string",
+              "pattern": "^on_change(_in_state_[a-zA-Z_][a-zA-Z0-9_]*)?$"
+            }
+          }
+        },
+        "required": ["name", "feel_expr", "action"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["rules"]
+}

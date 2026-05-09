@@ -132,16 +132,18 @@ def _parse_copy(expr: str):
     fk_field = m.group(1)
     source_field = m.group(2)
     when_str = m.group(3)
-    if when_str == 'always':
-        return fk_field, source_field, ['always']
+    if when_str == 'on_change':
+        return fk_field, source_field, ['on_change']
     events = when_str.split('+')
+    normalized_events = []
     for event in events:
-        if event != 'on_insert' and not event.startswith('state_'):
+        if event not in ('on_insert', 'on_change') and not event.startswith('on_change_in_state_'):
             raise ValueError(
                 f"Invalid event '{event}' in copy expression. "
-                "Expected 'always', 'on_insert', or 'state_<name>'"
+                "Expected 'on_change', 'on_insert', or 'on_change_in_state_<name>'"
             )
-    return fk_field, source_field, events
+        normalized_events.append(event)
+    return fk_field, source_field, normalized_events
 
 
 def _parse_copy_logged_on_insert(expr: str):
@@ -211,13 +213,13 @@ def generate_copy_triggers(
                         f"source field '{source_field}' not found in '{fk_target}'"
                     )
 
-                has_on_insert = "on_insert" in events or "always" in events
-                has_always = "always" in events
+                has_on_insert = "on_insert" in events or "on_change" in events
+                has_on_change = "on_change" in events
 
                 # BEFORE INSERT: copy from FK based on applicable events.
                 parent_state_events = [
-                    e[len("state_"):] for e in events
-                    if e.startswith("state_") and not concept_has_workflow
+                    e[len("on_change_in_state_"):] for e in events
+                    if e.startswith("on_change_in_state_") and not concept_has_workflow
                 ]
 
                 insert_declare = ""
@@ -266,7 +268,7 @@ FOR EACH ROW EXECUTE FUNCTION "{fn_ins}"();""")
 
                 # BEFORE UPDATE: protect or recopy when FK changes in a matching state.
                 update_declare = ""
-                if has_always:
+                if has_on_change:
                     update_body = (
                         f'\n    IF NEW."{fk_field}" IS NOT NULL THEN\n'
                         f'        SELECT "{source_field}" INTO NEW."{field_name}" '
@@ -322,9 +324,9 @@ FOR EACH ROW EXECUTE FUNCTION "{fn_upd}"();""")
 
                 # State-transition triggers.
                 for event in events:
-                    if not event.startswith("state_"):
+                    if not event.startswith("on_change_in_state_"):
                         continue
-                    state_name = event[len("state_"):]
+                    state_name = event[len("on_change_in_state_"):]
 
                     fn_st = f"copy_state_{concept_name}_{field_name}_{state_name}"
 

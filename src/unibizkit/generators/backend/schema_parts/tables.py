@@ -52,7 +52,7 @@ def generate_field_sql(field: Dict[str, Any], concept: Dict[str, Any]) -> str:
             if field["_be_not_null"]:
                 field_parts.append("NOT NULL")
             return ' '.join(field_parts)
-        if expr.startswith('copy(') or expr.startswith('copy_logged_on_insert('):
+        if expr.startswith('copy(') or expr.startswith('copy_logged_on_insert(') or expr == 'by_rules':
             return f'"{field_name}" {sql_type}'
         sql_parts = [f'"{field_name}" {sql_type} GENERATED ALWAYS AS ({expr}) STORED']
         return ' '.join(sql_parts)
