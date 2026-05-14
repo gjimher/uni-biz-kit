@@ -161,6 +161,41 @@ def _stored_functions_signature(marker_path):
     return marker_path.read_text().strip()
 
 
+def _project_id(config_path):
+    with open(config_path, 'rb') as f:
+        return tomllib.load(f).get('project_id')
+
+
+def _edge_runtime_running(config_path):
+    project_id = _project_id(config_path)
+    if not project_id:
+        return False
+    result = subprocess.run(
+        [
+            'docker',
+            'inspect',
+            '-f',
+            '{{.State.Running}}',
+            f'supabase_edge_runtime_{project_id}',
+        ],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and result.stdout.strip() == 'true'
+
+
+def _restart_supabase(reason):
+    print(f"{reason} — restarting Supabase...")
+    result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'stop'],
+                            stdout=sys.stdout, stderr=sys.stderr)
+    if result.returncode != 0:
+        sys.exit(f"supabase stop failed with code {result.returncode}")
+    result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'start'],
+                            stdout=sys.stdout, stderr=sys.stderr)
+    if result.returncode != 0:
+        sys.exit(f"supabase start failed with code {result.returncode}")
+
+
 delta_files = [delta_toml] + ([sso_delta_toml] if sso_delta_toml.exists() else [])
 functions_signature_path = supabase_dir / '.functions_signature'
 current_functions_signature = _functions_signature(supabase_dir / 'functions')
@@ -169,7 +204,7 @@ functions_changed = current_functions_signature != _stored_functions_signature(f
 if config_toml.exists():
     config_changed = not _merged_deltas_applied(config_toml, delta_files)
     if config_changed or functions_changed:
-        print("Config or Edge Functions changed — stopping Supabase, applying changes, restarting...")
+        print("Config or Edge Functions changed.")
         result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'stop'],
                                 stdout=sys.stdout, stderr=sys.stderr)
         if result.returncode != 0:
@@ -196,6 +231,10 @@ if config_toml.exists():
                 sys.exit(f"supabase start failed with code {result.returncode}")
             functions_signature_path.write_text(current_functions_signature)
             print("Supabase started.")
+        elif not _edge_runtime_running(config_toml):
+            _restart_supabase("Supabase status is up but Edge Runtime is not running")
+            functions_signature_path.write_text(current_functions_signature)
+            print("Supabase restarted.")
         else:
             print("Config is up to date and Supabase is running. Nothing to do.")
     sys.exit(0)

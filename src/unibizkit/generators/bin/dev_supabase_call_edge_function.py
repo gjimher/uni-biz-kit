@@ -25,6 +25,7 @@ def usage():
         f"  python bin/{Path(__file__).name} USER [PASSWORD] EDGE_FUNCTION [JSON_ARGS]\n\n"
         "Examples:\n"
         f"  python bin/{Path(__file__).name} user1@test.com order-shipping-costs '{{\"id\": 1}}'\n"
+        f"  python bin/{Path(__file__).name} user1@test.com workflow-transition '{{\"concept\":\"order\",\"id\":1,\"to_state\":\"initial\",\"comment\":\"Back to initial\"}}'\n"
         f"  python bin/{Path(__file__).name} user1@test.com useruser order-shipping-costs '{{\"id\": 1}}'"
     )
 

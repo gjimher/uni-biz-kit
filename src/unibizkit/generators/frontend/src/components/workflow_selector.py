@@ -22,6 +22,7 @@ import {
     Tooltip
 } from '@mui/material';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { useFormContext } from 'react-hook-form';
 
 export const useWorkflowCanEdit = (workflow, record, identity, identityLoading) => {
     if (identityLoading || !record) return true;
@@ -37,6 +38,8 @@ export const WorkflowSelector = ({ workflow, resource, canEdit }) => {
     const record = useRecordContext();
     const notify = useNotify();
     const refresh = useRefresh();
+    const formContext = useFormContext();
+    const isDirty = !!formContext?.formState?.isDirty;
     const [pendingState, setPendingState] = React.useState(null);
     const [transitionText, setTransitionText] = React.useState('');
 
@@ -70,6 +73,10 @@ ${t.text}` : '';
 
     const handleRadioClick = (stateName) => {
         if (!canEdit || stateName === currentStateName) return;
+        if (isDirty) {
+            notify('Save changes before changing state', { type: 'warning' });
+            return;
+        }
         setPendingState(stateName);
     };
 
@@ -100,7 +107,11 @@ ${t.text}` : '';
             handleCancel();
             refresh();
         } catch (error) {
-            notify('Error updating state: ' + (error.context?.error || error.message), { type: 'warning' });
+            let body = error.context;
+            if (typeof body === 'string') {
+                try { body = JSON.parse(body); } catch { body = null; }
+            }
+            notify(body?.error || error.message || 'Error updating state', { type: 'warning' });
         }
     };
     return (

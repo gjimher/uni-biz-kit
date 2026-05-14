@@ -128,7 +128,7 @@ class SchemaProcessor:
                     result_names.append(target)
         return result_names
 
-    def __init__(self, schema: Dict[str, Any], security_config: Optional[Dict[str, Any]] = None, presentation_config: Optional[Dict[str, Any]] = None, workflow_config: Optional[Dict[str, Any]] = None, system_config: Optional[Dict[str, Any]] = None, deployment_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, schema: Dict[str, Any], security_config: Optional[Dict[str, Any]] = None, presentation_config: Optional[Dict[str, Any]] = None, workflow_config: Optional[Dict[str, Any]] = None, system_config: Optional[Dict[str, Any]] = None, deployment_config: Optional[Dict[str, Any]] = None, validations_config: Optional[Dict[str, Any]] = None):
         """
         Initialize the Schema Processor.
 
@@ -139,6 +139,7 @@ class SchemaProcessor:
             workflow_config: The loaded workflow configuration.
             system_config: The loaded system configuration (SMTP, base_url).
             deployment_config: The loaded deployment configuration (base_uri).
+            validations_config: The loaded CSV-driven validation configuration.
         """
         self.raw_schema = schema
         self.security_config = security_config or {"authentication_required": False}
@@ -147,6 +148,8 @@ class SchemaProcessor:
         self.workflow_extended = copy.deepcopy(workflow_config or {"workflow_rules": []})
         self.system_extended = copy.deepcopy(system_config or {})
         self.deployment_extended = copy.deepcopy(deployment_config or {})
+        self.validations_config = copy.deepcopy(validations_config or {"validations": []})
+        self._validations_by_concept = {}
         
         # We work on a deep copy to avoid mutating the original
         self.extended_schema = copy.deepcopy(schema)
@@ -173,6 +176,9 @@ class SchemaProcessor:
 
         # 0. Enrich Workflow
         self._enrich_workflow()
+
+        # 0. Enrich CSV validations
+        self._enrich_validations()
 
         # Expand prefill fields before security ACL and list field pool computation
         self._expand_prefill_fields()
@@ -277,6 +283,27 @@ class SchemaProcessor:
         if not base_uri.endswith("/"):
             base_uri = base_uri + "/"
         self.deployment_extended["base_uri"] = base_uri
+
+    def _enrich_validations(self):
+        validations = self.validations_config.get("validations", [])
+        self.extended_schema["_validations"] = validations
+        self._validations_by_concept = {}
+        for validation in validations:
+            self._validations_by_concept.setdefault(validation["concept"], []).append(validation)
+        for concept in self.concepts:
+            concept_validations = self._validations_by_concept.get(concept["name"], [])
+            for validation in concept_validations:
+                for index, field_name in enumerate(validation["columns"]):
+                    field = self.concept_map[concept["name"]]["fields"]
+                    for candidate in field:
+                        if candidate["name"] == field_name:
+                            candidate["_validation_csv_filename"] = f"{validation['name']}.csv"
+                            candidate["_validation_csv_column"] = index
+                            break
+
+    def _add_validation(self, validation: Dict[str, Any]):
+        self.extended_schema["_validations"].append(validation)
+        self._validations_by_concept.setdefault(validation["concept"], []).append(validation)
 
     def _enrich_workflow(self):
         """
@@ -697,6 +724,7 @@ class SchemaProcessor:
                 # Build expanded fields from source concept fields
                 expanded_fields = []
                 expanded_field_names = []
+                expanded_name_by_source = {}
                 for sf in source_concept["fields"]:
                     sf_name = sf["name"]
                     if sf_name in excluded_names or sf_name.startswith("_"):
@@ -708,7 +736,7 @@ class SchemaProcessor:
 
                     new_field = dict(sf)
                     new_field["name"] = f"{prefix}_{sf_name}"
-                    new_field["required"] = False
+                    new_field["required"] = sf["required"] if pfield["required"] and sf_name != pres_field else False
                     new_field["unique"] = False
                     new_field["_prefill_group"] = prefix
                     new_field["_prefill_source_field"] = sf_name
@@ -716,6 +744,24 @@ class SchemaProcessor:
 
                     expanded_fields.append(new_field)
                     expanded_field_names.append(new_field["name"])
+                    expanded_name_by_source[sf_name] = new_field["name"]
+
+                for validation in self._validations_by_concept.get(source_concept["name"], []):
+                    if not all(column in expanded_name_by_source for column in validation["columns"]):
+                        continue
+                    derived_validation = {
+                        "name": f"{validation['name']}-{prefix}",
+                        "concept": concept["name"],
+                        "columns": [expanded_name_by_source[column] for column in validation["columns"]],
+                        "rows": validation["rows"],
+                    }
+                    self._add_validation(derived_validation)
+                    for index, field_name in enumerate(derived_validation["columns"]):
+                        for expanded_field in expanded_fields:
+                            if expanded_field["name"] == field_name:
+                                expanded_field["_validation_csv_filename"] = f"{validation['name']}.csv"
+                                expanded_field["_validation_csv_column"] = index
+                                break
 
                 concept_prefill_groups.append({
                     "name": prefix,

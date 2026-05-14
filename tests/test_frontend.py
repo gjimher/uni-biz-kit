@@ -120,4 +120,5 @@ class TestAppFrontend:
         # Level 3: Concept-specific override (e.g. remove c, move e to front)
         l3 = ReactAdminGenerator.filter_list_fields(pool, l2, '!c, e[0]')
         assert l3 == ['e', 'id_presentation', 'a', 'b', 'd']
+
     

@@ -27,7 +27,7 @@
 
           "fields": {
             "items": {
-              "optional_properties": ["_prefill_group", "_prefill_source_field", "_prefill_is_pres_field"],
+              "optional_properties": ["_prefill_group", "_prefill_source_field", "_prefill_is_pres_field", "_validation_csv_filename", "_validation_csv_column"],
               "properties": {
                 "_be_sql_type": { "type": "string" },
                 "_be_not_null": { "type": "boolean" },
@@ -50,6 +50,14 @@
                 "_prefill_is_pres_field": {
                   "type": "boolean",
                   "description": "True if this field is the presentation field of the prefill group"
+                },
+                "_validation_csv_filename": {
+                  "type": "string",
+                  "description": "CSV filename for the validation this field participates in"
+                },
+                "_validation_csv_column": {
+                  "type": "integer",
+                  "description": "Zero-based column index in the CSV validation"
                 }
               }
             }

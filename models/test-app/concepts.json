@@ -228,6 +228,13 @@
           "description": "City"
         },
         {
+          "name": "province",
+          "type": "string",
+          "required": true,
+          "max_length": 100,
+          "description": "Province"
+        },
+        {
           "name": "country",
           "type": "string",
           "required": true,
@@ -278,6 +285,7 @@
           "name": "shipping_address",
           "type": "prefill",
           "subtype": "customer.addresses",
+          "required": true,
           "description": "Shipping address fields prefilled from customer saved addresses"
         },
         {

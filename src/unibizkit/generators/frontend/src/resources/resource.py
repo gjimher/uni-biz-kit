@@ -20,6 +20,18 @@ def _generate_document_tab(concept_name: str, docs: Dict[str, Any], has_workflow
       </FormTab>"""
 
 
+def _validations_for_concept(ctx: Context, concept: Dict[str, Any]) -> List[Dict[str, Any]]:
+    concept_name = concept["name"]
+    return [
+        validation for validation in ctx.business_schema.get("_validations", [])
+        if validation["concept"] == concept_name
+    ]
+
+
+def _has_validations(ctx: Context, concept: Dict[str, Any]) -> bool:
+    return bool(_validations_for_concept(ctx, concept))
+
+
 def _generate_recursive_dialogs(
     ctx: Context,
     concept: Dict[str, Any],
@@ -74,6 +86,7 @@ def _generate_recursive_dialogs(
 
     create_comp_name = f"CREATE_{resource_name.upper()}_FOR_{parent_name.upper()}"
     edit_comp_name = f"EDIT_{resource_name.upper()}_FOR_{parent_name.upper()}"
+    validate_prop = f" validate={{validate_{resource_name}_related_fields}}" if _has_validations(ctx, concept) else ""
 
     create_comp = f"""
 const {create_comp_name} = ({{ canEditParent = true }}) => {{
@@ -102,7 +115,7 @@ const {create_comp_name} = ({{ canEditParent = true }}) => {{
         <DialogTitle>Create {resource_name}</DialogTitle>
         <DialogContent>
           <Create resource="{resource_name}" redirect={{false}} mutationOptions={{{{ onSuccess }}}} title=" ">
-            <SimpleForm defaultValues={{{{ {fk_field_name}: id }}}}>
+            <SimpleForm defaultValues={{{{ {fk_field_name}: id }}}}{validate_prop}>
               <Grid container rowSpacing={{0}} columnSpacing={{2}}>
 {create_fields}
               </Grid>
@@ -118,7 +131,7 @@ const {create_comp_name} = ({{ canEditParent = true }}) => {{
 
     form_content = ""
     if my_children:
-        form_content = f"""<TabbedForm record={{record}} onSubmit={{onSubmit}} syncWithLocation={{false}} toolbar={{<EditToolbar />}}>
+        form_content = f"""<TabbedForm record={{record}} onSubmit={{onSubmit}} syncWithLocation={{false}} toolbar={{<EditToolbar />}}{validate_prop}>
               <FormTab label="Summary">
                 {workflow_ui}
                 <Grid container rowSpacing={{0}} columnSpacing={{2}}>
@@ -128,7 +141,7 @@ const {create_comp_name} = ({{ canEditParent = true }}) => {{
 {child_tabs}
             </TabbedForm>"""
     else:
-        form_content = f"""<SimpleForm record={{record}} onSubmit={{onSubmit}} toolbar={{<EditToolbar />}}>
+        form_content = f"""<SimpleForm record={{record}} onSubmit={{onSubmit}} toolbar={{<EditToolbar />}}{validate_prop}>
               {workflow_ui}
               <Grid container rowSpacing={{0}} columnSpacing={{2}}>
 {edit_fields}
@@ -307,6 +320,167 @@ const {comp_name} = () => {{
 }};"""
 
 
+def _generate_related_validation_component(ctx: Context, concept: Dict[str, Any]) -> str:
+    validations = _validations_for_concept(ctx, concept)
+    if not validations:
+        return ""
+    validation_json = json.dumps(validations)
+    required_fields = [
+        field["name"]
+        for field in concept["fields"]
+        if field["_be_not_null"] and field["_fe_visibility"] == "editable"
+    ]
+    required_fields_json = json.dumps(required_fields)
+    suffix = concept["name"].upper()
+    comp_name = f"RELATED_VALIDATION_INPUT_{concept['name'].upper()}"
+    validate_name = f"validate_{concept['name']}_related_fields"
+    return f"""
+const RELATED_VALIDATIONS_{concept['name'].upper()} = {validation_json};
+const REQUIRED_FIELDS_{concept['name'].upper()} = {required_fields_json};
+const FREE_ENTRY_OPTION_{suffix} = '(type any value)';
+
+const compatibleRows_{suffix} = (validation, values, ignoredColumn = null) => {{
+  let rows = validation.rows;
+  for (const [index, column] of validation.columns.entries()) {{
+    if (column === ignoredColumn) continue;
+    const value = values[column];
+    if (value === undefined || value === null || value === '') continue;
+    if (rows.some(row => row[index] === value)) {{
+      rows = rows.filter(row => row[index] === value);
+    }} else {{
+      rows = rows.filter(row => row[index] === '*');
+    }}
+  }}
+  return rows;
+}};
+
+const matchesValidationRow_{suffix} = (validation, values) =>
+  compatibleRows_{suffix}(validation, values).some(row =>
+    validation.columns.every((column, index) => row[index] === '*' || values[column] === row[index])
+  );
+
+const optionInfo_{suffix} = (validation, values, source) => {{
+  const sourceIndex = validation.columns.indexOf(source);
+  const rows = compatibleRows_{suffix}(validation, values, source);
+  const concrete = Array.from(new Set(rows.map(row => row[sourceIndex]).filter(value => value !== '*'))).sort();
+  const options = rows.some(row => row[sourceIndex] === '*') ? [...concrete, FREE_ENTRY_OPTION_{suffix}] : concrete;
+  return {{ options }};
+}};
+
+const firstValidationForSource_{suffix} = (source) =>
+  RELATED_VALIDATIONS_{concept['name'].upper()}.find(validation => validation.columns.includes(source));
+
+const validationErrorText_{suffix} = (error) => {{
+  if (!error) return '';
+  if (typeof error === 'string') return error;
+  if (typeof error.message === 'string') return error.message;
+  if (error.message) return validationErrorText_{suffix}(error.message);
+  return '';
+}};
+
+const {validate_name} = (values) => {{
+  const errors = {{}};
+  for (const field of REQUIRED_FIELDS_{concept['name'].upper()}) {{
+    if (values[field] === undefined || values[field] === null || values[field] === '') {{
+      errors[field] = 'Required';
+    }}
+  }}
+  for (const validation of RELATED_VALIDATIONS_{concept['name'].upper()}) {{
+    const complete = validation.columns.every(column => values[column] !== undefined && values[column] !== null && values[column] !== '');
+    if (!complete) continue;
+    if (!matchesValidationRow_{suffix}(validation, values)) {{
+      for (const column of validation.columns) errors[column] = 'Invalid combination';
+    }}
+  }}
+  return errors;
+}};
+
+const {comp_name} = ({{ source }}) => {{
+  const {{ watch, setValue, formState }} = useFormContext();
+  const values = watch();
+  const validation = firstValidationForSource_{suffix}(source);
+  const currentValue = values[source] ?? '';
+  const {{ options }} = validation ? optionInfo_{suffix}(validation, values, source) : {{ options: [FREE_ENTRY_OPTION_{suffix}] }};
+  const fieldError = formState.errors?.[source];
+
+  const setFieldValue = (value) => {{
+    const nextValue = value === FREE_ENTRY_OPTION_{suffix} ? '' : value;
+    setValue(source, nextValue, {{ shouldDirty: true, shouldValidate: true }});
+  }};
+
+  const clearValidationGroup = () => {{
+    if (!validation) return;
+    for (const column of validation.columns) {{
+      setValue(column, '', {{ shouldDirty: true, shouldValidate: true }});
+    }}
+  }};
+
+  React.useEffect(() => {{
+    if (!validation) return;
+    for (const column of validation.columns) {{
+      if (values[column]) continue;
+      const {{ options: columnOptions }} = optionInfo_{suffix}(validation, values, column);
+      const concrete = columnOptions.filter(option => option !== FREE_ENTRY_OPTION_{suffix});
+      if (columnOptions.length === 1 && concrete.length === 1) {{
+        setValue(column, concrete[0], {{ shouldDirty: true, shouldValidate: true }});
+      }}
+    }}
+  }}, [validation, values, setValue]);
+
+  return (
+    <MuiValidationAutocomplete
+      freeSolo
+      options={{options}}
+      value={{currentValue}}
+      onChange={{(_event, value, reason) => {{
+        if (reason === 'clear') {{
+          clearValidationGroup();
+          return;
+        }}
+        setFieldValue(value ?? '');
+      }}}}
+      onInputChange={{(_event, value, reason) => {{
+        if (reason === 'clear') {{
+          clearValidationGroup();
+          return;
+        }}
+        if (reason === 'reset') return;
+        setFieldValue(value ?? '');
+      }}}}
+      renderInput={{params => (
+        <MuiValidationTextField
+          {{...params}}
+          label={{source.replaceAll('_', ' ')}}
+          margin="none"
+          size="small"
+          error={{!!fieldError}}
+          helperText={{validationErrorText_{suffix}(fieldError)}}
+        />
+      )}}
+    />
+  );
+}};
+"""
+
+
+def _collect_validation_concepts(ctx: Context, concept: Dict[str, Any]) -> List[Dict[str, Any]]:
+    result = []
+    seen = set()
+
+    def add(candidate: Dict[str, Any]):
+        name = candidate["name"]
+        if name in seen:
+            return
+        seen.add(name)
+        if _has_validations(ctx, candidate):
+            result.append(candidate)
+
+    add(concept)
+    for child in collect_all_descendants(concept["name"], ctx.concepts):
+        add(child["concept"])
+    return result
+
+
 def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     resource_name = concept["name"]
     title_desc_prop = f' description="{concept["description"].replace(chr(34), "&quot;")}"' if concept["description"] else ''
@@ -315,6 +489,7 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     many_to_many_links = find_many_to_many_links(resource_name, ctx.concepts, ctx.concept_map)
     has_documents = concept["documents"]["enabled"]
     concept_workflow = ctx.business_schema.get("_concept_workflow", {}).get(resource_name)
+    validation_concepts = _collect_validation_concepts(ctx, concept)
 
     field_components = generate_field_components(
         concept,
@@ -343,6 +518,11 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
             if item not in mui_imports:
                 mui_imports.append(item)
         mui_imports.extend(["Select as MuiSelect", "MenuItem as MuiMenuItem", "TextField as MuiTextField"])
+    if validation_concepts:
+        mui_imports.extend([
+            "Autocomplete as MuiValidationAutocomplete",
+            "TextField as MuiValidationTextField",
+        ])
     mui_imports_str = ", ".join(mui_imports)
 
     child_dialog_components_list = []
@@ -359,6 +539,10 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     if has_prefill:
         prefill_parts = [_generate_prefill_component(concept, g) for g in concept["_prefill_groups"]]
         prefill_components = "\n".join(prefill_parts)
+    validation_components = "\n".join(
+        _generate_related_validation_component(ctx, validation_concept)
+        for validation_concept in validation_concepts
+    )
 
     doc_tab = ""
     if has_documents:
@@ -378,8 +562,9 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     if workflow_import:
         component_imports.append(workflow_import)
 
-    if has_prefill:
+    if has_prefill or validation_concepts:
         component_imports.append("import { useFormContext } from 'react-hook-form';")
+    if has_prefill:
         component_imports.append("import { useQueryClient } from '@tanstack/react-query';")
     if has_documents:
         component_imports.append(f"import {{ DocumentTab }} from '../../components/document_tab';")
@@ -404,11 +589,12 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
       </FormTab>"""
 
     edit_inner_component = ""
+    validate_prop = f" validate={{validate_{resource_name}_related_fields}}" if _has_validations(ctx, concept) else ""
     if concept_workflow:
         wf_json = json.dumps(concept_workflow)
         inner_comp_name = f"{resource_name.upper()}_EDIT_FORM"
         if owned_children or many_to_many_links or has_documents:
-            form_content = f"""<TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} />}}>
+            form_content = f"""<TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} />}}{validate_prop}>
       <FormTab label="Summary">
         <WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" canEdit={{canEdit}} />
         <Box sx={{{{ pointerEvents: canEdit ? 'auto' : 'none', opacity: canEdit ? 1 : 0.6 }}}}>
@@ -422,7 +608,7 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
       {relations_tab}
     </TabbedForm>"""
         else:
-            form_content = f"""<SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} />}}>
+            form_content = f"""<SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} />}}{validate_prop}>
       <WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" canEdit={{canEdit}} />
       <Box sx={{{{ pointerEvents: canEdit ? 'auto' : 'none', opacity: canEdit ? 1 : 0.6 }}}}>
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
@@ -445,7 +631,7 @@ const {inner_comp_name} = () => {{
   </Edit>"""
     elif owned_children or many_to_many_links or has_documents:
         edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}} {{...props}}>
-    <TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" />}}>
+    <TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" />}}{validate_prop}>
       <FormTab label="Summary">
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
           {field_components["edit_fields"]}
@@ -458,7 +644,7 @@ const {inner_comp_name} = () => {{
   </Edit>"""
     else:
         edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}} {{...props}}>
-    <SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}" />}}>
+    <SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}" />}}{validate_prop}>
       <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
         {field_components["edit_fields"]}
       </Grid>
@@ -473,6 +659,7 @@ import {{ {mui_imports_str} }} from '@mui/material';
 
 {child_dialog_components}
 {prefill_components}
+{validation_components}
 {edit_inner_component}
 
 const {resource_name}_filters = [
@@ -494,7 +681,7 @@ export const {resource_name.upper()}_CREATE = (props) => {{
   const {{ permissions }} = usePermissions();
   return (
     <Create {{...props}}>
-      <SimpleForm>
+      <SimpleForm{validate_prop}>
         {create_workflow_ui}
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>
           {field_components["create_fields"]}

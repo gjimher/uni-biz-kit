@@ -274,6 +274,11 @@ def generate_field_components(
 
     # Track which prefill group headers have been inserted
     added_prefill_headers = set()
+    validation_fields = {
+        field["name"]
+        for field in concept["fields"]
+        if field.get("_validation_csv_filename")
+    }
 
     def update_grid(current_pos, width, fields_list):
         if width == 6:
@@ -384,7 +389,7 @@ def generate_field_components(
 
         grid_props = f"xs={{12}} sm={{{width_units}}}"
 
-        validation = ' validate={[required()]}' if is_required else ''
+        validation = ' validate={[required()]}' if is_required and visibility != "read_only" else ''
         full_width = ' fullWidth'
         margin = ' margin="none" size="small"'
 
@@ -406,7 +411,11 @@ def generate_field_components(
 
         input_html = ""
 
-        if field["type"] == "relation_to_one":
+        if field_name in validation_fields and field["type"] == "string":
+            input_html = f'          <RELATED_VALIDATION_INPUT_{concept["name"].upper()} source="{field_name}" />'
+            filter_fields.append((field_name, f'  <{comp_type} source="{field_name}" />'))
+
+        elif field["type"] == "relation_to_one":
             target = field["target"]
 
             if concept["_type"] == "recursive_part_of" and field.get("subtype") == "part_of":

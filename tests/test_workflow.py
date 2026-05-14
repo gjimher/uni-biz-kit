@@ -69,8 +69,15 @@ def test_workflow_state_permissions():
             cur.execute(f"SELECT set_config('request.jwt.claims', '{{\"sub\": \"{user1_id}\", \"app_metadata\": {{\"roles\": [\"user\"]}}}}', true)")
             
             cur.execute(f"""
-                INSERT INTO "order" (order_date, shipping_address_street, state)
-                VALUES (CURRENT_TIMESTAMP, 'Initial Addr', 'initial')
+                INSERT INTO "order" (
+                    order_date,
+                    shipping_address_street,
+                    shipping_address_city,
+                    shipping_address_province,
+                    shipping_address_country,
+                    state
+                )
+                VALUES (CURRENT_TIMESTAMP, 'Initial Addr', 'Bilbao', 'Bizkaia', 'Spain', 'initial')
                 RETURNING id;
             """)
             order_id = cur.fetchone()[0]

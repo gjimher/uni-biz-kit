@@ -207,6 +207,9 @@ class TestAppBackend:
             body={
                 "order_date": "2026-05-09T12:00:00Z",
                 "shipping_address_street": "Shipping rule test street",
+                "shipping_address_city": "Bilbao",
+                "shipping_address_province": "Bizkaia",
+                "shipping_address_country": "Spain",
             },
         )
         assert status == 201, f"Order creation failed: {status} {created}"
@@ -338,6 +341,64 @@ class TestAppBackend:
 
     @pytest.mark.integration
     @pytest.mark.timeout(60)
+    def test_workflow_transition_rejects_invalid_prefill_validation(self):
+        """workflow-transition must reject invalid CSV-derived prefill field combinations."""
+        api_url, anon_key = _api_env()
+        user1_token = _login(api_url, anon_key, "user1@test.com")
+
+        user1_headers = {
+            "apikey": anon_key,
+            "Authorization": f"Bearer {user1_token}",
+            "Content-Type": "application/json",
+        }
+        status, created = _http_json(
+            "POST",
+            f"{api_url}/rest/v1/order",
+            headers={**user1_headers, "Prefer": "return=representation"},
+            body={
+                "order_date": "2026-05-10T12:00:00Z",
+                "shipping_address_street": "Invalid province test street",
+                "shipping_address_country": "Spain",
+                "shipping_address_province": "xxx",
+                "shipping_address_city": "Bilbao",
+            },
+        )
+        assert status == 201, f"Order creation failed: {status} {created}"
+        order_id = created[0]["id"]
+
+        returncode, transition_result = _call_edge_function_script(
+            "user1@test.com",
+            "workflow-transition",
+            {
+                "concept": "order",
+                "id": order_id,
+                "to_state": "ordered",
+                "comment": "Invalid prefill validation should block",
+            },
+        )
+        assert returncode == 0
+        assert transition_result["status"] == 200
+        assert transition_result["body"]["ok"] is False
+        assert transition_result["body"]["error"] == (
+            "Validation failed for address-shipping_address: "
+            "shipping address country, shipping address province, shipping address city"
+        )
+        assert transition_result["body"]["validation"] == "address-shipping_address"
+
+        encoded_filter = urllib.parse.urlencode({
+            "id": f"eq.{order_id}",
+            "select": "state",
+        })
+        status, rows = _http_json(
+            "GET",
+            f"{api_url}/rest/v1/order?{encoded_filter}",
+            headers={"apikey": anon_key, "Authorization": f"Bearer {user1_token}"},
+        )
+        assert status == 200
+        assert rows == [{"state": "initial"}]
+
+    @pytest.mark.integration
+    @pytest.mark.timeout(60)
     def test_copy_and_rollup_triggers(self):
         """Verify copy(product,price,on_change_in_state_initial) and rollup(sum,order_item,total_price) triggers.
 
@@ -366,8 +427,9 @@ class TestAppBackend:
 
                 # Insert order in 'ordered' state so the on_change_in_state_initial copy does not fire yet.
                 cur.execute(
-                    'INSERT INTO "order" ("customer", "order_date", "shipping_address_street", "state") '
-                    "VALUES (%s, NOW(), 'Test Street 1', 'ordered') RETURNING id;",
+                    'INSERT INTO "order" ("customer", "order_date", "shipping_address_street", '
+                    '"shipping_address_city", "shipping_address_province", "shipping_address_country", "state") '
+                    "VALUES (%s, NOW(), 'Test Street 1', 'Bilbao', 'Bizkaia', 'Spain', 'ordered') RETURNING id;",
                     (customer_id,),
                 )
                 order_id = cur.fetchone()[0]
@@ -432,8 +494,9 @@ class TestAppBackend:
 
                 def make_order(state):
                     cur.execute(
-                        'INSERT INTO "order" ("customer","order_date","shipping_address_street","state") '
-                        "VALUES (%s,NOW(),'Test',  %s) RETURNING id;",
+                        'INSERT INTO "order" ("customer","order_date","shipping_address_street",'
+                        '"shipping_address_city","shipping_address_province","shipping_address_country","state") '
+                        "VALUES (%s,NOW(),'Test','Bilbao','Bizkaia','Spain',%s) RETURNING id;",
                         (customer_id, state),
                     )
                     return cur.fetchone()[0]
@@ -541,8 +604,9 @@ class TestAppBackend:
 
                 # INSERT with an explicit customer value — trigger must override it.
                 cur.execute(
-                    'INSERT INTO "order" ("customer","order_date","shipping_address_street") '
-                    "VALUES (%s,NOW(),'Security Test') RETURNING id,customer;",
+                    'INSERT INTO "order" ("customer","order_date","shipping_address_street",'
+                    '"shipping_address_city","shipping_address_province","shipping_address_country") '
+                    "VALUES (%s,NOW(),'Security Test','Bilbao','Bizkaia','Spain') RETURNING id,customer;",
                     (customer_id,),
                 )
                 order_id, actual_customer = cur.fetchone()

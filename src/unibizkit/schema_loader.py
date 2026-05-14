@@ -6,6 +6,7 @@ Handles loading and validating business concept schemas against the JSON schema 
 
 import json
 import jsonschema
+import csv
 from jsonschema import Draft7Validator, validators
 from pathlib import Path
 from typing import Dict, Any, List
@@ -57,6 +58,7 @@ class SchemaLoader:
         self.deployment_config = None
         self.seed_data_config = None
         self.rules_config = None
+        self.validations_config = {"validations": []}
         self.validation_schema = self._load_validation_schema("concepts_schema.json")
         self.presentation_validation_schema = self._load_validation_schema("presentation_schema.json")
         self.security_validation_schema = self._load_validation_schema("security_schema.json")
@@ -161,6 +163,7 @@ class SchemaLoader:
 
             self._validate_reserved_field_names(business_schema)
             self._validate_seed_data_against_business_schema(business_schema)
+            self.load_validations(Path(path).parent, business_schema)
             
             logger.info(f"Successfully loaded and validated schema: {path}")
             self.business_schema = business_schema
@@ -270,6 +273,70 @@ class SchemaLoader:
 
         self.rules_config = rules_config
         logger.info(f"Successfully loaded and validated rules: {rules_path}")
+
+    def load_validations(self, model_dir: Path, business_schema: Dict[str, Any]):
+        """
+        Load CSV validations from validations/<concept>[-name].csv.
+        """
+        validations_dir = model_dir / "validations"
+        if not validations_dir.exists():
+            self.validations_config = {"validations": []}
+            return
+
+        concept_map = {concept["name"]: concept for concept in business_schema["concepts"]}
+        validations = []
+        for csv_path in sorted(validations_dir.glob("*.csv")):
+            concept_name = csv_path.stem.split("-", 1)[0]
+            if concept_name not in concept_map:
+                raise SchemaValidationError(
+                    f"Validation file '{csv_path.name}' references unknown concept '{concept_name}'"
+                )
+            concept = concept_map[concept_name]
+            field_map = {field["name"]: field for field in concept["fields"]}
+
+            with open(csv_path, "r", encoding="utf-8-sig", newline="") as f:
+                reader = csv.reader(f)
+                try:
+                    columns = [col.strip() for col in next(reader)]
+                except StopIteration:
+                    raise SchemaValidationError(f"Validation file '{csv_path.name}' is empty")
+
+                if not columns or any(not col for col in columns):
+                    raise SchemaValidationError(f"Validation file '{csv_path.name}' has an empty column name")
+                if len(set(columns)) != len(columns):
+                    raise SchemaValidationError(f"Validation file '{csv_path.name}' has duplicate columns")
+
+                for column in columns:
+                    field = field_map.get(column)
+                    if not field:
+                        raise SchemaValidationError(
+                            f"Validation file '{csv_path.name}' references unknown field '{concept_name}.{column}'"
+                        )
+                    if field["type"] != "string":
+                        raise SchemaValidationError(
+                            f"Validation file '{csv_path.name}' field '{concept_name}.{column}' must be a string field"
+                        )
+
+                rows = []
+                for line_number, row in enumerate(reader, start=2):
+                    if not row or all(not cell.strip() for cell in row):
+                        continue
+                    if len(row) != len(columns):
+                        raise SchemaValidationError(
+                            f"Validation file '{csv_path.name}' line {line_number} has "
+                            f"{len(row)} values but expected {len(columns)}"
+                        )
+                    rows.append([cell.strip() for cell in row])
+
+            validations.append({
+                "name": csv_path.stem,
+                "concept": concept_name,
+                "columns": columns,
+                "rows": rows,
+            })
+
+        self.validations_config = {"validations": validations}
+        logger.info(f"Successfully loaded {len(validations)} CSV validations from: {validations_dir}")
     
     def _apply_special_defaults(self, data: Dict[str, Any]):
         """

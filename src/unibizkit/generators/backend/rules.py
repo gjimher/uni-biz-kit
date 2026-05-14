@@ -417,7 +417,7 @@ BEGIN
         url := supabase_url || {_sql_literal(function_url_path)},
         headers := request_headers,
         body := jsonb_build_object('id', NEW."id"),
-        timeout_milliseconds := 1000
+        timeout_milliseconds := 10000
     );
 
     RETURN NEW;
@@ -434,6 +434,7 @@ EXECUTE FUNCTION {_quote_ident(function_name)}();
 
 def _generate_workflow_transition_ts(ctx: Context, rules: List[FeelRule]) -> str:
     workflows_json = json.dumps(ctx.business_schema.get("_concept_workflow", {}), indent=2)
+    validations_json = json.dumps(ctx.business_schema.get("_validations", []), indent=2)
     rules_json = json.dumps([
         {
             "name": rule.name,
@@ -447,6 +448,7 @@ def _generate_workflow_transition_ts(ctx: Context, rules: List[FeelRule]) -> str
     return f"""import {{ createClient }} from "@supabase/supabase-js";
 
 const WORKFLOWS = {workflows_json};
+const VALIDATIONS = {validations_json};
 const RULES = {rules_json};
 
 Deno.serve(async (req) => {{
@@ -496,6 +498,10 @@ Deno.serve(async (req) => {{
     return jsonResponse({{ error: "Expected exactly one accessible record", count: rows?.length ?? 0 }}, 403);
   }}
   const record = rows[0];
+  const validationError = validateRecord(concept, record);
+  if (validationError) {{
+    return jsonResponse({{ ok: false, ...validationError }});
+  }}
   const currentStateName = record.state ?? WORKFLOWS[concept].states[0]?.name;
   const currentState = WORKFLOWS[concept].states.find((state: {{ name: string }}) => state.name === currentStateName);
   const userRoles = Array.isArray(authData.user.app_metadata?.roles) ? authData.user.app_metadata.roles : [];
@@ -572,6 +578,47 @@ async function callRule(supabaseUrl: string, apiKey: string, authorization: stri
     body = text;
   }}
   return {{ status: response.status, body }};
+}}
+
+function validateRecord(concept: string, record: Record<string, any>) {{
+  const validations = VALIDATIONS.filter((validation: any) => validation.concept === concept);
+  for (const validation of validations) {{
+    const complete = validation.columns.every((column: string) =>
+      record[column] !== undefined && record[column] !== null && record[column] !== ""
+    );
+    if (!complete) {{
+      continue;
+    }}
+    const matches = compatibleRows(validation, record).some((row: string[]) =>
+      validation.columns.every((column: string, index: number) =>
+        row[index] === "*" || record[column] === row[index]
+      )
+    );
+    if (!matches) {{
+      const labels = validation.columns.map((column: string) => column.replaceAll("_", " ")).join(", ");
+      return {{
+        error: `Validation failed for ${{validation.name}}: ${{labels}}`,
+        validation: validation.name,
+        concept,
+        fields: validation.columns,
+      }};
+    }}
+  }}
+  return null;
+}}
+
+function compatibleRows(validation: any, values: Record<string, any>) {{
+  let rows = validation.rows;
+  validation.columns.forEach((column: string, index: number) => {{
+    const value = values[column];
+    if (value === undefined || value === null || value === "") return;
+    if (rows.some((row: string[]) => row[index] === value)) {{
+      rows = rows.filter((row: string[]) => row[index] === value);
+    }} else {{
+      rows = rows.filter((row: string[]) => row[index] === "*");
+    }}
+  }});
+  return rows;
 }}
 
 function requiredEnv(name: string): string {{

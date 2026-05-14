@@ -409,8 +409,15 @@ def test_owner_write_rls():
             
             # Create an order as user1
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address_street)
-                VALUES (CURRENT_TIMESTAMP, 'initial', 'User 1 Address')
+                INSERT INTO "order" (
+                    order_date,
+                    state,
+                    shipping_address_street,
+                    shipping_address_city,
+                    shipping_address_province,
+                    shipping_address_country
+                )
+                VALUES (CURRENT_TIMESTAMP, 'initial', 'User 1 Address', 'Bilbao', 'Bizkaia', 'Spain')
                 RETURNING id;
             """)
             order_id = cur.fetchone()[0]
@@ -461,8 +468,15 @@ def test_security_owner_id_is_not_updatable():
         cur.execute("SET ROLE authenticated;")
         cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
         cur.execute(f"""
-            INSERT INTO "order" (order_date, state, shipping_address_street)
-            VALUES (CURRENT_TIMESTAMP, 'initial', 'Test Address')
+            INSERT INTO "order" (
+                order_date,
+                state,
+                shipping_address_street,
+                shipping_address_city,
+                shipping_address_province,
+                shipping_address_country
+            )
+            VALUES (CURRENT_TIMESTAMP, 'initial', 'Test Address', 'Bilbao', 'Bizkaia', 'Spain')
             RETURNING id;
         """)
         order_id = cur.fetchone()[0]
@@ -566,9 +580,17 @@ def test_timestamps_cannot_be_forged_on_insert():
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user_claims}', true);")
 
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address_street,
-                    "_created_at", "_updated_at")
-                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test',
+                INSERT INTO "order" (
+                    order_date,
+                    state,
+                    shipping_address_street,
+                    shipping_address_city,
+                    shipping_address_province,
+                    shipping_address_country,
+                    "_created_at",
+                    "_updated_at"
+                )
+                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test', 'Bilbao', 'Bizkaia', 'Spain',
                     '{fake_ts}', '{fake_ts}')
                 RETURNING "_created_at", "_updated_at";
             """)
@@ -818,8 +840,15 @@ def test_order_document_owner_isolation():
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
 
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address_street)
-                VALUES (CURRENT_TIMESTAMP, 'initial', 'User1 Address')
+                INSERT INTO "order" (
+                    order_date,
+                    state,
+                    shipping_address_street,
+                    shipping_address_city,
+                    shipping_address_province,
+                    shipping_address_country
+                )
+                VALUES (CURRENT_TIMESTAMP, 'initial', 'User1 Address', 'Bilbao', 'Bizkaia', 'Spain')
                 RETURNING id;
             """)
             order_id = cur.fetchone()[0]
@@ -956,8 +985,15 @@ def test_order_document_upload_authorization():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address_street)
-                VALUES (CURRENT_TIMESTAMP, 'initial', 'User1 Address')
+                INSERT INTO "order" (
+                    order_date,
+                    state,
+                    shipping_address_street,
+                    shipping_address_city,
+                    shipping_address_province,
+                    shipping_address_country
+                )
+                VALUES (CURRENT_TIMESTAMP, 'initial', 'User1 Address', 'Bilbao', 'Bizkaia', 'Spain')
                 RETURNING id;
             """)
             order_id = cur.fetchone()[0]
@@ -1032,8 +1068,15 @@ def test_order_item_create_restricted_by_order_state():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address_street)
-                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test Address')
+                INSERT INTO "order" (
+                    order_date,
+                    state,
+                    shipping_address_street,
+                    shipping_address_city,
+                    shipping_address_province,
+                    shipping_address_country
+                )
+                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test Address', 'Bilbao', 'Bizkaia', 'Spain')
                 RETURNING id;
             """)
             order_id = cur.fetchone()[0]
@@ -1113,8 +1156,15 @@ def test_order_document_create_restricted_by_order_state():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address_street)
-                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test Address')
+                INSERT INTO "order" (
+                    order_date,
+                    state,
+                    shipping_address_street,
+                    shipping_address_city,
+                    shipping_address_province,
+                    shipping_address_country
+                )
+                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test Address', 'Bilbao', 'Bizkaia', 'Spain')
                 RETURNING id;
             """)
             order_id = cur.fetchone()[0]
@@ -1197,8 +1247,15 @@ def test_order_workflow_state_transitions():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address_street)
-                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test')
+                INSERT INTO "order" (
+                    order_date,
+                    state,
+                    shipping_address_street,
+                    shipping_address_city,
+                    shipping_address_province,
+                    shipping_address_country
+                )
+                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test', 'Bilbao', 'Bizkaia', 'Spain')
                 RETURNING id;
             """)
             order_id = cur.fetchone()[0]
@@ -1289,8 +1346,15 @@ def test_order_item_cross_user_isolation():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address_street)
-                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test')
+                INSERT INTO "order" (
+                    order_date,
+                    state,
+                    shipping_address_street,
+                    shipping_address_city,
+                    shipping_address_province,
+                    shipping_address_country
+                )
+                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test', 'Bilbao', 'Bizkaia', 'Spain')
                 RETURNING id;
             """)
             order_id = cur.fetchone()[0]
@@ -1379,8 +1443,15 @@ def test_order_item_update_delete_restricted_by_order_state():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address_street)
-                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test')
+                INSERT INTO "order" (
+                    order_date,
+                    state,
+                    shipping_address_street,
+                    shipping_address_city,
+                    shipping_address_province,
+                    shipping_address_country
+                )
+                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test', 'Bilbao', 'Bizkaia', 'Spain')
                 RETURNING id;
             """)
             order_id = cur.fetchone()[0]
@@ -1462,8 +1533,15 @@ def test_order_document_update_delete_restricted_by_order_state():
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user1_claims}', false);")
             cur.execute(f"""
-                INSERT INTO "order" (order_date, state, shipping_address_street)
-                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test')
+                INSERT INTO "order" (
+                    order_date,
+                    state,
+                    shipping_address_street,
+                    shipping_address_city,
+                    shipping_address_province,
+                    shipping_address_country
+                )
+                VALUES (CURRENT_TIMESTAMP, 'initial', 'Test', 'Bilbao', 'Bizkaia', 'Spain')
                 RETURNING id;
             """)
             order_id = cur.fetchone()[0]
@@ -1622,7 +1700,10 @@ def test_order_lifecycle_via_api():
             f"{supabase_url}/rest/v1/order",
             headers={**api_headers(user1_token), "Prefer": "return=representation"},
             json={"order_date": "2024-01-01", "state": "initial",
-                  "shipping_address_street": "Lifecycle Test Address"},
+                  "shipping_address_street": "Lifecycle Test Address",
+                  "shipping_address_city": "Bilbao",
+                  "shipping_address_province": "Bizkaia",
+                  "shipping_address_country": "Spain"},
             timeout=10,
         )
         assert r.status_code in (200, 201), f"user1 failed to create order: {r.status_code} {r.text}"
