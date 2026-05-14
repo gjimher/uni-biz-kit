@@ -17,7 +17,13 @@ def generate(ctx: Context) -> str:
     smtp_user = smtp.get('user') or 'mock'
     smtp_pass = smtp.get('password') or 'mock'
 
-    base_url = f'http://localhost:{dev_ports.FRONTEND}'
+    base_uri = ctx.deployment_config.get('base_uri', '/')
+    # base_uri always ends with / (normalized by SchemaProcessor)
+    # site_url keeps the trailing slash so Supabase redirect_to matches Vite's base exactly
+    base_url = f'http://localhost:{dev_ports.FRONTEND}{base_uri}'
+    # external_url routes email links through the Vite dev proxy
+    base_prefix = base_uri.rstrip('/')
+    api_external_url = f'http://localhost:{dev_ports.FRONTEND}{base_prefix}/api'
 
     registration = ctx.security_config['registration']
     allow_registration = registration['allow']
@@ -33,7 +39,7 @@ project_id = "{project_id}"
 
 [api]
 port = {dev_ports.SUPABASE_API}
-external_url = "http://localhost:{dev_ports.SUPABASE_API}"
+external_url = "{api_external_url}"
 
 [db]
 port = {dev_ports.SUPABASE_DB}
@@ -60,7 +66,7 @@ inspector_port = {dev_ports.EDGE_INSPECTOR}
 
 [auth]
 site_url = "{base_url}"
-additional_redirect_urls = ["{base_url}", "{base_url}/**"]
+additional_redirect_urls = ["{base_url}", "{base_url.rstrip('/')}/**"]
 enable_signup = {enable_signup}
 
 [auth.rate_limit]

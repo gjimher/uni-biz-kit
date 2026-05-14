@@ -1,0 +1,4 @@
+{
+  "$schema": "../../schemas/deployment_schema.json",
+  "base_uri": "/test"
+}

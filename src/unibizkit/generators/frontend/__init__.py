@@ -62,6 +62,7 @@ class ReactAdminGenerator:
             presentation_config=schema_loader.presentation_config,
             system_config=getattr(schema_loader, 'system_config', None) or {},
             security_config=schema_loader.security_config,
+            deployment_config=getattr(schema_loader, 'deployment_config', None) or {},
             business_schema=schema_loader.business_schema,
             output_dir=self.output_dir,
         )
@@ -70,13 +71,19 @@ class ReactAdminGenerator:
 
         self._create_directory_structure(ctx)
 
+        base_uri = ctx.deployment_config.get("base_uri", "/")
+
         # Root files
         _write(ctx.output_dir / "package.json", package_json.generate())
-        _write(ctx.output_dir / "vite.config.js", vite_config.generate())
+        _write(ctx.output_dir / "vite.config.js", vite_config.generate(base_uri))
         _write(ctx.output_dir / ".eslintrc.json", eslintrc.generate())
         _write(ctx.output_dir / "index.html", index_html.generate(ctx))
+        base_prefix = base_uri.rstrip("/")
+        api_url = f"http://localhost:{dev_ports.FRONTEND}{base_prefix}/api"
         _upsert_env(ctx.output_dir / ".env.development", {
             "VITE_BASE_URL": f"http://localhost:{dev_ports.FRONTEND}",
+            "VITE_BASE_URI": base_uri,
+            "VITE_API_URL": api_url,
         })
 
         # src/

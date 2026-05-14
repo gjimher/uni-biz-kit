@@ -10,6 +10,7 @@ class Context:
     security_config: Dict[str, Any]
     business_schema: Dict[str, Any]
     system_config: Dict[str, Any]
+    deployment_config: Dict[str, Any]
     seed_data_config: Dict[str, Any]
     rules_config: Dict[str, Any]
     model_dir: Path = field(default_factory=lambda: Path("."))

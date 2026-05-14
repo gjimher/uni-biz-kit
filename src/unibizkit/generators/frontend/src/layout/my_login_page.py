@@ -157,12 +157,13 @@ const SsoButton = ({ onStart, loading }) => {
 
     return f"""import * as React from 'react';
 import {{ useState }} from 'react';
-import {{ useNotify }} from 'react-admin';
+import {{ useNotify, Notification }} from 'react-admin';
 import {{ LoginPage, LoginForm }} from 'ra-supabase';
 import {{ supabaseClient }} from '../supabaseClient';
 import {{ Box, Tab, Tabs, Button, TextField, CircularProgress, Alert{divider_import} }} from '@mui/material';
 
-const BASE_URL = import.meta.env.VITE_BASE_URL || window.location.origin;
+const BASE_URL = import.meta.env.VITE_BASE_URL;
+if (!BASE_URL) throw new Error('VITE_BASE_URL is required');
 const SSO_REDIRECT_PARAM = 'sso_redirect';
 const POST_LOGIN_REDIRECT_KEY = 'unibizkit_post_login_redirect';
 
@@ -319,6 +320,7 @@ const LoginWithTabs = (props) => {{
 export const MyLoginPage = props => (
     <LoginPage {{...props}}>
         <LoginWithTabs />
+        <Notification />
     </LoginPage>
 );
 """

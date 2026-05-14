@@ -32,6 +32,23 @@ def _load_env():
     return api_url, anon_key
 
 
+def _normalize_confirmation_url(url: str, api_url: str) -> str:
+    """Rewrite proxy-based confirmation URLs to direct Supabase URLs.
+
+    Email links may point to the Vite dev proxy (e.g. http://localhost:3000/test/api/...)
+    instead of Supabase directly. Tests must not depend on the proxy being alive, so we
+    strip the frontend base and route directly to Supabase.
+    """
+    frontend_base_url = os.getenv("VITE_BASE_URL", "")
+    base_uri = os.getenv("VITE_BASE_URI", "/")
+    if not frontend_base_url:
+        return url
+    proxy_prefix = frontend_base_url + base_uri.rstrip("/") + "/api"
+    if url.startswith(proxy_prefix + "/"):
+        return url.replace(proxy_prefix, api_url, 1)
+    return url
+
+
 def _supabase_signup(api_url: str, anon_key: str, email: str, password: str) -> dict:
     """Call Supabase signUp endpoint and return the response body."""
     url = f"{api_url}/auth/v1/signup"
@@ -340,8 +357,12 @@ def test_register_user_and_email_flow(smtp_server):
     print(f"Confirmation URL: {confirmation_url}")
 
     # -- Step 4: Follow confirmation link (GET request simulates clicking)
+    # Normalize proxy URLs to direct Supabase so the test doesn't require Vite running.
+    direct_url = _normalize_confirmation_url(confirmation_url, api_url)
+    if direct_url != confirmation_url:
+        print(f"Normalized to direct Supabase URL: {direct_url}")
     try:
-        conf_req = urllib.request.Request(confirmation_url, method="GET")
+        conf_req = urllib.request.Request(direct_url, method="GET")
         with urllib.request.urlopen(conf_req) as resp:
             print(f"Confirmation response: {resp.status}")
     except urllib.error.HTTPError as e:

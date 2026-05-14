@@ -215,6 +215,7 @@ def test_profile_dev_seed_uses_pending_email_records():
         security_config=processor.security_extended,
         business_schema=processed,
         system_config={},
+        deployment_config={"base_uri": "/"},
         seed_data_config={"include_test_data": True, "records": {}},
         rules_config={"rules": []},
     )

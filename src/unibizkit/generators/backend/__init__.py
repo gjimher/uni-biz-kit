@@ -16,6 +16,7 @@ class SupabaseGenerator:
             security_config=schema_loader.security_config,
             business_schema=schema_loader.business_schema,
             system_config=getattr(schema_loader, 'system_config', None) or {},
+            deployment_config=getattr(schema_loader, 'deployment_config', None) or {},
             seed_data_config=getattr(schema_loader, 'seed_data_config', None) or {"include_test_data": True, "records": {}},
             rules_config=getattr(schema_loader, 'rules_config', None) or {"rules": []},
             model_dir=Path(schema_loader.schema_path).parent,

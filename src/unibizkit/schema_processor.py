@@ -128,7 +128,7 @@ class SchemaProcessor:
                     result_names.append(target)
         return result_names
 
-    def __init__(self, schema: Dict[str, Any], security_config: Optional[Dict[str, Any]] = None, presentation_config: Optional[Dict[str, Any]] = None, workflow_config: Optional[Dict[str, Any]] = None, system_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, schema: Dict[str, Any], security_config: Optional[Dict[str, Any]] = None, presentation_config: Optional[Dict[str, Any]] = None, workflow_config: Optional[Dict[str, Any]] = None, system_config: Optional[Dict[str, Any]] = None, deployment_config: Optional[Dict[str, Any]] = None):
         """
         Initialize the Schema Processor.
 
@@ -138,6 +138,7 @@ class SchemaProcessor:
             presentation_config: The loaded presentation configuration.
             workflow_config: The loaded workflow configuration.
             system_config: The loaded system configuration (SMTP, base_url).
+            deployment_config: The loaded deployment configuration (base_uri).
         """
         self.raw_schema = schema
         self.security_config = security_config or {"authentication_required": False}
@@ -145,6 +146,7 @@ class SchemaProcessor:
         self.presentation_extended = copy.deepcopy(presentation_config or {})
         self.workflow_extended = copy.deepcopy(workflow_config or {"workflow_rules": []})
         self.system_extended = copy.deepcopy(system_config or {})
+        self.deployment_extended = copy.deepcopy(deployment_config or {})
         
         # We work on a deep copy to avoid mutating the original
         self.extended_schema = copy.deepcopy(schema)
@@ -265,7 +267,16 @@ class SchemaProcessor:
         for concept in self.concepts:
             self._process_relationships(concept)
 
+        # Enrich Deployment: normalize base_uri to always end with /
+        self._enrich_deployment()
+
         return self.extended_schema
+
+    def _enrich_deployment(self):
+        base_uri = self.deployment_extended.get("base_uri", "/")
+        if not base_uri.endswith("/"):
+            base_uri = base_uri + "/"
+        self.deployment_extended["base_uri"] = base_uri
 
     def _enrich_workflow(self):
         """

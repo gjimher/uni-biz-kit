@@ -54,6 +54,7 @@ class SchemaLoader:
         self.security_config = None
         self.workflow_config = None
         self.system_config = None
+        self.deployment_config = None
         self.seed_data_config = None
         self.rules_config = None
         self.validation_schema = self._load_validation_schema("concepts_schema.json")
@@ -61,6 +62,7 @@ class SchemaLoader:
         self.security_validation_schema = self._load_validation_schema("security_schema.json")
         self.workflow_validation_schema = self._load_validation_schema("workflow_schema.json")
         self.system_validation_schema = self._load_validation_schema("system_schema.json")
+        self.deployment_validation_schema = self._load_validation_schema("deployment_schema.json")
         self.seed_data_validation_schema = self._load_validation_schema("seed_data_schema.json")
         self.rules_validation_schema = self._load_validation_schema("rules_schema.json")
     
@@ -126,6 +128,14 @@ class SchemaLoader:
                 # Apply defaults from system schema
                 self.system_config = {}
                 DefaultValidatingDraft7Validator(self.system_validation_schema).validate(self.system_config)
+
+            # Try to load deployment.json (optional)
+            deployment_path = Path(path).parent / "deployment.json"
+            if deployment_path.exists():
+                self.load_deployment(str(deployment_path))
+            else:
+                self.deployment_config = {}
+                DefaultValidatingDraft7Validator(self.deployment_validation_schema).validate(self.deployment_config)
 
             # Try to load seed_data.json (optional)
             seed_data_path = Path(path).parent / "seed_data.json"
@@ -224,6 +234,18 @@ class SchemaLoader:
 
         self.system_config = system_config
         logger.info(f"Successfully loaded and validated system settings: {system_path}")
+
+    def load_deployment(self, deployment_path: str):
+        """
+        Load and validate the deployment settings.
+        """
+        with open(deployment_path, 'r', encoding='utf-8') as f:
+            deployment_config = json.load(f)
+
+        DefaultValidatingDraft7Validator(self.deployment_validation_schema).validate(deployment_config)
+
+        self.deployment_config = deployment_config
+        logger.info(f"Successfully loaded and validated deployment settings: {deployment_path}")
 
     def load_seed_data(self, seed_data_path: str):
         """

@@ -10,5 +10,6 @@ class Context:
     presentation_config: Dict[str, Any]
     system_config: Dict[str, Any]
     security_config: Dict[str, Any]
+    deployment_config: Dict[str, Any]
     business_schema: Dict[str, Any]
     output_dir: Path

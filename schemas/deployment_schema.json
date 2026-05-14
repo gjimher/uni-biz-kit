@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Deployment Schema",
+  "description": "Deployment configuration for the application",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path to the JSON schema"
+    },
+    "base_uri": {
+      "type": "string",
+      "description": "Base URI path for the application. Must start with '/'. Example: '/ej' serves the app at localhost:PORT/ej/...",
+      "pattern": "^/",
+      "default": "/"
+    }
+  },
+  "additionalProperties": false
+}

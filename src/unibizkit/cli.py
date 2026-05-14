@@ -376,6 +376,41 @@ Examples:
 
         return base_schema
 
+    def _generate_deployment_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
+        """
+        Dynamically generate the full extended deployment schema definition by merging
+        deployment_schema.json and deployment_extended_required_additions.json.
+        """
+        schemas_dir = Path(__file__).parent.parent.parent / "schemas"
+        base_schema_path = schemas_dir / "deployment_schema.json"
+        additions_path = schemas_dir / "deployment_extended_required_additions.json"
+
+        with open(base_schema_path, 'r', encoding='utf-8') as f:
+            base_schema = json.load(f)
+
+        if additions_path.exists():
+            with open(additions_path, 'r', encoding='utf-8') as f:
+                additions = json.load(f)
+
+            if "properties" in additions:
+                base_schema["properties"].update(additions["properties"])
+
+            if "required" in additions:
+                if "required" not in base_schema:
+                    base_schema["required"] = []
+                base_schema["required"].extend(additions["required"])
+                base_schema["required"] = list(set(base_schema["required"]))
+
+        base_schema["title"] = "Extended Deployment Schema"
+        base_schema["description"] = "Dynamically generated extended deployment schema."
+
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / "deployment_extended_schema.json"
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(base_schema, f, indent=2)
+
+        return base_schema
+
     def _handle_generate_command(self, args):
         """Handle the generate command."""
         
@@ -398,7 +433,8 @@ Examples:
             schema_loader.security_config,
             schema_loader.presentation_config,
             schema_loader.workflow_config,
-            schema_loader.system_config
+            schema_loader.system_config,
+            schema_loader.deployment_config,
         )
         extended_schema = processor.process()
 
@@ -495,11 +531,27 @@ Examples:
             json.dump(new_sys_config, f, indent=2)
         logger.info(f"System extended saved to: {sys_dump_path}")
 
+        # Save Deployment Extended
+        dep_dump_path = output_dir / "deployment_extended.json"
+        new_dep_config = {"$schema": "./deployment_extended_schema.json"}
+        dep_config_copy = processor.deployment_extended.copy()
+        if "$schema" in dep_config_copy:
+            del dep_config_copy["$schema"]
+        new_dep_config.update(dep_config_copy)
+
+        extended_deployment_schema_def = self._generate_deployment_extended_schema_def(output_dir)
+        self._validate_extended_schema(new_dep_config, extended_deployment_schema_def, "deployment")
+
+        with open(dep_dump_path, 'w', encoding='utf-8') as f:
+            json.dump(new_dep_config, f, indent=2)
+        logger.info(f"Deployment extended saved to: {dep_dump_path}")
+
         # Pass the EXTENDED schema to generators
         schema_loader.business_schema = extended_schema
         schema_loader.concepts = extended_schema["concepts"]
         schema_loader.security_config = processor.security_extended
         schema_loader.system_config = processor.system_extended
+        schema_loader.deployment_config = processor.deployment_extended
 
         seed_dump_path = output_dir / "seed_data_extended.json"
         with open(seed_dump_path, 'w', encoding='utf-8') as f:
@@ -598,7 +650,8 @@ Examples:
             schema_loader.security_config,
             schema_loader.presentation_config,
             schema_loader.workflow_config,
-            schema_loader.system_config
+            schema_loader.system_config,
+            schema_loader.deployment_config,
         )
         extended_schema = processor.process()
         
