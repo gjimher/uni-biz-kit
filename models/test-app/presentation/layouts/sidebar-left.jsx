@@ -30,7 +30,7 @@ export default function SidebarLeft({ frontmatter, children }) {
         flexShrink: 0,
       }}>
         <Link to="/" style={{ display: 'block', marginBottom: 20, textDecoration: 'none' }}>
-          <img src="/assets/logo.svg" alt={model.appName} style={{ width: 100 }} />
+          <img src="assets/logo.svg" alt={model.appName} style={{ width: 100 }} />
         </Link>
 
         {model.menu.map(group => (
