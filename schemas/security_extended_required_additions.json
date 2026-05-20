@@ -9,7 +9,7 @@
         "properties": {
           "_main": {
             "type": "object",
-            "description": "Concept-level access per role",
+            "description": "Concept-level access per role. Values: 'read' = SELECT only; 'write' = full INSERT/UPDATE/DELETE for all rows; 'owner_write' = INSERT/UPDATE/DELETE only on rows owned by the authenticated user.",
             "additionalProperties": {
               "type": "string",
               "enum": ["read", "write", "owner_write"]
@@ -17,7 +17,7 @@
           },
           "_fields": {
             "type": "object",
-            "description": "Field-level access overrides per role",
+            "description": "Field-level access overrides per role. Same access level values as _main. A field entry overrides the concept-level rule for that specific field.",
             "additionalProperties": {
               "type": "object",
               "additionalProperties": {

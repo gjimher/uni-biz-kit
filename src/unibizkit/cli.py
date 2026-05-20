@@ -185,10 +185,6 @@ Examples:
             "type": "object",
             "description": "Mapping of concept names to their workflow configurations"
         }
-        base_schema["properties"]["_validations"] = {
-            "type": "array",
-            "description": "CSV-driven cross-field validations"
-        }
 
         # 2. Merge Concept Required (Auto-generate)
         if "required" not in base_concept_items:
@@ -557,6 +553,7 @@ Examples:
         schema_loader.security_config = processor.security_extended
         schema_loader.system_config = processor.system_extended
         schema_loader.deployment_config = processor.deployment_extended
+        schema_loader.validations_config = {"validations": processor.all_validations_with_rows}
 
         seed_dump_path = output_dir / "seed_data_extended.json"
         with open(seed_dump_path, 'w', encoding='utf-8') as f:

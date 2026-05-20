@@ -434,7 +434,7 @@ EXECUTE FUNCTION {_quote_ident(function_name)}();
 
 def _generate_workflow_transition_ts(ctx: Context, rules: List[FeelRule]) -> str:
     workflows_json = json.dumps(ctx.business_schema.get("_concept_workflow", {}), indent=2)
-    validations_json = json.dumps(ctx.business_schema.get("_validations", []), indent=2)
+    validations_json = json.dumps(ctx.validations_config.get("validations", []), indent=2)
     rules_json = json.dumps([
         {
             "name": rule.name,

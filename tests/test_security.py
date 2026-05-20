@@ -218,6 +218,7 @@ def test_profile_dev_seed_uses_pending_email_records():
         deployment_config={"base_uri": "/"},
         seed_data_config={"include_test_data": True, "records": {}},
         rules_config={"rules": []},
+        validations_config={"validations": []},
     )
 
     sql = generate_seed_data_dev(ctx)

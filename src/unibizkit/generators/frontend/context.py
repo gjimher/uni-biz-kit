@@ -12,4 +12,5 @@ class Context:
     security_config: Dict[str, Any]
     deployment_config: Dict[str, Any]
     business_schema: Dict[str, Any]
+    validations_config: Dict[str, Any]
     output_dir: Path

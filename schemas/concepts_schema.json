@@ -184,8 +184,7 @@
                 "enum_values": {
                   "type": "array",
                   "description": "Allowed values for enum fields",
-                  "items": { "type": "string" },
-                  "default": []
+                  "items": { "type": "string" }
                 },
                 "calculated": {
                   "type": "string",

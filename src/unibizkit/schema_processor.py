@@ -286,7 +286,6 @@ class SchemaProcessor:
 
     def _enrich_validations(self):
         validations = self.validations_config.get("validations", [])
-        self.extended_schema["_validations"] = validations
         self._validations_by_concept = {}
         for validation in validations:
             self._validations_by_concept.setdefault(validation["concept"], []).append(validation)
@@ -302,8 +301,11 @@ class SchemaProcessor:
                             break
 
     def _add_validation(self, validation: Dict[str, Any]):
-        self.extended_schema["_validations"].append(validation)
         self._validations_by_concept.setdefault(validation["concept"], []).append(validation)
+
+    @property
+    def all_validations_with_rows(self) -> list:
+        return [v for vs in self._validations_by_concept.values() for v in vs]
 
     def _enrich_workflow(self):
         """
@@ -356,10 +358,9 @@ class SchemaProcessor:
                         "description": "Workflow state",
                         "required": True,
                         "unique": False,
-                        "enum_values": [],
                         "size": "s"
                     })
-                
+
                 # Check for state_info field, if not, add it
                 if not any(f["name"] == "state_info" for f in concept["fields"]):
                     concept["fields"].append({
@@ -368,7 +369,6 @@ class SchemaProcessor:
                         "description": "Workflow history (XML)",
                         "required": False,
                         "unique": False,
-                        "enum_values": [],
                         "size": "l"
                     })
 
@@ -572,7 +572,6 @@ class SchemaProcessor:
     def _enrich_profile_concepts(self):
         """Resolve roles[].profile_concept and inject generated profile link fields."""
         profile_mappings = []
-        used_concepts = {}
 
         for role in self.security_extended["roles"]:
             profile_concept = role.get("profile_concept")
@@ -586,14 +585,9 @@ class SchemaProcessor:
                     f"Role '{role_name}' references unknown profile_concept '{profile_concept}'"
                 )
 
-            previous_role = used_concepts.get(profile_concept)
-            if previous_role:
-                raise ValueError(
-                    f"Profile concept '{profile_concept}' is used by both roles "
-                    f"'{previous_role}' and '{role_name}'"
-                )
-            used_concepts[profile_concept] = role_name
-
+            if "_profile_for_roles" not in concept:
+                concept["_profile_for_roles"] = []
+            concept["_profile_for_roles"].append(role_name)
             self._inject_profile_fields(concept)
             self._validate_profile_autocreate_defaults(concept, role_name)
             profile_mappings.append({"role": role_name, "concept": profile_concept})
@@ -798,16 +792,16 @@ class SchemaProcessor:
              raise ValueError(f"Concept '{name}' can only have one 'part_of' relationship, found {len(part_of_fields)}.")
         
         part_of_field = part_of_fields[0] if part_of_fields else None
-        
+
         # 1. Determine Type (Archetype)
         c_type = self._determine_concept_type(concept)
-        
+
         # Add recursive check if needed
         if c_type == 'recursive_part_of' and part_of_field:
              if "checks" not in concept:
                  concept["checks"] = []
              concept["checks"].append(f'id != "{part_of_field["name"]}"')
-        
+
         # 2. Add part_of_order for part_of concepts
         if c_type in ['part_of', 'recursive_part_of']:
              # Add part_of_order field if not exists
@@ -823,16 +817,14 @@ class SchemaProcessor:
 
         # 3. Reconstruct dictionary to enforce order
         new_concept = {}
-        
+
         # Keys to keep at the very top
         top_keys = ['name', 'plural_name', 'description']
         for k in top_keys:
             if k in concept:
                 new_concept[k] = concept[k]
-        
-        # Insert _type and _part_of_field here
+
         new_concept["_type"] = c_type
-        new_concept["_part_of_field"] = part_of_field
 
         # documents defaults were already applied in process() before this call
 
@@ -994,6 +986,8 @@ class SchemaProcessor:
 
     def _determine_ui_component(self, field: Dict[str, Any]) -> str:
         """Map field type to React-Admin Input component."""
+        if field.get("_validation_csv_filename") and field["type"] == "string":
+            return 'RelatedValidationInput'
         mapping = {
             'string': 'TextInput',
             'integer': 'NumberInput',

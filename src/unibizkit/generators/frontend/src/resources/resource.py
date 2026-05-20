@@ -23,7 +23,7 @@ def _generate_document_tab(concept_name: str, docs: Dict[str, Any], has_workflow
 def _validations_for_concept(ctx: Context, concept: Dict[str, Any]) -> List[Dict[str, Any]]:
     concept_name = concept["name"]
     return [
-        validation for validation in ctx.business_schema.get("_validations", [])
+        validation for validation in ctx.validations_config.get("validations", [])
         if validation["concept"] == concept_name
     ]
 

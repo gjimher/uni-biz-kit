@@ -2,24 +2,35 @@
   "properties": {
     "concepts": {
       "items": {
-        "optional_properties": ["_prefill_groups"],
+        "optional_properties": ["_prefill_groups", "_profile_for_roles"],
         "properties": {
           "_type": {
             "type": "string",
-            "description": "Calculated archetype of the concept",
+            "description": "Calculated archetype of the concept. 'root' = standalone top-level concept; 'part_of' = child concept owned by a parent via a part_of relation_to_one; 'recursive_part_of' = concept that is part_of itself (tree structure).",
             "enum": ["root", "part_of", "recursive_part_of"]
           },
-          "_part_of_field": {
-            "type": ["object", "null"],
-            "description": "The field definition that creates the part_of relationship"
+          "_profile_for_roles": {
+            "type": "array",
+            "description": "Roles for which this concept acts as profile. Only present if the concept is a profile for at least one role. A profile concept stores the extended user data for users of those roles.",
+            "items": { "type": "string" }
           },
           "_be_presentation_mode": {
             "type": "string",
+            "description": "How the backend computes the presentation string for this concept. 'generated_column' = SQL GENERATED ALWAYS AS expression (only simple same-table fields); 'trigger' = PL/pgSQL trigger (complex fields involving joins); 'none' = no presentation string configured.",
             "enum": ["generated_column", "trigger", "none"]
           },
-          "_be_presentation_expr": { "type": "string" },
-          "_fe_owned_children": { "type": "array" },
-          "_meta_m2m_links": { "type": "array" },
+          "_be_presentation_expr": {
+            "type": "string",
+            "description": "The SQL expression used to populate id_presentation when _be_presentation_mode is 'generated_column'. Empty string otherwise."
+          },
+          "_fe_owned_children": {
+            "type": "array",
+            "description": "Child concepts that declare a part_of relation_to_one pointing to this concept. Used by the frontend to render nested tab panels. Each item has: child_concept, child_fk_field, child_plural."
+          },
+          "_meta_m2m_links": {
+            "type": "array",
+            "description": "Many-to-many relationship descriptors where this concept is either source or target. Used by both backend (join table DDL) and frontend (ReferenceManyField). Each item has: target_concept, join_table, my_fk, other_fk, field_name, is_source."
+          },
           "_prefill_groups": {
             "type": "array",
             "description": "Prefill group metadata for concepts that have prefill fields"
@@ -29,14 +40,30 @@
             "items": {
               "optional_properties": ["_prefill_group", "_prefill_source_field", "_prefill_is_pres_field", "_validation_csv_filename", "_validation_csv_column"],
               "properties": {
-                "_be_sql_type": { "type": "string" },
-                "_be_not_null": { "type": "boolean" },
+                "_be_sql_type": {
+                  "type": "string",
+                  "description": "PostgreSQL column type derived from the abstract field type. Examples: string/s→VARCHAR(255), string/m|l→TEXT, integer→INTEGER, decimal→DECIMAL(p,s), boolean→BOOLEAN, date→DATE, datetime→TIMESTAMP WITH TIME ZONE, enum→TEXT, relation_to_one→INTEGER, relation_to_many→'' (handled via join table)."
+                },
+                "_be_not_null": {
+                  "type": "boolean",
+                  "description": "Whether the column should have a NOT NULL constraint. Mirrors the field's 'required' property."
+                },
 
-                "_fe_component": { "type": "string" },
-                "_fe_list_component": { "type": "string" },
-                "_fe_grid_width": { "type": "integer" },
+                "_fe_component": {
+                  "type": "string",
+                  "description": "React-Admin Input component used in create/edit forms. Possible values: TextInput, NumberInput, BooleanInput, DateInput, SelectInput, ReferenceInput, ReferenceManyField, RelatedValidationInput (for string fields with CSV validation)."
+                },
+                "_fe_list_component": {
+                  "type": "string",
+                  "description": "React-Admin Field component used in list and show views. Possible values: TextField, NumberField, BooleanField, DateField, ReferenceField, ReferenceManyField."
+                },
+                "_fe_grid_width": {
+                  "type": "integer",
+                  "description": "MUI Grid column span for the field in forms. 6 for medium/large fields (size m or l), 3 for small fields (size s)."
+                },
                 "_fe_visibility": {
                     "type": "string",
+                    "description": "Controls how the field appears in the UI. 'editable' = shown in forms and lists, user can edit; 'read_only' = shown but not editable (e.g. calculated fields, id); 'internal' = hidden from UI entirely (e.g. state, part_of_order, _-prefixed system fields).",
                     "enum": ["editable", "read_only", "internal"]
                 },
                 "_prefill_group": {

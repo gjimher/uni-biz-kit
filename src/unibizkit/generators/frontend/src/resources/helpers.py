@@ -215,7 +215,8 @@ def get_optimized_react_admin_imports(
     if all_descendants:
         for child in all_descendants:
             for field in child["concept"]["fields"]:
-                needed_components.add(field["_fe_component"])
+                if field["_fe_component"] != "RelatedValidationInput":
+                    needed_components.add(field["_fe_component"])
                 needed_components.add(field["_fe_list_component"])
 
     if many_to_many_links:
@@ -226,7 +227,8 @@ def get_optimized_react_admin_imports(
         ])
 
     for field in concept["fields"]:
-        needed_components.add(field["_fe_component"])
+        if field["_fe_component"] != "RelatedValidationInput":
+            needed_components.add(field["_fe_component"])
         needed_components.add(field["_fe_list_component"])
 
         if field["type"] == "relation_to_one":
@@ -413,7 +415,7 @@ def generate_field_components(
 
         if field_name in validation_fields and field["type"] == "string":
             input_html = f'          <RELATED_VALIDATION_INPUT_{concept["name"].upper()} source="{field_name}" />'
-            filter_fields.append((field_name, f'  <{comp_type} source="{field_name}" />'))
+            filter_fields.append((field_name, f'  <TextInput source="{field_name}" />'))
 
         elif field["type"] == "relation_to_one":
             target = field["target"]
