@@ -51,11 +51,11 @@ class TestCLI:
         
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            with open(temp_path / "concepts.json", 'w') as f:
+            with open(temp_path / "concepts.jsonc", 'w') as f:
                 json.dump(valid_schema, f)
-            with open(temp_path / "presentation.json", 'w') as f:
+            with open(temp_path / "presentation.jsonc", 'w') as f:
                 json.dump({}, f)
-            with open(temp_path / "security.json", 'w') as f:
+            with open(temp_path / "security.jsonc", 'w') as f:
                 json.dump({"authentication_required": False}, f)
     
             with patch('sys.argv', ['uni-biz-kit', str(temp_path), '--task', 'validate']):
@@ -74,7 +74,7 @@ class TestCLI:
         
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            with open(temp_path / "concepts.json", 'w') as f:
+            with open(temp_path / "concepts.jsonc", 'w') as f:
                 json.dump(invalid_schema, f)
             
             with patch('sys.argv', ['uni-biz-kit', str(temp_path), '--task', 'validate']):
@@ -118,11 +118,11 @@ class TestCLI:
         
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            with open(temp_path / "concepts.json", 'w') as f:
+            with open(temp_path / "concepts.jsonc", 'w') as f:
                 json.dump(valid_schema, f)
-            with open(temp_path / "presentation.json", 'w') as f:
+            with open(temp_path / "presentation.jsonc", 'w') as f:
                 json.dump({}, f)
-            with open(temp_path / "security.json", 'w') as f:
+            with open(temp_path / "security.jsonc", 'w') as f:
                 json.dump({"authentication_required": False}, f)
         
             try:
@@ -172,11 +172,11 @@ class TestCLI:
         
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            with open(temp_path / "concepts.json", 'w') as f:
+            with open(temp_path / "concepts.jsonc", 'w') as f:
                 json.dump(valid_schema, f)
-            with open(temp_path / "presentation.json", 'w') as f:
+            with open(temp_path / "presentation.jsonc", 'w') as f:
                 json.dump({}, f)
-            with open(temp_path / "security.json", 'w') as f:
+            with open(temp_path / "security.jsonc", 'w') as f:
                 json.dump({"authentication_required": False}, f)
         
             try:
@@ -229,11 +229,11 @@ class TestCLI:
         
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            with open(temp_path / "concepts.json", 'w') as f:
+            with open(temp_path / "concepts.jsonc", 'w') as f:
                 json.dump(valid_schema, f)
-            with open(temp_path / "presentation.json", 'w') as f:
+            with open(temp_path / "presentation.jsonc", 'w') as f:
                 json.dump({}, f)
-            with open(temp_path / "security.json", 'w') as f:
+            with open(temp_path / "security.jsonc", 'w') as f:
                 json.dump({"authentication_required": False}, f)
         
             custom_dir = 'my-custom-app'
@@ -262,7 +262,7 @@ class TestCLI:
         
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            with open(temp_path / "concepts.json", 'w') as f:
+            with open(temp_path / "concepts.jsonc", 'w') as f:
                 json.dump(invalid_schema, f)
             
             with patch('sys.argv', ['uni-biz-kit', str(temp_path)]):

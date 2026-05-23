@@ -122,7 +122,7 @@ Examples:
              raise FileNotFoundError(f"Input directory not found: {input_dir}")
 
         # Determine Schema File Path
-        schema_path = input_dir / "concepts.json"
+        schema_path = input_dir / "concepts.jsonc"
         
         # Determine Output Directory
         if output_dir_arg:

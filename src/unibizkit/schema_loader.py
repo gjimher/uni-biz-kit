@@ -7,6 +7,7 @@ Handles loading and validating business concept schemas against the JSON schema 
 import json
 import jsonschema
 import csv
+from jsoncomment import JsonComment
 from jsonschema import Draft7Validator, validators
 from pathlib import Path
 from typing import Dict, Any, List
@@ -41,11 +42,17 @@ class SchemaValidationError(Exception):
     """Exception raised when schema validation fails."""
     pass
 
+_jsonc = JsonComment()
+
+def _load_jsonc_file(path) -> Dict[str, Any]:
+    with open(path, 'r', encoding='utf-8') as f:
+        return _jsonc.load(f)
+
 class SchemaLoader:
     def __init__(self, schema_path: str = None):
         """
         Initialize the schema loader.
-        
+
         Args:
             schema_path: Path to the business schema JSON file
         """
@@ -96,58 +103,47 @@ class SchemaLoader:
             raise ValueError("No schema path provided")
         
         try:
-            # Load the business schema
-            with open(path, 'r', encoding='utf-8') as f:
-                business_schema = json.load(f)
-            
-            # Try to load presentation.json
-            presentation_path = Path(path).parent / "presentation.json"
+            business_schema = _load_jsonc_file(path)
+
+            parent = Path(path).parent
+
+            presentation_path = parent / "presentation.jsonc"
             if not presentation_path.exists():
-                raise FileNotFoundError(f"'presentation.json' is mandatory. Please provide it in {presentation_path.parent} (it can be an empty object '{{}}' if you want defaults).")
-            
+                raise FileNotFoundError(f"'presentation.jsonc' is mandatory. Please provide it in {parent} (it can be an empty object '{{}}' if you want defaults).")
             self.load_presentation(str(presentation_path))
 
-            # Try to load security.json
-            security_path = Path(path).parent / "security.json"
+            security_path = parent / "security.jsonc"
             if not security_path.exists():
-                raise FileNotFoundError(f"'security.json' is mandatory. Please provide it in {security_path.parent} (it can be an empty object '{{}}' if you want defaults).")
-            
+                raise FileNotFoundError(f"'security.jsonc' is mandatory. Please provide it in {parent} (it can be an empty object '{{}}' if you want defaults).")
             self.load_security(str(security_path))
 
-            # Try to load workflow.json
-            workflow_path = Path(path).parent / "workflow.json"
+            workflow_path = parent / "workflow.jsonc"
             if not workflow_path.exists():
-                # For backward compatibility and when no workflow is needed
                 self.workflow_config = {"workflow_rules": []}
             else:
                 self.load_workflow(str(workflow_path))
 
-            # Try to load system.json (optional)
-            system_path = Path(path).parent / "system.json"
+            system_path = parent / "system.jsonc"
             if system_path.exists():
                 self.load_system(str(system_path))
             else:
-                # Apply defaults from system schema
                 self.system_config = {}
                 DefaultValidatingDraft7Validator(self.system_validation_schema).validate(self.system_config)
 
-            # Try to load deployment.json (optional)
-            deployment_path = Path(path).parent / "deployment.json"
+            deployment_path = parent / "deployment.jsonc"
             if deployment_path.exists():
                 self.load_deployment(str(deployment_path))
             else:
                 self.deployment_config = {}
                 DefaultValidatingDraft7Validator(self.deployment_validation_schema).validate(self.deployment_config)
 
-            # Try to load seed_data.json (optional)
-            seed_data_path = Path(path).parent / "seed_data.json"
+            seed_data_path = parent / "seed_data.jsonc"
             if seed_data_path.exists():
                 self.load_seed_data(str(seed_data_path))
             else:
                 self.seed_data_config = {"include_test_data": True, "records": {}}
 
-            # Try to load rules.json (optional)
-            rules_path = Path(path).parent / "rules.json"
+            rules_path = parent / "rules.jsonc"
             if rules_path.exists():
                 self.load_rules(str(rules_path))
             else:
@@ -174,8 +170,8 @@ class SchemaLoader:
             error_msg = f"Schema validation failed: {e.message}"
             logger.error(error_msg)
             raise SchemaValidationError(error_msg)
-        except json.JSONDecodeError as e:
-            error_msg = f"Invalid JSON format: {e}"
+        except (json.JSONDecodeError, ValueError) as e:
+            error_msg = f"Invalid JSON/JSONC format: {e}"
             logger.error(error_msg)
             raise SchemaValidationError(error_msg)
         except Exception as e:
@@ -187,8 +183,7 @@ class SchemaLoader:
         """
         Load and validate the presentation settings.
         """
-        with open(presentation_path, 'r', encoding='utf-8') as f:
-            presentation_config = json.load(f)
+        presentation_config = _load_jsonc_file(presentation_path)
         
         # Validate and inject defaults
         # We MUST use the custom validator that injects defaults
@@ -202,8 +197,7 @@ class SchemaLoader:
         """
         Load and validate the security settings.
         """
-        with open(security_path, 'r', encoding='utf-8') as f:
-            security_config = json.load(f)
+        security_config = _load_jsonc_file(security_path)
         
         # Validate and inject defaults
         DefaultValidatingDraft7Validator(self.security_validation_schema).validate(security_config)
@@ -216,8 +210,7 @@ class SchemaLoader:
         """
         Load and validate the workflow settings.
         """
-        with open(workflow_path, 'r', encoding='utf-8') as f:
-            workflow_config = json.load(f)
+        workflow_config = _load_jsonc_file(workflow_path)
 
         # Validate and inject defaults
         DefaultValidatingDraft7Validator(self.workflow_validation_schema).validate(workflow_config)
@@ -229,8 +222,7 @@ class SchemaLoader:
         """
         Load and validate the system settings.
         """
-        with open(system_path, 'r', encoding='utf-8') as f:
-            system_config = json.load(f)
+        system_config = _load_jsonc_file(system_path)
 
         # Validate and inject defaults
         DefaultValidatingDraft7Validator(self.system_validation_schema).validate(system_config)
@@ -242,8 +234,7 @@ class SchemaLoader:
         """
         Load and validate the deployment settings.
         """
-        with open(deployment_path, 'r', encoding='utf-8') as f:
-            deployment_config = json.load(f)
+        deployment_config = _load_jsonc_file(deployment_path)
 
         DefaultValidatingDraft7Validator(self.deployment_validation_schema).validate(deployment_config)
 
@@ -254,8 +245,7 @@ class SchemaLoader:
         """
         Load and validate the optional seed data settings.
         """
-        with open(seed_data_path, 'r', encoding='utf-8') as f:
-            seed_data_config = json.load(f)
+        seed_data_config = _load_jsonc_file(seed_data_path)
 
         DefaultValidatingDraft7Validator(self.seed_data_validation_schema).validate(seed_data_config)
 
@@ -266,8 +256,7 @@ class SchemaLoader:
         """
         Load and validate the optional FEEL business rules.
         """
-        with open(rules_path, 'r', encoding='utf-8') as f:
-            rules_config = json.load(f)
+        rules_config = _load_jsonc_file(rules_path)
 
         DefaultValidatingDraft7Validator(self.rules_validation_schema).validate(rules_config)
 

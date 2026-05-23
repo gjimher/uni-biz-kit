@@ -32,7 +32,7 @@ class TestAppFrontend:
         cli = CLI()
         
         # Use the app schema from models
-        schema_path = Path('models/test-app/concepts.json')
+        schema_path = Path('models/test-app/concepts.jsonc')
         output_dir = Path('test-app')
         
         print("Executing uni-biz-kit: generating a complete app application from schema")

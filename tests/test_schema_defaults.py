@@ -29,12 +29,12 @@ def test_defaults_population():
     }
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir) / "concepts.json"
+        temp_path = Path(temp_dir) / "concepts.jsonc"
         with open(temp_path, 'w') as f:
             json.dump(schema_content, f)
-        with open(Path(temp_dir) / "presentation.json", 'w') as f:
+        with open(Path(temp_dir) / "presentation.jsonc", 'w') as f:
             json.dump({}, f)
-        with open(Path(temp_dir) / "security.json", 'w') as f:
+        with open(Path(temp_dir) / "security.jsonc", 'w') as f:
             json.dump({"authentication_required": False}, f)
         
         try:
@@ -91,12 +91,12 @@ def test_special_required_default():
     }
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir) / "concepts.json"
+        temp_path = Path(temp_dir) / "concepts.jsonc"
         with open(temp_path, 'w') as f:
             json.dump(schema_content, f)
-        with open(Path(temp_dir) / "presentation.json", 'w') as f:
+        with open(Path(temp_dir) / "presentation.jsonc", 'w') as f:
             json.dump({}, f)
-        with open(Path(temp_dir) / "security.json", 'w') as f:
+        with open(Path(temp_dir) / "security.jsonc", 'w') as f:
             json.dump({"authentication_required": False}, f)
             
         try:
@@ -125,12 +125,12 @@ _MINIMAL_CONCEPTS = {
 def test_underscore_role_name_raises_error():
     """Role names starting with '_' are reserved and must be rejected at load time."""
     with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir) / "concepts.json"
+        temp_path = Path(temp_dir) / "concepts.jsonc"
         with open(temp_path, 'w') as f:
             json.dump(_MINIMAL_CONCEPTS, f)
-        with open(Path(temp_dir) / "presentation.json", 'w') as f:
+        with open(Path(temp_dir) / "presentation.jsonc", 'w') as f:
             json.dump({}, f)
-        with open(Path(temp_dir) / "security.json", 'w') as f:
+        with open(Path(temp_dir) / "security.jsonc", 'w') as f:
             json.dump({"authentication_required": True, "roles": [{"name": "_secret"}]}, f)
 
         with pytest.raises(SchemaValidationError, match="_secret"):
@@ -140,12 +140,12 @@ def test_underscore_role_name_raises_error():
 def test_anon_role_name_raises_error():
     """'_anon' declared explicitly in the roles list must be rejected."""
     with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir) / "concepts.json"
+        temp_path = Path(temp_dir) / "concepts.jsonc"
         with open(temp_path, 'w') as f:
             json.dump(_MINIMAL_CONCEPTS, f)
-        with open(Path(temp_dir) / "presentation.json", 'w') as f:
+        with open(Path(temp_dir) / "presentation.jsonc", 'w') as f:
             json.dump({}, f)
-        with open(Path(temp_dir) / "security.json", 'w') as f:
+        with open(Path(temp_dir) / "security.jsonc", 'w') as f:
             json.dump({"authentication_required": True, "roles": [{"name": "_anon"}]}, f)
 
         with pytest.raises(SchemaValidationError, match="_anon"):
