@@ -11,6 +11,7 @@
       "id_presentation": {
         "fields": ["name"]
       },
+      // documents.versioned: keeps historical versions per tag instead of replacing them
       "documents": {
         "enabled": true,
         "versioned": true,
@@ -38,6 +39,7 @@
         {
           "name": "price",
           "type": "decimal",
+          // subtype money: renders as currency in the UI and maps to NUMERIC in SQL
           "subtype": "money",
           "required": true,
           "precision": 10,
@@ -79,6 +81,7 @@
         },
         {
           "name": "categories",
+          // relation_to_many: generates a join table (product_category) in SQL
           "type": "relation_to_many",
           "target": "category",
           "description": "Categories this product belongs to"
@@ -90,8 +93,11 @@
       "plural_name": "categories",
       "description": "Product categories",
       "id_presentation": {
+        // Nested traversal: resolves parent's own id_presentation recursively.
+        // Result example: "Electronics / Keyboards"
         "fields": ["parent.id_presentation", "name"],
         "separator": "/",
+        // show: true renders the label as a visible column in list views
         "show": true
       },
       "documents": {
@@ -101,10 +107,11 @@
       "fields": [
         {
           "name": "parent",
+          // part_of: child-of relationship; deleting the parent cascades to children
           "type": "relation_to_one",
           "subtype": "part_of",
+          // Self-reference makes this a tree structure
           "target": "category",
-
           "description": "Parent category"
         },
         {
@@ -138,6 +145,7 @@
       "name": "customer",
       "plural_name": "customers",
       "description": "Customers who purchase products",
+      // data_size m: hint that this table will have tens of thousands of rows (affects pagination defaults)
       "data_size": "m",
       "id_presentation": {
         "fields": ["first_name", "last_name"],
@@ -148,6 +156,7 @@
           "name": "first_name",
           "type": "string",
           "required": true,
+          // Default matches security.jsonc registration flow: new users see "Pending Profile" until they fill in their details
           "default": "Pending",
           "min_length": 1,
           "max_length": 50,
@@ -165,6 +174,8 @@
         {
           "name": "email",
           "type": "string",
+          // calculated with a quoted string: the literal "_user_email" is an internal variable
+          // that resolves to the authenticated user's email at runtime
           "calculated": "\"_user_email\"",
           "required": false,
           "unique": true,
@@ -185,6 +196,7 @@
           "type": "string",
           "required": false,
           "size": "s",
+          // Name starts with admin_ so security rules_level_3 restricts users to read-only on this field
           "description": "A field only admins can edit"
         }
       ]
@@ -200,6 +212,7 @@
       "fields": [
         {
           "name": "customer",
+          // part_of: address is owned by the customer; deleting a customer removes their addresses
           "type": "relation_to_one",
           "subtype": "part_of",
           "target": "customer",
@@ -221,6 +234,7 @@
           "description": "Street and number"
         },
         {
+          // country/province/city are validated together via validations/address.csv
           "name": "city",
           "type": "string",
           "required": true,
@@ -257,10 +271,13 @@
       "fields": [
         {
           "name": "customer",
+          // related_to: loose reference; deleting a customer does NOT cascade to orders
           "type": "relation_to_one",
           "subtype": "related_to",
           "target": "customer",
           "required": false,
+          // copy_logged_on_insert: sets this to the logged-in user's customer record at insert time;
+          // the field is then locked (not editable by the user)
           "calculated": "copy_logged_on_insert(customer)",
           "description": "Customer who placed the order"
         },
@@ -278,11 +295,15 @@
           "precision": 10,
           "scale": 2,
           "min": 0,
+          // rollup: kept in sync automatically whenever an order_item's total_price changes
           "calculated": "rollup(sum,order_item,total_price)",
           "description": "Total order amount"
         },
         {
           "name": "shipping_address",
+          // prefill: expands all fields of the matched sub-collection inline on this concept.
+          // The customer's saved addresses are shown as options; the selected one's fields
+          // (street, city, province, country) are copied into the order record.
           "type": "prefill",
           "subtype": "customer.addresses",
           "required": true,
@@ -296,6 +317,7 @@
           "precision": 10,
           "scale": 2,
           "min": 0,
+          // by_rules: value is computed by the "order-shipping-costs" rule in rules.jsonc
           "calculated": "by_rules",
           "description": "Shipping cost calculated by business rules"
         },
@@ -307,6 +329,7 @@
           "precision": 10,
           "scale": 2,
           "min": 0,
+          // by_rules: snapshotted by "order-save-ordered-total-amount" when state changes to "ordered"
           "calculated": "by_rules",
           "description": "Total order amount captured when the order is placed"
         },
@@ -328,17 +351,17 @@
       "fields": [
         {
           "name": "order",
+          // part_of: order_item is owned by order; deleting an order removes its items
           "type": "relation_to_one",
           "subtype": "part_of",
           "target": "order"
-
         },
         {
           "name": "product",
+          // related_to: loose reference; deleting a product does NOT cascade to order items
           "type": "relation_to_one",
           "subtype": "related_to",
           "target": "product",
-
           "required": false,
           "description": "Product ordered"
         },
@@ -357,6 +380,8 @@
           "precision": 10,
           "scale": 2,
           "min": 0,
+          // copy: snapshots product.price into this field only while the order is in state "initial".
+          // Once the order moves to "ordered", the price is frozen and no longer follows the product.
           "calculated": "copy(product,price,on_change_in_state_initial)",
           "description": "Price per unit at time of purchase"
         },
@@ -368,6 +393,7 @@
           "precision": 10,
           "scale": 2,
           "min": 0,
+          // Inline arithmetic: recalculated automatically on every change to quantity or unit_price
           "calculated": "quantity*unit_price",
           "description": "Total price for this order item"
         },

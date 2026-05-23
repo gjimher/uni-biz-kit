@@ -5,12 +5,33 @@
       "name": "order_workflow",
       "description": "Tracks the lifecycle of a customer order from creation to delivery.",
       "concepts": "order",
+      // States define the valid lifecycle steps. Transitions are always sequential
+      // (each state can only move to the next one in the list).
       "states": [
-        { "name": "initial", "description": "Order just created, pending confirmation by the customer.", "owners": ["user", "admin"] },
-        { "name": "ordered", "owners": ["admin"] },
-        { "name": "accepted", "owners": ["admin"] },
-        { "name": "sent", "owners": ["admin"] },
-        { "name": "delivered", "owners": ["admin"] }
+        {
+          "name": "initial",
+          "description": "Order just created, pending confirmation by the customer.",
+          // owners: roles that may act on records in this state (e.g. submit the order).
+          // Both user and admin can submit from initial → ordered.
+          "owners": ["user", "admin"]
+        },
+        {
+          "name": "ordered",
+          // Only admins can advance the order once the customer has submitted it
+          "owners": ["admin"]
+        },
+        {
+          "name": "accepted",
+          "owners": ["admin"]
+        },
+        {
+          "name": "sent",
+          "owners": ["admin"]
+        },
+        {
+          "name": "delivered",
+          "owners": ["admin"]
+        }
       ]
     }
   ]

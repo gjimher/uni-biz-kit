@@ -1,17 +1,33 @@
 {
   "$schema": "../../schemas/rules_schema.json",
+  // Rules are evaluated by the FEEL (Friendly Enough Expression Language) engine.
+  //
+  // action types:
+  //   update — writes the expression result back to the concept's fields
+  //   check  — validates; returning { error: "..." } aborts the state transition
+  //   return — exposes a computed value to the frontend (no DB write)
+  //
+  // Trigger properties:
+  //   when       — fires synchronously (blocks the transition until complete)
+  //   when_async — fires asynchronously in the background (user is not blocked)
+  //
+  // FEEL context: db.<concept> = current record values; auth.<concept> = logged-in user's profile
   "rules": [
     {
       "concept": "order",
       "name": "order-shipping-costs",
+      // Free shipping on orders >= 60; otherwise flat 6 fee
       "feel_expr": "{ shipping_costs: if db.order.total_amount >= 60 then 0 else 6 }",
       "action": "update",
+      // when_async during initial: recalculates shipping whenever items change, without blocking the user
       "when_async": ["on_change_in_state_initial"],
+      // when at ordered: final sync calculation before the state transition commits
       "when": ["on_state_changed_to_ordered"]
     },
     {
       "concept": "order",
       "name": "order-save-ordered-total-amount",
+      // Snapshots the live total into ordered_total_amount so later checks can detect tampering
       "feel_expr": "{ ordered_total_amount: db.order.total_amount }",
       "action": "update",
       "when": ["on_state_changed_to_ordered"]
@@ -19,6 +35,8 @@
     {
       "concept": "order",
       "name": "order-check-ordered-total-amount",
+      // Guards against the total changing after the order was placed (e.g. concurrent edits).
+      // Returns an error object on mismatch, which aborts the transition.
       "feel_expr": "if db.order.total_amount = db.order.ordered_total_amount then true else { error: \"Order total has changed since it was ordered\" }",
       "action": "check",
       "when": [
@@ -28,6 +46,9 @@
       ]
     },
     {
+      // No concept: this is a standalone function available to the frontend.
+      // Corresponds to customer.email calculated: "\"_user_email\"" — returns the
+      // logged-in user's email from their profile record.
       "name": "current-customer-email",
       "feel_expr": "auth.customer.email",
       "action": "return"

@@ -28,10 +28,24 @@
       ]
     }
   ],
+  // list_field_rules_level_2: compact DSL that controls which fields appear in list views
+  // and in what order, per concept.
+  //
+  // Token syntax:
+  //   field              — include this field at its default position
+  //   !field             — hide this field from list views entirely
+  //   !>field            — promote this field to the front of the list
+  //   id_presentation[N] — insert the Nth element of the concept's id_presentation fields
+  //
+  // Fields not mentioned keep their default visibility.
   "list_field_rules_level_2": {
+    // product: promote price to front; hide sku from list (still visible in detail view)
     "product": "!>price, sku",
+    // category: hide slug (URL-only field, not useful in admin lists)
     "category": "!slug",
+    // order: show id as first column, then promote total_amount
     "order": "id_presentation[0], !>total_amount",
+    // customer: promote email to front of list
     "customer": "!>email"
   }
 }

@@ -1,5 +1,7 @@
 {
   "$schema": "../../schemas/system_schema.json",
+  // smtp: outgoing mail configuration used by Supabase Auth for verification emails,
+  // password resets, and magic links. Points to a local dev mail catcher by default.
   "smtp": {
     "host": "127.0.0.1",
     "port": 3010,

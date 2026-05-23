@@ -2,13 +2,19 @@
   "$schema": "../../schemas/security_schema.json",
   "authentication_required": true,
   "registration": {
+    // allow: users can self-register via the login page
     "allow": true,
+    // New self-registered users are assigned the "user" role automatically
     "role": "user"
   },
+  // sso: Single Sign-On via JWT claims (e.g. from an external identity provider)
   "sso": {
     "enabled": true,
+    // domain: the email domain accepted for SSO login
     "domain": "dev.local",
+    // role_claim: JWT claim key that contains the user's role(s)
     "role_claim": "roles",
+    // default_role: assigned when the JWT has no matching role claim
     "default_role": "user"
   },
   "roles": [
@@ -19,9 +25,13 @@
     {
       "name": "user",
       "description": "Standard User",
+      // profile_concept: links this role to the "customer" concept.
+      // When a user logs in, their customer record is their profile.
+      // This enables owner_write access checks (is this record linked to the logged-in user?)
       "profile_concept": "customer"
     }
   ],
+  // Seed users created at deploy time (development only — use strong passwords in production)
   "users": [
     {
       "email": "admin@test.com",
@@ -39,8 +49,17 @@
       "roles": ["user"]
     }
   ],
+  // rules_level_2: per-role, per-concept, per-field access rules.
+  // These are enforced at the database level via Supabase RLS policies.
+  //
+  // access values:
+  //   read        — SELECT only
+  //   write       — INSERT, UPDATE, DELETE
+  //   owner_write — INSERT/UPDATE/DELETE only on records linked to the user's profile
   "rules_level_2": [
     {
+      // _anon: built-in role for unauthenticated requests (Supabase anon key).
+      // Products and categories are publicly readable without login.
       "role": "_anon",
       "concept": "product",
       "field": "*",
@@ -53,20 +72,26 @@
       "access": "read"
     },
     {
+      // owner_write: users can only create/edit their own customer profile
       "role": "user",
       "concept": "customer",
       "field": "*",
       "access": "owner_write"
     },
     {
+      // owner_write: users can only create/edit their own orders
       "role": "user",
       "concept": "order",
       "field": "*",
       "access": "owner_write"
     }
   ],
+  // rules_level_3: glob-pattern rules applied on top of level_2.
+  // Useful for cross-cutting field-level policies that apply to many concepts at once.
   "rules_level_3": [
     {
+      // admin_* glob: any field whose name starts with "admin_" is read-only for users.
+      // Matches customer.admin_field. Admins retain full write access via their default privileges.
       "role": "user",
       "concept": "*",
       "field": "admin_*",

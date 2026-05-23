@@ -1,6 +1,11 @@
 {
   "$schema": "../../schemas/seed_data_schema.json",
+  // include_test_data: when true, the generator also creates synthetic faker-based test records
+  // in addition to the explicit records defined below.
+  // Set to false in production models to load only the mandatory seed records.
   "include_test_data": true,
+  // records: mandatory records inserted at every deploy (idempotent — uses upsert by id).
+  // Use stable string ids so re-runs don't create duplicates.
   "records": {
     "category": [
       {
@@ -21,13 +26,17 @@
         "sku": "SEED-KBD-001",
         "status": "published",
         "is_featured": true,
+        // Reference a seeded category by its string id
         "categories": ["accessories"],
+        // documents: seed files attached to this record at deploy time.
+        // content_base64 is the file content encoded in Base64.
         "documents": [
           {
             "tag": "datasheet",
             "name": "seeded-keyboard.txt",
             "content_type": "text/plain",
             "version": 1,
+            // Decoded: "Initial product datasheet\n"
             "content_base64": "SW5pdGlhbCBwcm9kdWN0IGRhdGFzaGVldAo="
           }
         ]
