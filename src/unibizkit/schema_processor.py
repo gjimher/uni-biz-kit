@@ -340,13 +340,12 @@ class SchemaProcessor:
                     concept_to_workflow[c_name] = rule
         
         # Inject state and state_info fields to concepts with workflows
-        self.extended_schema["_concept_workflow"] = {}
+        self.workflow_extended["_concept_workflow"] = {}
         for concept in self.concepts:
             concept_name = concept["name"]
             if concept_name in concept_to_workflow:
                 wf = concept_to_workflow[concept_name]
-                # Store in central map at extended_schema root
-                self.extended_schema["_concept_workflow"][concept_name] = wf
+                self.workflow_extended["_concept_workflow"][concept_name] = wf
                 
                 # Check for existing state field, if not, add it
                 if not any(f["name"] == "state" for f in concept["fields"]):

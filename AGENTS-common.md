@@ -67,6 +67,7 @@ pytest
 **Commit Messages:**
 *   Write in English.
 *   Keep them concise and focused on the *why* and *what*.
+*   Prefix with `refactor:` when the commit does not change functionality (e.g., renaming, restructuring, cleanup).
 
 ## Design Principles
 

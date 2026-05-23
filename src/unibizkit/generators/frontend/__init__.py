@@ -64,6 +64,7 @@ class ReactAdminGenerator:
             security_config=schema_loader.security_config,
             deployment_config=getattr(schema_loader, 'deployment_config', None) or {},
             business_schema=schema_loader.business_schema,
+            workflow_config=schema_loader.workflow_config,
             validations_config=getattr(schema_loader, 'validations_config', None) or {"validations": []},
             output_dir=self.output_dir,
         )

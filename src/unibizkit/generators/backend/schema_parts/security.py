@@ -289,7 +289,7 @@ def generate_security_policies(
     concepts: List[Dict[str, Any]],
     concept_map: Dict[str, Any],
     security_config: Dict[str, Any],
-    business_schema: Dict[str, Any],
+    workflow_config: Dict[str, Any],
 ) -> List[str]:
     policies = []
 
@@ -334,7 +334,7 @@ def generate_security_policies(
                         join_tables.append(jt)
 
     all_tables = [c["name"] for c in concepts] + join_tables
-    concept_workflows = business_schema["_concept_workflow"]
+    concept_workflows = workflow_config["_concept_workflow"]
 
     # Map: child concept name -> list of {fk_field, parent, workflow}
     child_parent_workflows: Dict[str, list] = {}

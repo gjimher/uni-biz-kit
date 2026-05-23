@@ -79,7 +79,7 @@ def _generate_recursive_dialogs(
     child_tabs = fields_res["child_tabs"]
 
     workflow_ui = ""
-    concept_workflow = ctx.business_schema.get("_concept_workflow", {}).get(resource_name)
+    concept_workflow = ctx.workflow_config["_concept_workflow"].get(resource_name)
     if concept_workflow:
         wf_json = json.dumps(concept_workflow)
         workflow_ui = f'<WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" />'
@@ -488,7 +488,7 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     owned_children = find_owned_children(resource_name, ctx.concepts)
     many_to_many_links = find_many_to_many_links(resource_name, ctx.concepts, ctx.concept_map)
     has_documents = concept["documents"]["enabled"]
-    concept_workflow = ctx.business_schema.get("_concept_workflow", {}).get(resource_name)
+    concept_workflow = ctx.workflow_config["_concept_workflow"].get(resource_name)
     validation_concepts = _collect_validation_concepts(ctx, concept)
 
     field_components = generate_field_components(

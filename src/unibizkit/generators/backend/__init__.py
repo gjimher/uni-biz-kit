@@ -15,6 +15,7 @@ class SupabaseGenerator:
             concept_map={c["name"]: c for c in concepts},
             security_config=schema_loader.security_config,
             business_schema=schema_loader.business_schema,
+            workflow_config=schema_loader.workflow_config,
             system_config=getattr(schema_loader, 'system_config', None) or {},
             deployment_config=getattr(schema_loader, 'deployment_config', None) or {},
             seed_data_config=getattr(schema_loader, 'seed_data_config', None) or {"include_test_data": True, "records": {}},

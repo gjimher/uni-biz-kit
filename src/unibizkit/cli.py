@@ -180,12 +180,6 @@ Examples:
                 continue
             base_concept_props[key] = value
 
-        # Add _concept_workflow to root
-        base_schema["properties"]["_concept_workflow"] = {
-            "type": "object",
-            "description": "Mapping of concept names to their workflow configurations"
-        }
-
         # 2. Merge Concept Required (Auto-generate)
         if "required" not in base_concept_items:
              base_concept_items["required"] = []
@@ -319,6 +313,19 @@ Examples:
 
         return base_schema
 
+    def _generate_seed_data_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
+        schemas_dir = Path(__file__).parent.parent.parent / "schemas"
+        base_schema_path = schemas_dir / "seed_data_schema.json"
+        with open(base_schema_path, 'r', encoding='utf-8') as f:
+            base_schema = json.load(f)
+        base_schema["title"] = "Extended Seed Data Schema"
+        base_schema["description"] = "Dynamically generated extended seed data schema."
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / "seed_data_extended_schema.json"
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(base_schema, f, indent=2)
+        return base_schema
+
     def _generate_workflow_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
         """
         Dynamically generate the full extended workflow schema definition.
@@ -332,7 +339,18 @@ Examples:
         # Update metadata
         base_schema["title"] = "Extended Workflow Schema"
         base_schema["description"] = "Dynamically generated extended workflow schema."
-        
+
+        # Add _concept_workflow as required enriched field
+        base_schema["properties"]["_concept_workflow"] = {
+            "type": "object",
+            "description": "Mapping of concept names to their workflow configurations"
+        }
+        if "required" not in base_schema:
+            base_schema["required"] = []
+        if "_concept_workflow" not in base_schema["required"]:
+            base_schema["required"].append("_concept_workflow")
+        base_schema["additionalProperties"] = False
+
         # Save to output dir for reference/debug
         output_dir.mkdir(exist_ok=True)
         output_path = output_dir / "workflow_extended_schema.json"
@@ -554,10 +572,17 @@ Examples:
         schema_loader.system_config = processor.system_extended
         schema_loader.deployment_config = processor.deployment_extended
         schema_loader.validations_config = {"validations": processor.all_validations_with_rows}
+        schema_loader.workflow_config = processor.workflow_extended
 
         seed_dump_path = output_dir / "seed_data_extended.json"
+        new_seed_config = {"$schema": "./seed_data_extended_schema.json"}
+        seed_config_copy = schema_loader.seed_data_config.copy()
+        seed_config_copy.pop("$schema", None)
+        new_seed_config.update(seed_config_copy)
         with open(seed_dump_path, 'w', encoding='utf-8') as f:
-            json.dump(schema_loader.seed_data_config, f, indent=2)
+            json.dump(new_seed_config, f, indent=2)
+        extended_seed_schema_def = self._generate_seed_data_extended_schema_def(output_dir)
+        self._validate_extended_schema(new_seed_config, extended_seed_schema_def, "seed_data")
         logger.info(f"Seed data saved to: {seed_dump_path}")
         legacy_initial_dump_path = output_dir / "initial_data_extended.json"
         if legacy_initial_dump_path.exists():

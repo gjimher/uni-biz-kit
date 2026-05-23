@@ -95,7 +95,7 @@ def _generate_sample_data_for_concept(concept: Dict[str, Any], ctx: Context) -> 
                 if field_name == "email":
                     value = f"'{table_name}_{field_name}_{i}@example.com'"
                 elif field_name == "state":
-                    concept_workflow = ctx.business_schema.get("_concept_workflow", {}).get(table_name)
+                    concept_workflow = ctx.workflow_config["_concept_workflow"].get(table_name)
                     if concept_workflow:
                         states = concept_workflow["states"]
                         value = f"'{states[(i - 1) % len(states)]['name']}'"

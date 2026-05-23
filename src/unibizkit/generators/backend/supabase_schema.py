@@ -29,7 +29,7 @@ def generate(ctx: Context) -> str:
 
     sql_parts.extend(generate_join_tables(ctx.concepts, ctx.concept_map))
     sql_parts.extend(generate_foreign_key_constraints(ctx.concepts, ctx.security_config))
-    sql_parts.extend(generate_document_tables(ctx.concepts, ctx.security_config, ctx.business_schema.get("_concept_workflow", {})))
+    sql_parts.extend(generate_document_tables(ctx.concepts, ctx.security_config, ctx.workflow_config["_concept_workflow"]))
 
     generated_table_names = _generated_table_names(ctx)
 
@@ -60,7 +60,7 @@ def generate(ctx: Context) -> str:
 
     if ctx.security_config["authentication_required"]:
         sql_parts.extend(generate_security_policies(
-            ctx.concepts, ctx.concept_map, ctx.security_config, ctx.business_schema
+            ctx.concepts, ctx.concept_map, ctx.security_config, ctx.workflow_config
         ))
 
     return '\n\n'.join(sql_parts)
