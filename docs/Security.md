@@ -98,6 +98,108 @@ Public pages (those not matching the `authenticated_pages` patterns in `presenta
 
 ---
 
+## Profile Concepts
+
+A role can declare a `profile_concept` in `security.json`. When it does, every user who holds that role gets a linked record in the corresponding concept table. The link is maintained by five injected columns. Profile sync is based only on the identity values available in the token event: user UUID, email, and roles. It does not consult `auth.users` to check whether an old UUID still exists.
+
+| Column | Purpose |
+|--------|---------|
+| `_user` | UUID currently linked to this profile. |
+| `_user_email` | Email of the currently linked user. |
+| `_user_prev` | UUID that was linked before this profile was deactivated or superseded. |
+| `_user_email_prev` | Email that was linked before this profile was deactivated or superseded. Kept for audit. |
+| `_user_pending_link` | Email of a pre-seeded profile waiting to be linked to a user for the first time. |
+
+Profile records are created and linked automatically — the application never needs to manage this manually.
+
+### States a profile record can be in
+
+| `_user` | `_user_prev` | `_user_pending_link` | Meaning |
+|---------|-------------|----------------------|---------|
+| set | null | null | Active: linked to the most recent token identity for that email and role. |
+| null | set | null | Inactive: the profile was unlinked because the same UUID lost the role, or because another UUID logged in with the same email. Reactivatable only by the UUID stored in `_user_prev`. |
+| null | null | set | Pre-seeded: created by an admin before the user exists. Links on first login by email. |
+
+### Profile sync at login
+
+Every time Supabase issues or refreshes a JWT, the `custom_access_token_hook` runs. It derives `user_id`, `email`, and roles from the token event, then calls `sync_role_profiles(user_id, email, roles)`. Profile sync executes the following logic **for each role that has a `profile_concept`**:
+
+**If the logged-in user does NOT hold the role:**
+
+```
+find the profile where _user = target_user_id:
+    if found:
+        profile._user_prev       = profile._user
+        profile._user_email_prev = profile._user_email
+        profile._user            = null
+        profile._user_email      = null
+```
+
+The profile is deactivated in place. All business data is preserved. The previous user UUID is recorded in `_user_prev` so the deactivation is auditable and reversible.
+
+**If the logged-in user DOES hold the role:**
+
+```
+if no profile with _user = target_user_id exists:
+
+    deactivate active profiles with the same email but a different UUID:
+        find profiles where _user_email = target_email
+          and _user is not null
+          and _user != target_user_id:
+            profile._user_prev       = profile._user
+            profile._user_email_prev = profile._user_email
+            profile._user            = null
+            profile._user_email      = null
+
+    try to reactivate a deactivated profile:
+        find profile where _user_prev = target_user_id:
+            if found:
+                profile._user            = target_user_id
+                profile._user_email      = target_email
+                profile._user_prev       = null
+                profile._user_email_prev = null
+
+    if still no profile linked:
+        try to claim a pre-seeded profile:
+            find profile where _user_pending_link = target_email and _user is null:
+                if found:
+                    profile._user              = target_user_id
+                    profile._user_email        = target_email
+                    profile._user_pending_link = null
+
+    if still no profile linked:
+        create a new profile record:
+            _user  = target_user_id
+            _user_email = target_email
+```
+
+### Same-Email, New-UUID Login
+
+In federated deployments, the application may not be able to ask the identity store whether an old UUID still exists. The sync logic therefore treats email as the continuity key for displacement, while still treating UUID as the continuity key for reactivation.
+
+If a token arrives with the same email but a different UUID from the currently linked profile, the hook sees that there is no profile where `_user = new_uuid`. It then:
+
+1. Deactivates active profiles where `_user_email = email` and `_user` is a different UUID.
+2. Tries to reactivate a profile where `_user_prev = new_uuid`.
+3. Tries to claim a pre-seeded profile where `_user_pending_link = email` and `_user IS NULL`.
+4. Creates a fresh profile if neither exists.
+
+This cleanup does **not** transfer the old profile to the new UUID. The old profile is moved to the inactive state with `_user_prev = old_uuid`, and the same-email, new-UUID user gets a new profile unless an admin prepared a `_user_pending_link` row for that email.
+
+### Reactivation is UUID-based, not email-based
+
+A deactivated profile can only be reactivated by the exact same user UUID that was previously linked (`_user_prev = target_user_id`). If a different UUID appears with the same email address, it will **not** inherit that deactivated profile. It will either claim a pre-seeded record via `_user_pending_link` or get a fresh one. The deactivated profile remains frozen until its original UUID reappears, or until an admin intervenes directly.
+
+This means federation scenarios where the same person acquires a new UUID (e.g. migrated to a different identity provider) require a manual admin step to re-link the profile.
+
+### Timing
+
+Role-based deactivation happens at JWT issuance — the user's next login or token refresh. A user whose role is revoked retains their active JWT for up to the token's remaining lifetime (Supabase default: **1 hour**). Once the JWT expires and the client refreshes, the hook fires for the same UUID, the profile is deactivated, and the new JWT reflects the updated role list. RLS policies then immediately deny access to the previously accessible records.
+
+User deletion in the identity system has different timing: there is no hook at the moment the UUID disappears, so the old profile remains active locally until another token event is seen. A later login with the same email and a new UUID deactivates the old local profile, then creates or claims a separate profile as described above.
+
+---
+
 ## Backend Implementation: Role Lifecycle
 
 This section covers how roles are stored, assigned, and enforced at the database level. The frontend has **no security enforcement**; all access control is implemented exclusively in the backend.
@@ -129,11 +231,12 @@ SSO roles flow through two separate mechanisms:
 
 Every time Supabase generates a JWT (login or token refresh), the `custom_access_token_hook` function runs. It:
 
-1. Reads the SSO identity row for the user from `auth.identities` (provider ≠ `'email'`).
-2. Extracts the role claim from the identity data, checking these paths in order:
-   - `identity_data -> 'roles'` (standard Keycloak)
-   - `identity_data -> 'custom_claims' -> 'roles'`
-   - `identity_data -> 'realm_access' -> 'roles'` (Keycloak realm access)
+1. Reads the role claim from the token event claims. The hook does not need to look up the user in `auth.users` or `auth.identities`.
+2. Extracts the role claim from these paths in order:
+   - `claims -> 'roles'` (standard Keycloak)
+   - `claims -> 'user_metadata' -> 'roles'`
+   - `claims -> 'custom_claims' -> 'roles'`
+   - `claims -> 'realm_access' -> 'roles'` (Keycloak realm access)
 3. Filters the extracted roles against the whitelist defined in `security.json` → `roles[*].name`. Invalid roles are silently dropped.
 4. Injects the filtered roles into the JWT under `app_metadata.roles`.
 5. If the SSO token contained roles but none passed the whitelist, the user falls back to `security.json` → `sso.default_role`.
@@ -149,7 +252,7 @@ When Supabase first creates an SSO user (or updates their `raw_user_meta_data`),
 | Scenario | Allowed? | Mechanism |
 |----------|---------|-----------|
 | Admin changes a user's role | Yes | Direct update to `auth.users.raw_app_meta_data` via the Supabase Admin API (service role key required) |
-| SSO provider sends different roles | Yes | `custom_access_token_hook` picks up the new claims on the next token refresh; `on_auth_user_roles_sync` trigger updates `raw_app_meta_data` |
+| SSO provider sends different roles | Yes | `custom_access_token_hook` picks up the new token claims on the next token refresh; `on_auth_user_roles_sync` trigger can also persist roles when Supabase writes matching raw metadata |
 | User changes their own role | **No** | `auth.users` is not exposed through the PostgREST API at all; it is an internal Supabase table |
 | Web app changes any user's role | **No** | The web application only holds the **anon key**, which never grants access to `auth.users` or the Admin API |
 | Role not on the whitelist | **No** | Filtered out silently by both the trigger and the JWT hook |
@@ -169,7 +272,7 @@ The only path to changing a role from the application layer would be a vulnerabi
 Roles have two independent lifetimes:
 
 - **In the database (`raw_app_meta_data.roles`):** Persists indefinitely until explicitly changed via the Admin API or through an SSO sync.
-- **In the JWT (`app_metadata.roles`):** Valid for the lifetime of the access token (Supabase default: **1 hour**). After expiry, the client must refresh the token, at which point `custom_access_token_hook` re-reads the latest roles from `auth.identities` and re-embeds them in the new JWT.
+- **In the JWT (`app_metadata.roles`):** Valid for the lifetime of the access token (Supabase default: **1 hour**). After expiry, the client must refresh the token, at which point `custom_access_token_hook` re-reads the latest role claims from the token event and re-embeds them in the new JWT.
 
 For SSO users this means: if an admin revokes a role in Keycloak, the user retains their current roles in the active JWT for up to 1 hour. The change takes effect on the next token refresh.
 

@@ -18,6 +18,7 @@ import re
 import subprocess
 import time
 import pytest
+import psycopg2
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
@@ -144,6 +145,31 @@ def _delete_supabase_user(email):
     print(f"[sso] Deleted Supabase user: {email}")
 
 
+def _get_profile_state(email, profile_concept="customer"):
+    """Return (user_id, profile_id, profile_user_uuid) for the given email via direct DB access."""
+    load_dotenv(os.path.abspath("test-app/backend/.env"))
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        return None
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM auth.users WHERE email = %s", (email,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        user_id = row[0]
+        cur.execute(
+            f'SELECT id, "_user" FROM {psycopg2.extensions.quote_ident(profile_concept, cur)} WHERE "_user" = %s',
+            (user_id,),
+        )
+        row = cur.fetchone()
+        profile_id = row[0] if row else None
+        profile_user = row[1] if row else None
+    conn.close()
+    return {"user_id": user_id, "profile_id": profile_id, "profile_user": profile_user}
+
+
 def _assert_keycloak_only(email):
     user = _find_supabase_user(email)
     assert user, f"User {email} not found in Supabase"
@@ -160,16 +186,21 @@ def _assert_keycloak_only(email):
     print(f"[sso] {email} is Keycloak-only. providers={providers}, identities={label} ✓")
 
 
-def _full_sso_cycle(playwright, email, expected_role, user_arg=None, print_reminder=False):
+def _full_sso_cycle(playwright, email, expected_role, user_arg=None, print_reminder=False, profile_concept=None):
     """
     Round 1 → login + verify role
     Kill Chrome → delete from Supabase
     Round 2 → re-login + verify role
     API check → Keycloak-only
+    If profile_concept is given, also verifies profile sync behaviour across the delete+re-create.
     Chrome stays open after round 2; caller is responsible for closing it.
     """
     browser = playwright.chromium.connect_over_cdp(f"http://localhost:{CDP_PORT}")
     _sso_login_and_verify_role(browser, email, expected_role, print_reminder=print_reminder)
+
+    before = _get_profile_state(email, profile_concept) if profile_concept else None
+    if before:
+        print(f"[sso] Before delete: user_id={before['user_id']}, profile_id={before['profile_id']}")
 
     _close_chrome()
     _delete_supabase_user(email)
@@ -178,6 +209,36 @@ def _full_sso_cycle(playwright, email, expected_role, user_arg=None, print_remin
     browser2 = playwright.chromium.connect_over_cdp(f"http://localhost:{CDP_PORT}")
     _sso_login_and_verify_role(browser2, email, expected_role)
     _assert_keycloak_only(email)
+
+    if before and before["profile_id"] is not None:
+        after = _get_profile_state(email, profile_concept)
+        assert after is not None, f"Could not read profile state after re-login for {email}"
+
+        # New UUID means new profile; old orphaned profile is deactivated by same-email login.
+        assert str(after["user_id"]) != str(before["user_id"]), \
+            "Re-created SSO user should have a new UUID"
+        assert after["profile_id"] != before["profile_id"], \
+            "New UUID should get a fresh profile, not reuse the old one"
+        assert after["profile_user"] == after["user_id"], \
+            "New profile should be linked to the new UUID"
+
+        # Old profile must still exist with the previous UUID saved.
+        load_dotenv(os.path.abspath("test-app/backend/.env"))
+        conn = psycopg2.connect(os.getenv("DB_URL"))
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute(
+                f'SELECT "_user", "_user_prev" FROM {psycopg2.extensions.quote_ident(profile_concept, cur)} WHERE id = %s',
+                (before["profile_id"],),
+            )
+            old_row = cur.fetchone()
+        conn.close()
+        assert old_row is not None, "Old profile record must still exist after user deletion (no FK cascade)"
+        assert old_row[0] is None, "Old profile should be deactivated after same-email new-UUID login"
+        assert str(old_row[1]) == str(before["user_id"]), "Old profile should keep the previous UUID"
+        print(f"[sso] After re-login: old profile {before['profile_id']} deactivated, "
+              f"new profile {after['profile_id']} linked to new UUID {after['user_id']} ✓")
+
     _close_chrome()
 
 
@@ -193,4 +254,4 @@ def test_sso_admin_profile(sso_chrome):
 def test_sso_user1_profile(sso_chrome):
     with sync_playwright() as playwright:
         _launch_chrome(user="user1")
-        _full_sso_cycle(playwright, "user1@test.com", "user", user_arg="user1")
+        _full_sso_cycle(playwright, "user1@test.com", "user", user_arg="user1", profile_concept="customer")

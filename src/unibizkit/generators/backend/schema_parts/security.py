@@ -63,7 +63,10 @@ def _profile_insert_columns(concept: Dict[str, Any]) -> List[str]:
     if any(f["name"] == "_security_owner_id" for f in concept["fields"]):
         columns.append("_security_owner_id")
     for field in concept["fields"]:
-        if field["name"] in ("_user", "_user_email", "_user_pending_link", "_security_owner_id"):
+        if field["name"] in (
+            "_user", "_user_email", "_user_pending_link", "_security_owner_id",
+            "_user_prev", "_user_email_prev",
+        ):
             continue
         if field["type"] == "relation_to_many":
             continue
@@ -77,18 +80,6 @@ def _profile_insert_columns(concept: Dict[str, Any]) -> List[str]:
                 f"required field '{field['name']}' has no default"
             )
     return columns
-
-
-def _generate_profile_user_foreign_keys(security_config: Dict[str, Any]) -> str:
-    constraints = []
-    for mapping in security_config["_profile_concepts"]:
-        concept_name = mapping["concept"]
-        constraint_name = f"{concept_name}__user_auth_user_fk"
-        constraints.append(f"""
-ALTER TABLE {_quote_ident(concept_name)}
-  ADD CONSTRAINT {_quote_ident(constraint_name)}
-  FOREIGN KEY ("_user") REFERENCES auth.users(id) ON DELETE CASCADE;""")
-    return "\n".join(constraints)
 
 
 def _generate_profile_sync_function(
@@ -105,6 +96,7 @@ def _generate_profile_sync_function(
         has_security_owner_id = any(f["name"] == "_security_owner_id" for f in concept["fields"])
         insert_columns = _profile_insert_columns(concept)
         insert_columns_sql = ", ".join(_quote_ident(column) for column in insert_columns)
+
         def _col_value(column: str) -> str:
             if column == "_user":
                 return "target_user_id"
@@ -113,42 +105,59 @@ def _generate_profile_sync_function(
             if column == "_security_owner_id":
                 return "target_user_id::text"
             return "NULL"
+
         insert_values_sql = ", ".join(_col_value(col) for col in insert_columns)
         owner_id_set = ',\n          "_security_owner_id" = target_user_id::text' if has_security_owner_id else ""
 
         sync_parts.append(f"""
   -- Sync {role_name} profiles in {concept_name}.
-  UPDATE {table_sql} AS profile
-  SET "_user" = NULL,
-      "_user_email" = NULL,
-      "_user_pending_link" = auth_user.email
-  FROM auth.users AS auth_user
-  WHERE profile."_user" = auth_user.id
-    AND NOT (coalesce(auth_user.raw_app_meta_data -> 'roles', '[]'::jsonb) ? {role_sql});
-
   IF target_roles ? {role_sql} THEN
     IF NOT EXISTS (SELECT 1 FROM {table_sql} WHERE "_user" = target_user_id) THEN
-      UPDATE {table_sql}
-      SET "_user" = target_user_id,
-          "_user_email" = target_email,
-          "_user_pending_link" = NULL{owner_id_set}
-      WHERE "id" = (
-        SELECT "id"
-        FROM {table_sql}
-        WHERE "_user_pending_link" = target_email AND "_user" IS NULL
-        ORDER BY "id"
-        LIMIT 1
-      );
-    END IF;
+      -- A same-email login with a different UUID supersedes the previously linked profile.
+      UPDATE {table_sql} AS profile
+      SET "_user_prev"       = profile."_user",
+          "_user_email_prev" = profile."_user_email",
+          "_user"            = NULL,
+          "_user_email"      = NULL
+      WHERE profile."_user_email" = target_email
+        AND profile."_user" IS NOT NULL
+        AND profile."_user" <> target_user_id;
 
-    INSERT INTO {table_sql} ({insert_columns_sql})
-    SELECT {insert_values_sql}
-    WHERE NOT EXISTS (SELECT 1 FROM {table_sql} WHERE "_user" = target_user_id);
+      -- Reactivate a previously deactivated profile for this exact UUID.
+      UPDATE {table_sql}
+      SET "_user"           = target_user_id,
+          "_user_email"     = target_email,
+          "_user_prev"      = NULL,
+          "_user_email_prev" = NULL{owner_id_set}
+      WHERE "_user_prev" = target_user_id
+        AND "_user" IS NULL;
+
+      -- Claim a pre-seeded profile matched by email (first-time link, no prior UUID).
+      IF NOT EXISTS (SELECT 1 FROM {table_sql} WHERE "_user" = target_user_id) THEN
+        UPDATE {table_sql}
+        SET "_user"              = target_user_id,
+            "_user_email"        = target_email,
+            "_user_pending_link" = NULL{owner_id_set}
+        WHERE "id" = (
+          SELECT "id" FROM {table_sql}
+          WHERE "_user_pending_link" = target_email AND "_user" IS NULL
+          ORDER BY "id"
+          LIMIT 1
+        );
+      END IF;
+
+      -- Create a fresh profile if still unlinked.
+      INSERT INTO {table_sql} ({insert_columns_sql})
+      SELECT {insert_values_sql}
+      WHERE NOT EXISTS (SELECT 1 FROM {table_sql} WHERE "_user" = target_user_id);
+    END IF;
   ELSE
+    -- User no longer holds the role: deactivate their profile.
     UPDATE {table_sql}
-    SET "_user" = NULL,
-        "_user_email" = NULL,
-        "_user_pending_link" = target_email
+    SET "_user_prev"       = "_user",
+        "_user_email_prev" = "_user_email",
+        "_user"            = NULL,
+        "_user_email"      = NULL
     WHERE "_user" = target_user_id;
   END IF;""")
 
@@ -210,16 +219,12 @@ BEGIN
   effective_roles := coalesce(claims -> 'app_metadata' -> 'roles', '[]'::jsonb);
 
   IF {sso_enabled} THEN
-    SELECT coalesce(
-      identity_data -> '{role_claim}',
-      identity_data -> 'custom_claims' -> '{role_claim}',
-      identity_data -> 'realm_access' -> 'roles'
-    )
-    INTO sso_roles
-    FROM auth.identities
-    WHERE user_id = current_user_id
-      AND provider != 'email'
-    LIMIT 1;
+    sso_roles := coalesce(
+      claims -> '{role_claim}',
+      claims -> 'user_metadata' -> '{role_claim}',
+      claims -> 'custom_claims' -> '{role_claim}',
+      claims -> 'realm_access' -> 'roles'
+    );
 
     IF sso_roles IS NOT NULL AND jsonb_typeof(sso_roles) = 'array' THEN
       SELECT coalesce(jsonb_agg(to_jsonb(role_name)), '[]'::jsonb)
@@ -246,10 +251,7 @@ BEGIN
     END IF;
   END IF;
 
-  SELECT email
-  INTO current_email
-  FROM auth.users
-  WHERE id = current_user_id;
+  current_email := claims ->> 'email';
 {sync_profiles_sql}
   RETURN jsonb_set(event, '{{claims}}', claims);
 END;
@@ -294,7 +296,6 @@ def generate_security_policies(
     policies = []
 
     if security_config["_profile_concepts"]:
-        policies.append(_generate_profile_user_foreign_keys(security_config))
         policies.append(_generate_profile_sync_function(concept_map, security_config))
 
     policies.append(_generate_access_token_hook(security_config))

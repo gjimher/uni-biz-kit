@@ -626,10 +626,30 @@ class SchemaProcessor:
                 "unique": True,
             })
 
+        if "_user_prev" not in existing_field_names:
+            concept["fields"].append({
+                "name": "_user_prev",
+                "type": "string",
+                "size": "s",
+                "description": "Previous auth user id when this profile was deactivated",
+                "required": False,
+                "unique": False,
+            })
+
+        if "_user_email_prev" not in existing_field_names:
+            concept["fields"].append({
+                "name": "_user_email_prev",
+                "type": "string",
+                "size": "s",
+                "description": "Previous auth user email kept for audit on deactivation",
+                "required": False,
+                "unique": False,
+            })
+
     def _validate_profile_autocreate_defaults(self, concept: Dict[str, Any], role_name: str):
         for field in concept["fields"]:
             field_name = field["name"]
-            if field_name in ("_user", "_user_email", "_user_pending_link"):
+            if field_name in ("_user", "_user_email", "_user_pending_link", "_user_prev", "_user_email_prev"):
                 continue
             if field["type"] == "relation_to_many":
                 continue
@@ -929,7 +949,7 @@ class SchemaProcessor:
         if field_name == "state_info":
             return "JSONB"
 
-        if field_name == "_user":
+        if field_name in ("_user", "_user_prev"):
             return "UUID"
 
         if field_type == "relation_to_many":

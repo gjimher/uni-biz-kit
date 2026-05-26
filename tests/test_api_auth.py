@@ -13,6 +13,7 @@ import time
 import urllib.request
 import urllib.parse
 import urllib.error
+import psycopg2
 from pathlib import Path
 from dotenv import load_dotenv
 from smtp_mock import smtp_emails as _smtp_emails, smtp_lock as _smtp_lock, extract_links as _extract_links, SMTP_PORT
@@ -205,6 +206,35 @@ def _supabase_admin_update_password(api_url: str, service_key: str, user_id: str
             "Content-Type": "application/json",
         },
         method="PUT",
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _supabase_admin_create_user(
+    api_url: str,
+    service_key: str,
+    email: str,
+    password: str,
+    roles: list[str],
+) -> dict:
+    """Create a confirmed user through the Supabase admin API."""
+    url = f"{api_url}/auth/v1/admin/users"
+    data = json.dumps({
+        "email": email,
+        "password": password,
+        "email_confirm": True,
+        "app_metadata": {"roles": roles},
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
     )
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read().decode("utf-8"))
@@ -648,3 +678,89 @@ def test_seeded_users_login_and_rls():
             print("  customer.admin_field update allowed for admin")
     except urllib.error.HTTPError as e:
         pytest.fail(f"Admin failed to update customer.admin_field: {e.code} {e.read().decode()}")
+
+
+def test_same_email_recreated_user_deactivates_old_profile_and_gets_new_customer():
+    """
+    Deleting an auth user leaves the old profile row linked to a dead UUID.
+    When a new auth user logs in with the same email, the hook deactivates the
+    orphaned profile and creates a distinct customer for the new UUID.
+    """
+    api_url, anon_key = _load_env()
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    db_url = os.getenv("DB_URL")
+    if not service_key or not db_url:
+        pytest.skip("SUPABASE_SERVICE_ROLE_KEY and DB_URL are required")
+
+    email = f"profile_recreate_{int(time.time())}@test.local"
+    first_password = "ProfileRecreateOne123!"
+    second_password = "ProfileRecreateTwo123!"
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    first_customer_id = None
+    second_customer_id = None
+
+    try:
+        first_user = _supabase_admin_create_user(api_url, service_key, email, first_password, ["user"])
+        first_user_id = first_user["id"]
+        ok, token_or_err = _supabase_login(api_url, anon_key, email, first_password)
+        assert ok, f"First login failed: {token_or_err}"
+
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT id, "_user", "_user_email" FROM customer WHERE "_user" = %s',
+                (first_user_id,),
+            )
+            row = cur.fetchone()
+            assert row is not None, "First login should create a customer profile"
+            first_customer_id, first_profile_user, first_profile_email = row
+            assert str(first_profile_user) == first_user_id
+            assert first_profile_email == email
+
+        _supabase_delete_user_by_email(api_url, service_key, email)
+        assert _supabase_get_user_id_by_email(api_url, service_key, email) is None
+
+        second_user = _supabase_admin_create_user(api_url, service_key, email, second_password, ["user"])
+        second_user_id = second_user["id"]
+        assert second_user_id != first_user_id, "Recreated auth user should have a new UUID"
+
+        ok, token_or_err = _supabase_login(api_url, anon_key, email, second_password)
+        assert ok, f"Second login failed: {token_or_err}"
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT "_user", "_user_email", "_user_prev", "_user_email_prev"
+                FROM customer
+                WHERE id = %s
+                """,
+                (first_customer_id,),
+            )
+            old_user, old_email, old_user_prev, old_email_prev = cur.fetchone()
+            assert old_user is None
+            assert old_email is None
+            assert str(old_user_prev) == first_user_id
+            assert old_email_prev == email
+
+            cur.execute(
+                'SELECT id, "_user", "_user_email" FROM customer WHERE "_user" = %s',
+                (second_user_id,),
+            )
+            row = cur.fetchone()
+            assert row is not None, "Second login should create a customer profile"
+            second_customer_id, second_profile_user, second_profile_email = row
+            assert second_customer_id != first_customer_id
+            assert str(second_profile_user) == second_user_id
+            assert second_profile_email == email
+    finally:
+        _supabase_delete_user_by_email(api_url, service_key, email)
+        with conn.cursor() as cur:
+            ids = [customer_id for customer_id in (first_customer_id, second_customer_id) if customer_id]
+            if ids:
+                cur.execute("DELETE FROM customer WHERE id = ANY(%s)", (ids,))
+            cur.execute(
+                'DELETE FROM customer WHERE "_user_email" = %s OR "_user_email_prev" = %s OR "_user_pending_link" = %s',
+                (email, email, email),
+            )
+        conn.close()

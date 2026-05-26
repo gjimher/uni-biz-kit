@@ -178,7 +178,11 @@
           // that resolves to the authenticated user's email at runtime
           "calculated": "\"_user_email\"",
           "required": false,
-          "unique": true,
+          // Not unique: profile records survive user deletion with _user_email still set
+          // (Security.md: no FK to auth.users, deactivation only fires at JWT issuance).
+          // An orphaned profile retains this email, so two profiles can legitimately share
+          // it. The _user unique index already ensures one active profile per user.
+          "unique": false,
           "min_length": 5,
           "max_length": 100,
           "description": "Customer's email address"

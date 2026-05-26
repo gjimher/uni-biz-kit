@@ -135,7 +135,7 @@ def test_role_profile_concept_injects_user_link_fields():
     }
 
     processor = SchemaProcessor(schema, security_config=security_config)
-    processor.process()
+    processed = processor.process()
 
     profile = processor.concept_map["employee_profile"]
     fields = {field["name"]: field for field in profile["fields"]}
@@ -149,6 +149,11 @@ def test_role_profile_concept_injects_user_link_fields():
     assert fields["_user_email"]["_fe_visibility"] == "internal"
     assert fields["_user_pending_link"]["unique"] is True
     assert fields["_user_pending_link"]["_fe_visibility"] == "internal"
+    assert fields["_user_prev"]["_be_sql_type"] == "UUID"
+    assert fields["_user_prev"]["unique"] is False
+    assert fields["_user_prev"]["_fe_visibility"] == "internal"
+    assert fields["_user_email_prev"]["_be_sql_type"] == "VARCHAR(255)"
+    assert fields["_user_email_prev"]["_fe_visibility"] == "internal"
 
 
 def test_role_profile_concept_requires_defaults_for_autocreated_required_fields():
@@ -227,6 +232,45 @@ def test_profile_dev_seed_uses_pending_email_records():
     assert 'INSERT INTO "employee_profile" ("_user_pending_link") VALUES' in sql
     assert "('employee@test.com')" in sql
     assert "admin@test.com" not in sql
+
+
+def test_profile_sync_uses_only_token_identity_not_auth_users_lookup():
+    schema = {
+        "concepts": [
+            {
+                "name": "employee_profile",
+                "plural_name": "employee_profiles",
+                "data_size": "s",
+                "fields": [],
+                "id_presentation": {"fields": [], "separator": " "},
+            }
+        ],
+    }
+    security_config = {
+        "authentication_required": True,
+        "roles": [
+            {"name": "employee", "profile_concept": "employee_profile"},
+        ],
+        "registration": {"allow": False, "role": "employee"},
+        "sso": {"enabled": False, "role_claim": "roles", "default_role": "employee"},
+        "users": [],
+    }
+    processor = SchemaProcessor(schema, security_config=security_config)
+    processor.process()
+
+    sql = "\n".join(generate_security_policies(
+        processor.concepts,
+        processor.concept_map,
+        processor.security_extended,
+        processor.workflow_extended,
+    ))
+
+    assert "auth.users" not in sql
+    assert "auth.identities" not in sql
+    assert "current_email := claims ->> 'email';" in sql
+    assert 'profile."_user_email" = target_email' in sql
+    assert 'profile."_user" <> target_user_id' in sql
+
 
 def test_security_rules_merging():
     schema = {
@@ -1909,3 +1953,208 @@ def test_anon_can_read_document_of_anon_readable_concept():
             if category_id:
                 cur.execute("DELETE FROM category WHERE id = %s;", (category_id,))
             conn.close()
+
+
+def _sync_role_profiles(cur, user_id, email, roles: list):
+    import json
+    cur.execute(
+        "SELECT sync_role_profiles(%s::uuid, %s, %s::jsonb)",
+        (str(user_id), email, json.dumps(roles)),
+    )
+
+
+@pytest.mark.integration
+def test_profile_deactivates_when_role_removed():
+    """sync_role_profiles with empty roles sets _user_prev/_user_email_prev and clears _user/_user_email."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, email FROM auth.users WHERE email = 'user1@test.com'")
+        row = cur.fetchone()
+        if not row:
+            pytest.skip("user1@test.com not found in auth.users")
+        user1_id, user1_email = row
+
+        cur.execute('SELECT id FROM customer WHERE "_user" = %s', (user1_id,))
+        row = cur.fetchone()
+        if not row:
+            pytest.skip("user1 has no linked customer profile")
+        customer_id = row[0]
+
+        try:
+            _sync_role_profiles(cur, user1_id, user1_email, [])
+
+            cur.execute(
+                'SELECT "_user", "_user_prev", "_user_email_prev" FROM customer WHERE id = %s',
+                (customer_id,),
+            )
+            user, user_prev, user_email_prev = cur.fetchone()
+            assert user is None, "Profile should be deactivated (_user = null)"
+            assert str(user_prev) == str(user1_id), "_user_prev should hold the previous UUID"
+            assert user_email_prev == user1_email, "_user_email_prev should hold the previous email"
+        finally:
+            _sync_role_profiles(cur, user1_id, user1_email, ["user"])
+
+
+@pytest.mark.integration
+def test_profile_reactivates_by_uuid_match():
+    """The same UUID that deactivated a profile reactivates the exact same record."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, email FROM auth.users WHERE email = 'user1@test.com'")
+        row = cur.fetchone()
+        if not row:
+            pytest.skip("user1@test.com not found in auth.users")
+        user1_id, user1_email = row
+
+        cur.execute('SELECT id FROM customer WHERE "_user" = %s', (user1_id,))
+        row = cur.fetchone()
+        if not row:
+            pytest.skip("user1 has no linked customer profile")
+        customer_id = row[0]
+
+        try:
+            _sync_role_profiles(cur, user1_id, user1_email, [])
+            _sync_role_profiles(cur, user1_id, user1_email, ["user"])
+
+            cur.execute(
+                'SELECT id, "_user", "_user_prev", "_user_email_prev" FROM customer WHERE "_user" = %s',
+                (user1_id,),
+            )
+            row = cur.fetchone()
+            assert row is not None, "Profile should be reactivated"
+            reactivated_id, user, user_prev, user_email_prev = row
+            assert reactivated_id == customer_id, "Same record should be reactivated, not a new one"
+            assert str(user) == str(user1_id)
+            assert user_prev is None, "_user_prev should be cleared after reactivation"
+            assert user_email_prev is None, "_user_email_prev should be cleared after reactivation"
+        finally:
+            _sync_role_profiles(cur, user1_id, user1_email, ["user"])
+
+
+@pytest.mark.integration
+def test_profile_not_claimed_by_different_uuid_same_email():
+    """A deactivated profile is NOT reactivated by a new UUID with the same email."""
+    import uuid as uuid_mod
+
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, email FROM auth.users WHERE email = 'user1@test.com'")
+        row = cur.fetchone()
+        if not row:
+            pytest.skip("user1@test.com not found in auth.users")
+        user1_id, user1_email = row
+
+        cur.execute('SELECT id FROM customer WHERE "_user" = %s', (user1_id,))
+        row = cur.fetchone()
+        if not row:
+            pytest.skip("user1 has no linked customer profile")
+        customer_id = row[0]
+
+        fake_uuid = str(uuid_mod.uuid4())
+
+        try:
+            _sync_role_profiles(cur, user1_id, user1_email, [])
+            _sync_role_profiles(cur, fake_uuid, user1_email, ["user"])
+
+            # Original deactivated profile must NOT be claimed
+            cur.execute('SELECT "_user", "_user_prev" FROM customer WHERE id = %s', (customer_id,))
+            user, user_prev = cur.fetchone()
+            assert user is None, "Deactivated profile should NOT be claimed by a different UUID"
+            assert str(user_prev) == str(user1_id), "_user_prev should still hold the original UUID"
+
+            # The new UUID should have received a fresh profile
+            cur.execute('SELECT id FROM customer WHERE "_user" = %s::uuid', (fake_uuid,))
+            assert cur.fetchone() is not None, "New UUID should have received a fresh profile"
+        finally:
+            cur.execute('DELETE FROM customer WHERE "_user" = %s::uuid', (fake_uuid,))
+            _sync_role_profiles(cur, user1_id, user1_email, ["user"])
+
+
+@pytest.mark.integration
+def test_profile_pending_link_claimed_on_first_login():
+    """A pre-seeded profile with _user_pending_link is claimed on first login by matching email."""
+    import uuid as uuid_mod
+
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+
+    pending_id = None
+    new_uuid = str(uuid_mod.uuid4())
+    pending_email = "pending_profile_test@test.local"
+
+    with conn.cursor() as cur:
+        try:
+            cur.execute(
+                'INSERT INTO customer ("_user_pending_link") VALUES (%s) RETURNING id',
+                (pending_email,),
+            )
+            pending_id = cur.fetchone()[0]
+
+            _sync_role_profiles(cur, new_uuid, pending_email, ["user"])
+
+            cur.execute(
+                'SELECT "_user", "_user_pending_link", "_user_prev" FROM customer WHERE id = %s',
+                (pending_id,),
+            )
+            user, pending_link, user_prev = cur.fetchone()
+            assert str(user) == new_uuid, "Pre-seeded profile should be claimed by the new user UUID"
+            assert pending_link is None, "_user_pending_link should be cleared after claim"
+            assert user_prev is None, "_user_prev should remain null (this was a first-time link)"
+        finally:
+            if pending_id:
+                cur.execute("DELETE FROM customer WHERE id = %s", (pending_id,))
+
+
+@pytest.mark.integration
+def test_profile_survives_auth_user_deletion():
+    """customer._user has no FK to auth.users — deleting a user does not cascade to their profile."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT COUNT(*) FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.referential_constraints rc
+                ON tc.constraint_name = rc.constraint_name
+                AND tc.constraint_schema = rc.constraint_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+              AND tc.table_schema = 'public'
+              AND tc.table_name = 'customer'
+              AND kcu.column_name = '_user'
+        """)
+        fk_count = cur.fetchone()[0]
+        assert fk_count == 0, "customer._user must NOT have a FK to auth.users (federation support)"
