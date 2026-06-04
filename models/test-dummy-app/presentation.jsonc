@@ -1,0 +1,9 @@
+{
+  "$schema": "../../schemas/presentation_schema.json",
+  "menu": [
+    {
+      "label": "Widgets",
+      "concept": "widget"
+    }
+  ]
+}

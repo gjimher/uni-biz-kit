@@ -23,7 +23,7 @@ def generate(ctx: Context) -> str:
     return f"""import {{ supabaseDataProvider }} from 'ra-supabase';
 import {{ supabaseClient }} from './supabaseClient';
 
-const supabaseUrl = import.meta.env.VITE_API_URL ?? import.meta.env.VITE_SUPABASE_URL;
+const supabaseUrl = window.location.origin + import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
 const baseDataProvider = supabaseDataProvider({{

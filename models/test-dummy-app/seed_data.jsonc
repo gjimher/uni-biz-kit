@@ -1,0 +1,14 @@
+{
+  "$schema": "../../schemas/seed_data_schema.json",
+  // No synthetic faker data — just the single mandatory record below.
+  "include_test_data": false,
+  "records": {
+    "widget": [
+      {
+        "id": "seed-widget",
+        "name": "Seeded Widget",
+        "quantity": 7
+      }
+    ]
+  }
+}

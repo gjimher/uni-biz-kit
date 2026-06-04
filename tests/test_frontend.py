@@ -77,6 +77,48 @@ class TestAppFrontend:
         finally:
             os.chdir(original_cwd)
 
+    @pytest.mark.integration
+    @pytest.mark.timeout(600)  # 10 minutes timeout
+    def test_dummy_frontend_builds(self):
+        """Generate the second dev environment's frontend (UBK_DEV_MODEL) and build it.
+
+        Mirrors the primary frontend test for the +50-offset secondary model: it
+        proves a second app can be generated and produce a working production bundle.
+        """
+        from conftest import generate_secondary_model
+
+        output_dir = generate_secondary_model()
+        frontend_dir = output_dir / 'frontend'
+        original_cwd = os.getcwd()
+
+        try:
+            os.chdir(frontend_dir)
+
+            # Install dependencies only if missing (node_modules is preserved between runs).
+            node_modules = frontend_dir / 'node_modules'
+            if not node_modules.exists():
+                print("Installing npm dependencies: executing 'npm install --silent'")
+                install_result = subprocess.run(
+                    ['npm', 'install', '--silent'],
+                    stdout=sys.stdout,
+                    stderr=sys.stderr,
+                    timeout=600,
+                )
+                assert install_result.returncode == 0, f"npm install failed with {install_result=}"
+
+            print("Building dummy frontend: executing 'npm run build -- --mode development'")
+            build_result = subprocess.run(
+                ['npm', 'run', 'build', '--', '--mode', 'development'],
+                stdout=sys.stdout,
+                stderr=sys.stderr,
+                timeout=600,
+            )
+            assert build_result.returncode == 0, f"Dummy frontend build failed. {build_result=}"
+
+            print("✓ Dummy frontend generated and built successfully!")
+        finally:
+            os.chdir(original_cwd)
+
     def test_filter_list_fields(self):
         """Test the logic for filtering list fields based on string modifiers."""
         from unibizkit.react_admin_generator import ReactAdminGenerator

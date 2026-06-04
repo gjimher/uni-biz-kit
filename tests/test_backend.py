@@ -16,7 +16,7 @@ import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 import psycopg2
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 from unibizkit.cli import CLI
 
 
@@ -52,10 +52,11 @@ def _http_json(method, url, *, headers=None, body=None, timeout=20):
 
 
 def _api_env():
-    load_dotenv(Path("test-app/frontend/.env.development"), override=True)
-    api_url = os.getenv("VITE_SUPABASE_URL")
-    anon_key = os.getenv("VITE_SUPABASE_KEY")
-    assert api_url and anon_key, "VITE_SUPABASE_URL / VITE_SUPABASE_KEY must be present"
+    # Tests reach Supabase (Kong) directly via backend/.env, not the Vite proxy.
+    values = dotenv_values(Path("test-app/backend/.env"))
+    api_url = values.get("SUPABASE_URL")
+    anon_key = values.get("SUPABASE_ANON_KEY")
+    assert api_url and anon_key, "SUPABASE_URL / SUPABASE_ANON_KEY must be present in backend/.env"
     return api_url, anon_key
 
 
@@ -187,6 +188,53 @@ class TestAppBackend:
 
         finally:
             os.chdir(original_cwd)
+
+    @pytest.mark.integration
+    @pytest.mark.timeout(600)  # 10 minutes timeout
+    def test_dummy_backend_postgres_responds(self):
+        """Smoke-test the second dev environment's Supabase (UBK_DEV_MODEL).
+
+        Generates the secondary model on the +50 port offset, brings up its own
+        Supabase stack, resets its schema/seed data, then connects to its Postgres
+        and verifies the generated schema is present — i.e. the second environment's
+        database is live and independent from the primary one. Kept model-agnostic
+        so it works with any UBK_DEV_MODEL, not just test-dummy-app.
+        """
+        from conftest import generate_secondary_model, SECONDARY_MODEL
+
+        output_dir = generate_secondary_model()
+        backend_dir = output_dir / "backend"
+
+        # dev-supabase-start.py self-fronts a temporary /api proxy on a cold start,
+        # so no frontend dev server is needed here.
+        print(f"Running dev-supabase-start.py for {SECONDARY_MODEL}...")
+        create_script = output_dir / "bin" / "dev-supabase-start.py"
+        result = _run([sys.executable, str(create_script)], timeout=600)
+        assert result.returncode == 0, f"dev-supabase-start.py failed with code {result.returncode}"
+
+        print(f"Running dev-supabase-reset-schema-and-data.py for {SECONDARY_MODEL}...")
+        reset_script = output_dir / "bin" / "dev-supabase-reset-schema-and-data.py"
+        result = _run([sys.executable, str(reset_script), "--force"], timeout=120)
+        assert result.returncode == 0, f"dev-supabase-reset-schema-and-data.py failed with code {result.returncode}"
+
+        # Read straight from the dummy .env file (do not pollute os.environ, so the
+        # primary tests that follow still resolve their own DB_URL).
+        db_url = dotenv_values(backend_dir / ".env").get("DB_URL")
+        assert db_url, f"DB_URL must be present in {SECONDARY_MODEL}/backend/.env"
+
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_type = 'BASE TABLE';"
+                )
+                (table_count,) = cur.fetchone()
+                assert table_count > 0, (
+                    f"{SECONDARY_MODEL} backend has no tables in the public schema"
+                )
+        finally:
+            conn.close()
 
     @pytest.mark.integration
     @pytest.mark.timeout(60)

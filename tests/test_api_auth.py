@@ -24,30 +24,27 @@ from smtp_mock import smtp_emails as _smtp_emails, smtp_lock as _smtp_lock, extr
 # ---------------------------------------------------------------------------
 
 def _load_env():
+    # Tests reach Supabase (Kong) directly via backend/.env, not the Vite proxy.
     load_dotenv(os.path.abspath("test-app/backend/.env"))
-    load_dotenv(os.path.abspath("test-app/frontend/.env.development"))
-    api_url = os.getenv("VITE_SUPABASE_URL")
-    anon_key = os.getenv("VITE_SUPABASE_KEY")
-    assert api_url, "VITE_SUPABASE_URL not found in frontend .env.development"
-    assert anon_key, "VITE_SUPABASE_KEY not found in frontend .env.development"
+    api_url = os.getenv("SUPABASE_URL")
+    anon_key = os.getenv("SUPABASE_ANON_KEY")
+    assert api_url, "SUPABASE_URL not found in backend/.env"
+    assert anon_key, "SUPABASE_ANON_KEY not found in backend/.env"
     return api_url, anon_key
 
 
 def _normalize_confirmation_url(url: str, api_url: str) -> str:
-    """Rewrite proxy-based confirmation URLs to direct Supabase URLs.
+    """Rewrite a proxy-based confirmation URL to hit Supabase (Kong) directly.
 
-    Email links may point to the Vite dev proxy (e.g. http://localhost:3000/test/api/...)
-    instead of Supabase directly. Tests must not depend on the proxy being alive, so we
-    strip the frontend base and route directly to Supabase.
+    Email links point at the Vite dev proxy (external_url), e.g.
+    http://localhost:3300/test/api/auth/v1/verify?...  Tests must not depend on the
+    proxy being alive, so splice the Supabase path onto the direct Kong api_url.
     """
-    frontend_base_url = os.getenv("VITE_BASE_URL", "")
-    base_uri = os.getenv("VITE_BASE_URI", "/")
-    if not frontend_base_url:
+    marker = "/auth/v1/"
+    idx = url.find(marker)
+    if idx == -1:
         return url
-    proxy_prefix = frontend_base_url + base_uri.rstrip("/") + "/api"
-    if url.startswith(proxy_prefix + "/"):
-        return url.replace(proxy_prefix, api_url, 1)
-    return url
+    return api_url.rstrip("/") + url[idx:]
 
 
 def _supabase_signup(api_url: str, anon_key: str, email: str, password: str) -> dict:
@@ -506,7 +503,7 @@ def test_forgot_password_flow(smtp_server):
     links = _extract_links(content)
     recovery_links = [l for l in links if any(k in l for k in ("recovery", "reset", "verify", "token"))]
     assert recovery_links, f"No recovery link found in email. All links: {links}"
-    recovery_url = recovery_links[0]
+    recovery_url = _normalize_confirmation_url(recovery_links[0], api_url)
     print(f"Recovery URL: {recovery_url}")
 
     # -- Step 4: Follow link and parse session tokens from redirect Location header
@@ -552,17 +549,16 @@ def test_seeded_users_login_and_rls():
     is enforced correctly: only admins can insert into product, and only admins
     can write admin_* fields (customer.admin_field).
     """
-    frontend_dir = os.path.abspath("test-app/frontend")
     security_extended_file = os.path.abspath("test-app/security_extended.json")
     assert os.path.exists(security_extended_file), "security_extended.json not found"
 
     with open(security_extended_file, "r") as f:
         auth_users = json.load(f)["users"]
 
-    load_dotenv(os.path.join(frontend_dir, ".env.development"))
-    api_url = os.getenv("VITE_SUPABASE_URL")
-    anon_key = os.getenv("VITE_SUPABASE_KEY")
-    assert api_url and anon_key, "VITE_SUPABASE_URL / VITE_SUPABASE_KEY not found in frontend .env.development"
+    load_dotenv(os.path.abspath("test-app/backend/.env"))
+    api_url = os.getenv("SUPABASE_URL")
+    anon_key = os.getenv("SUPABASE_ANON_KEY")
+    assert api_url and anon_key, "SUPABASE_URL / SUPABASE_ANON_KEY not found in backend/.env"
 
     user1_customer_id = None
     user1_auth_headers = None

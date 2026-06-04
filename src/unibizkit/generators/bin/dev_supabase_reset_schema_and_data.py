@@ -76,8 +76,9 @@ if not db_url:
     sys.exit("Error: DB_URL not found in backend/.env")
 
 service_role_key = backend_env.get('SUPABASE_SERVICE_ROLE_KEY')
-frontend_env = parse_env(frontend_dir / '.env.development')
-api_url = frontend_env.get('VITE_SUPABASE_URL')
+# Reach Supabase (Kong) directly via backend/.env, not the Vite proxy, so reset
+# works without a running dev server.
+api_url = backend_env.get('SUPABASE_URL')
 
 conn = psycopg2.connect(db_url)
 conn.autocommit = True

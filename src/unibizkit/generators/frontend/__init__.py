@@ -81,11 +81,15 @@ class ReactAdminGenerator:
         _write(ctx.output_dir / ".eslintrc.json", eslintrc.generate())
         _write(ctx.output_dir / "index.html", index_html.generate(ctx))
         base_prefix = base_uri.rstrip("/")
-        api_url = f"http://localhost:{dev_ports.FRONTEND}{base_prefix}/api"
+        # The app talks to Supabase through the Vite /api proxy. Keep this a relative
+        # path (resolved against the serving origin in the browser) so the app works
+        # on whatever host/port serves it — dev server or preview — with no hardcoded
+        # port. Tests/tooling use the direct Kong URL in backend/.env instead.
+        api_path = f"{base_prefix}/api"
         _upsert_env(ctx.output_dir / ".env.development", {
             "VITE_BASE_URL": f"http://localhost:{dev_ports.FRONTEND}",
             "VITE_BASE_URI": base_uri,
-            "VITE_API_URL": api_url,
+            "VITE_SUPABASE_URL": api_path,
         })
 
         # src/

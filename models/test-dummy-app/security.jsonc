@@ -1,0 +1,35 @@
+{
+  "$schema": "../../schemas/security_schema.json",
+  "authentication_required": true,
+  // No self-registration and no SSO: this model is only a smoke test.
+  "registration": {
+    "allow": false
+  },
+  "sso": {
+    "enabled": false
+  },
+  "roles": [
+    {
+      "name": "admin",
+      "description": "System Administrator"
+    }
+  ],
+  // Single seed user (development only).
+  "users": [
+    {
+      "email": "admin@dummy.com",
+      "password": "adminadmin",
+      "roles": ["admin"]
+    }
+  ],
+  // _anon read access lets the backend smoke test read the seeded widget through
+  // the public PostgREST endpoint without authenticating.
+  "rules_level_2": [
+    {
+      "role": "_anon",
+      "concept": "widget",
+      "field": "*",
+      "access": "read"
+    }
+  ]
+}

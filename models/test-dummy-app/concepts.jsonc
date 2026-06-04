@@ -1,0 +1,36 @@
+{
+  "$schema": "../../schemas/concepts_schema.json",
+  "version": "1.0.0",
+  "name": "Dummy App",
+  "description": "Minimal model used to smoke-test a second generated environment (UBK_DEV_MODEL_2). It exists only to prove that a second app can be generated, deployed to its own Supabase and served on a +50 port offset.",
+  "concepts": [
+    {
+      "name": "widget",
+      "plural_name": "widgets",
+      "description": "A trivial concept with a single seeded record, used to verify the generated app is correctly wired to its own Supabase instance.",
+      "id_presentation": {
+        "fields": ["name"],
+        "show": true
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "unique": true,
+          "min_length": 2,
+          "max_length": 100,
+          "description": "Widget name"
+        },
+        {
+          "name": "quantity",
+          "type": "integer",
+          "required": true,
+          "min": 0,
+          "default": 0,
+          "description": "How many widgets are in stock"
+        }
+      ]
+    }
+  ]
+}

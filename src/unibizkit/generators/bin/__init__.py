@@ -9,8 +9,8 @@ from . import (
 )
 
 
-def generate(bin_dir: Path, security_config: Dict[str, Any]):
-    dev_supabase_start.generate(bin_dir)
+def generate(bin_dir: Path, security_config: Dict[str, Any], base_uri: str = "/"):
+    dev_supabase_start.generate(bin_dir, base_uri)
     dev_supabase_stop.generate(bin_dir)
     dev_supabase_remove.generate(bin_dir)
     dev_supabase_reset_schema_and_data.generate(bin_dir)

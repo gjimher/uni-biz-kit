@@ -18,6 +18,9 @@ _base = 3000 + 100 * _env_num
 _FRONTEND_PORT = _base + 0
 _PREVIEW_PORT = _base + 1
 
+# Second dev environment (UBK_DEV_MODEL), served on a +50 port offset.
+from conftest import SECONDARY_MODEL, SECONDARY_PREVIEW_PORT as _DUMMY_PREVIEW_PORT
+
 
 @pytest.fixture(scope="module")
 def app_server(xprocess, request):
@@ -36,6 +39,9 @@ def app_server(xprocess, request):
     if result.returncode != 0:
         pytest.fail(f"Frontend build failed:\n{result.stderr}")
 
+    # `vite preview` serves the production build and proxies /api -> Kong (preview.proxy
+    # in vite.config.js). The app resolves VITE_SUPABASE_URL against this same origin,
+    # so a single server is enough — no separate dev server needed.
     class Starter(ProcessStarter):
         pattern = "Local:"
         env = os.environ.copy()
@@ -52,6 +58,51 @@ def app_server(xprocess, request):
     xprocess.ensure("app_server_pure", Starter)
     yield f"http://localhost:{_PREVIEW_PORT}"
     xprocess.getinfo("app_server_pure").terminate()
+
+
+@pytest.fixture(scope="module")
+def dummy_app_server(xprocess, request):
+    """Build and serve the second dev environment's frontend on the +50 preview port."""
+    if not request.config.getoption("--slow"):
+        pytest.skip("need --slow option to run")
+
+    frontend_dir = os.path.abspath(f"{SECONDARY_MODEL}/frontend")
+
+    import subprocess
+    result = subprocess.run(
+        ["npm", "run", "build", "--prefix", frontend_dir, "--", "--mode", "development"],
+        capture_output=True, text=True, cwd=frontend_dir
+    )
+    if result.returncode != 0:
+        pytest.fail(f"Dummy frontend build failed:\n{result.stderr}")
+
+    class Starter(ProcessStarter):
+        pattern = "Local:"
+        env = os.environ.copy()
+        args = ["npm", "--prefix", frontend_dir, "run", "preview", "--", "--port", str(_DUMMY_PREVIEW_PORT)]
+        cwd = frontend_dir
+        timeout = 30
+
+    try:
+        xprocess.getinfo("dummy_app_server_pure").terminate()
+    except Exception:
+        pass
+
+    xprocess.ensure("dummy_app_server_pure", Starter)
+    yield f"http://localhost:{_DUMMY_PREVIEW_PORT}"
+    xprocess.getinfo("dummy_app_server_pure").terminate()
+
+
+def test_dummy_app_server_responds(dummy_app_server):
+    """Minimal smoke test: the second environment's frontend serves HTTP 200."""
+    import urllib.request
+
+    with urllib.request.urlopen(dummy_app_server + "/", timeout=15) as resp:
+        assert resp.status == 200, f"Dummy app server returned {resp.status}"
+        body = resp.read().decode("utf-8", errors="replace")
+    assert "<div id=\"root\">" in body or "<title>" in body, (
+        "Dummy app server response did not look like the SPA index page"
+    )
 
 
 def test_create_product_as_user(page: Page, app_server):
@@ -288,8 +339,7 @@ def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):
         import requests
         from dotenv import load_dotenv
         load_dotenv("test-app/backend/.env")
-        load_dotenv("test-app/frontend/.env.development")
-        api_url = os.getenv("VITE_SUPABASE_URL")
+        api_url = os.getenv("SUPABASE_URL")
         service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         
         if api_url and service_role_key:

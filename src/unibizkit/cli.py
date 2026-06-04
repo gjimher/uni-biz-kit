@@ -17,6 +17,7 @@ from .schema_loader import SchemaLoader, SchemaValidationError
 from .schema_processor import SchemaProcessor
 from .supabase_generator import SupabaseGenerator
 from .react_admin_generator import ReactAdminGenerator
+from .generators import dev_ports
 from .generators.bin import generate as generate_bin_scripts
 
 # Set up logging
@@ -433,7 +434,13 @@ Examples:
         """Handle the generate command."""
         
         schema_path, output_dir = self._resolve_paths(args.input_path, args.output_dir)
-        
+
+        # The UBK_DEV_MODEL is the second dev environment: generate it on the +50
+        # port offset so it can run alongside the primary model (test-app) within
+        # the same UBK_DEV_ENV_NUM block.
+        dev_model = os.environ.get("UBK_DEV_MODEL", "test-dummy-app")
+        dev_ports.set_secondary(schema_path.parent.name == dev_model)
+
         logger.info(f"Generating application from schema: {schema_path}")
         
         # Validate schema path existence
@@ -643,7 +650,8 @@ Examples:
             # Generate bin/ scripts
             bin_dir = output_dir / "bin"
             bin_dir.mkdir(exist_ok=True)
-            generate_bin_scripts(bin_dir, schema_loader.security_config)
+            base_uri = schema_loader.deployment_config.get("base_uri", "/")
+            generate_bin_scripts(bin_dir, schema_loader.security_config, base_uri)
         
         # Generate React-Admin frontend
         if not args.skip_frontend:

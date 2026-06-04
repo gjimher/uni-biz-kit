@@ -1,15 +1,7 @@
 from pathlib import Path
+from .. import dev_ports
 
 SUPABASE_CLI_VERSION = "2.88.1"
-
-_SCRIPT_HEAD = f'''\
-#!/usr/bin/python3
-"""Create and start Supabase for local development."""
-import sys
-from pathlib import Path
-
-SUPABASE_CLI_VERSION = "{SUPABASE_CLI_VERSION}"
-'''
 
 _SCRIPT_BODY = r'''
 if sys.prefix == sys.base_prefix:
@@ -23,8 +15,14 @@ import json
 import hashlib
 import os
 import re
+import socket
+import socketserver
 import subprocess
+import threading
 import tomllib
+import http.server
+import urllib.error
+import urllib.request
 
 root_dir = Path(__file__).parent.parent
 backend_dir = root_dir / 'backend'
@@ -35,6 +33,80 @@ delta_toml = backend_dir / 'supabase_config_dev.toml'
 sso_delta_toml = backend_dir / 'supabase_sso_config_dev.toml'
 
 os.chdir(backend_dir)
+
+
+# --- Temporary /api -> Kong proxy for a cold `supabase start` ----------------
+# `supabase start` verifies storage through [api].external_url, which is set to the
+# Vite dev proxy (http://localhost:_FRONTEND_PORT/<base>/api) so auth email links
+# and storage URLs stay same-origin with the SPA. When no dev server is running
+# that URL is unreachable and the CLI rolls back the otherwise-healthy stack with a
+# "connection refused" on .../storage/v1/bucket. To make a cold start self-sufficient
+# we bring up a tiny stdlib proxy on the frontend port for the duration of `start`
+# only, forwarding <base>/api/* to Kong (stripping the prefix, exactly like Vite).
+# If a real dev server is already listening we leave it alone.
+def _port_in_use(port):
+    with socket.socket() as probe:
+        probe.settimeout(0.5)
+        return probe.connect_ex(('127.0.0.1', port)) == 0
+
+
+class _ApiProxyHandler(http.server.BaseHTTPRequestHandler):
+    def _forward(self):
+        if not self.path.startswith(_API_PROXY_PREFIX):
+            self.send_error(404)
+            return
+        target = f'http://127.0.0.1:{_SUPABASE_API_PORT}{self.path[len(_API_PROXY_PREFIX):] or "/"}'
+        length = int(self.headers.get('Content-Length') or 0)
+        body = self.rfile.read(length) if length else None
+        req = urllib.request.Request(target, data=body, method=self.command)
+        for key, value in self.headers.items():
+            if key.lower() not in ('host', 'content-length'):
+                req.add_header(key, value)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                self._relay(resp.status, resp.getheaders(), resp.read())
+        except urllib.error.HTTPError as exc:
+            self._relay(exc.code, exc.headers.items(), exc.read())
+        except Exception:
+            self.send_error(502)
+
+    def _relay(self, status, headers, payload):
+        self.send_response(status)
+        for key, value in headers:
+            if key.lower() not in ('transfer-encoding', 'connection', 'content-length'):
+                self.send_header(key, value)
+        self.send_header('Content-Length', str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def __getattr__(self, name):
+        # Forward every HTTP method (GET/HEAD/POST/...) through the same handler.
+        if name.startswith('do_'):
+            return self._forward
+        raise AttributeError(name)
+
+    def log_message(self, *args):
+        pass
+
+
+class _ProxyServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+def _supabase_start():
+    """Run `supabase start`, fronting it with the temporary /api proxy if needed."""
+    httpd = None
+    if not _port_in_use(_FRONTEND_PORT):
+        httpd = _ProxyServer(('127.0.0.1', _FRONTEND_PORT), _ApiProxyHandler)
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        return subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'start'],
+                              stdout=sys.stdout, stderr=sys.stderr)
+    finally:
+        if httpd:
+            httpd.shutdown()
+            httpd.server_close()
 
 
 def _parse_toml_sections(text):
@@ -190,8 +262,7 @@ def _restart_supabase(reason):
                             stdout=sys.stdout, stderr=sys.stderr)
     if result.returncode != 0:
         sys.exit(f"supabase stop failed with code {result.returncode}")
-    result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'start'],
-                            stdout=sys.stdout, stderr=sys.stderr)
+    result = _supabase_start()
     if result.returncode != 0:
         sys.exit(f"supabase start failed with code {result.returncode}")
 
@@ -212,8 +283,7 @@ if config_toml.exists():
         if config_changed:
             for d in delta_files:
                 _apply_delta(config_toml, d)
-        result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'start'],
-                                stdout=sys.stdout, stderr=sys.stderr)
+        result = _supabase_start()
         if result.returncode != 0:
             sys.exit(f"supabase start failed with code {result.returncode}")
         functions_signature_path.write_text(current_functions_signature)
@@ -225,8 +295,7 @@ if config_toml.exists():
         )
         if status_check.returncode != 0:
             print("Config is up to date but Supabase is not running — starting...")
-            result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'start'],
-                                    stdout=sys.stdout, stderr=sys.stderr)
+            result = _supabase_start()
             if result.returncode != 0:
                 sys.exit(f"supabase start failed with code {result.returncode}")
             functions_signature_path.write_text(current_functions_signature)
@@ -250,8 +319,7 @@ for d in delta_files:
     _apply_delta(config_toml, d)
 
 print("Starting Supabase...")
-result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'start'],
-                        stdout=sys.stdout, stderr=sys.stderr)
+result = _supabase_start()
 if result.returncode != 0:
     sys.exit(f"supabase start failed with code {result.returncode}")
 functions_signature_path.write_text(current_functions_signature)
@@ -268,17 +336,23 @@ result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'status', '-
 if result.returncode != 0:
     sys.exit(f"supabase status failed: {result.stderr}")
 status = json.loads(result.stdout)
-api_url = status['API_URL']
 anon_key = status['ANON_KEY']
 db_url = status['DB_URL']
 service_role_key = status['SERVICE_ROLE_KEY']
 
+# backend/.env is read by tooling/tests/reset, which reach the API without a running
+# dev server, so point them straight at Kong (status['API_URL'] is [api].external_url,
+# i.e. the Vite proxy, which would need the dev server up). The app's frontend .env
+# (VITE_SUPABASE_URL = the proxy) is written by the frontend generator; here we only
+# add the anon key it needs.
+supabase_url = f"http://localhost:{_SUPABASE_API_PORT}"
+
 print("Writing .env files...")
 (backend_dir / '.env').write_text(
-    f"DB_URL={db_url}\nSUPABASE_URL={api_url}\nSUPABASE_SERVICE_ROLE_KEY={service_role_key}\n"
+    f"DB_URL={db_url}\nSUPABASE_URL={supabase_url}\n"
+    f"SUPABASE_ANON_KEY={anon_key}\nSUPABASE_SERVICE_ROLE_KEY={service_role_key}\n"
 )
 _upsert_env(frontend_dir / '.env.development', {
-    'VITE_SUPABASE_URL': api_url,
     'VITE_SUPABASE_KEY': anon_key,
 })
 
@@ -286,7 +360,21 @@ print("Supabase is ready.")
 '''
 
 
-def generate(bin_dir: Path):
+def generate(bin_dir: Path, base_uri: str = "/"):
+    # base_uri always ends with / (normalized by SchemaProcessor); the cold-start
+    # proxy strips "<base>/api" before forwarding to Kong, matching vite.config.js.
+    base_prefix = base_uri.rstrip("/")
+    head = f'''\
+#!/usr/bin/python3
+"""Create and start Supabase for local development."""
+import sys
+from pathlib import Path
+
+SUPABASE_CLI_VERSION = "{SUPABASE_CLI_VERSION}"
+_FRONTEND_PORT = {dev_ports.FRONTEND}
+_SUPABASE_API_PORT = {dev_ports.SUPABASE_API}
+_API_PROXY_PREFIX = "{base_prefix}/api"
+'''
     script = bin_dir / "dev-supabase-start.py"
-    script.write_text(_SCRIPT_HEAD + _SCRIPT_BODY)
+    script.write_text(head + _SCRIPT_BODY)
     script.chmod(0o755)

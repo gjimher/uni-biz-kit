@@ -112,11 +112,12 @@ def request_json(method, url, headers, body=None):
 def main():
     user, password, function_name, payload = parse_args(sys.argv[1:])
     root_dir = Path(__file__).parent.parent
-    frontend_env = load_env(root_dir / "frontend" / ".env.development")
-    api_url = frontend_env.get("VITE_SUPABASE_URL")
-    anon_key = frontend_env.get("VITE_SUPABASE_KEY")
+    # Reach Supabase (Kong) directly via backend/.env, not the Vite proxy.
+    backend_env = load_env(root_dir / "backend" / ".env")
+    api_url = backend_env.get("SUPABASE_URL")
+    anon_key = backend_env.get("SUPABASE_ANON_KEY")
     if not api_url or not anon_key:
-        sys.exit("VITE_SUPABASE_URL / VITE_SUPABASE_KEY not found in frontend/.env.development")
+        sys.exit("SUPABASE_URL / SUPABASE_ANON_KEY not found in backend/.env")
 
     if password is None:
         password = find_seed_password(root_dir, user)

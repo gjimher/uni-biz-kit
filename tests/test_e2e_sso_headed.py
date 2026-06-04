@@ -123,10 +123,9 @@ def _sso_login_and_verify_role(browser, email, expected_role, print_reminder=Fal
 
 def _supabase_admin(path, method="GET", **kwargs):
     load_dotenv(os.path.abspath("test-app/backend/.env"))
-    load_dotenv(os.path.abspath("test-app/frontend/.env.development"))
-    api_url = os.getenv("VITE_SUPABASE_URL")
+    api_url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-    assert api_url and key, "Missing VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
+    assert api_url and key, "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
     headers = {"Authorization": f"Bearer {key}", "apikey": key}
     resp = requests.request(method, f"{api_url}/auth/v1/admin{path}", headers=headers, **kwargs)
     resp.raise_for_status()

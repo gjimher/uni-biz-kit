@@ -42,6 +42,17 @@ export default defineConfig(() => {
         },
       },
     },
+    // Mirror the /api -> Kong proxy for `vite preview` so the production build is
+    // served same-origin (the app resolves VITE_SUPABASE_URL against its origin).
+    preview: {
+      proxy: {
+        '__API_PROXY_PATH__': {
+          target: 'http://localhost:__SUPABASE_PORT__',
+          rewrite: (path) => path.replace(/^__API_PROXY_PATH_RE__/, ''),
+          changeOrigin: true,
+        },
+      },
+    },
   };
 });
 """
