@@ -324,87 +324,33 @@ def _generate_related_validation_component(ctx: Context, concept: Dict[str, Any]
     validations = _validations_for_concept(ctx, concept)
     if not validations:
         return ""
-    validation_json = json.dumps(validations)
     required_fields = [
         field["name"]
         for field in concept["fields"]
         if field["_be_not_null"] and field["_fe_visibility"] == "editable"
     ]
     required_fields_json = json.dumps(required_fields)
-    suffix = concept["name"].upper()
-    comp_name = f"RELATED_VALIDATION_INPUT_{concept['name'].upper()}"
-    validate_name = f"validate_{concept['name']}_related_fields"
+    cname = concept["name"]
+    suffix = cname.upper()
+    comp_name = f"RELATED_VALIDATION_INPUT_{suffix}"
+    validate_name = f"validate_{cname}_related_fields"
+    # The validation data and the pure logic live in presentation/lib/validations.js
+    # so they are shared with custom presentation pages (see component imports below).
     return f"""
-const RELATED_VALIDATIONS_{concept['name'].upper()} = {validation_json};
-const REQUIRED_FIELDS_{concept['name'].upper()} = {required_fields_json};
-const FREE_ENTRY_OPTION_{suffix} = '(type any value)';
+const REQUIRED_FIELDS_{suffix} = {required_fields_json};
 
-const compatibleRows_{suffix} = (validation, values, ignoredColumn = null) => {{
-  let rows = validation.rows;
-  for (const [index, column] of validation.columns.entries()) {{
-    if (column === ignoredColumn) continue;
-    const value = values[column];
-    if (value === undefined || value === null || value === '') continue;
-    if (rows.some(row => row[index] === value)) {{
-      rows = rows.filter(row => row[index] === value);
-    }} else {{
-      rows = rows.filter(row => row[index] === '*');
-    }}
-  }}
-  return rows;
-}};
-
-const matchesValidationRow_{suffix} = (validation, values) =>
-  compatibleRows_{suffix}(validation, values).some(row =>
-    validation.columns.every((column, index) => row[index] === '*' || values[column] === row[index])
-  );
-
-const optionInfo_{suffix} = (validation, values, source) => {{
-  const sourceIndex = validation.columns.indexOf(source);
-  const rows = compatibleRows_{suffix}(validation, values, source);
-  const concrete = Array.from(new Set(rows.map(row => row[sourceIndex]).filter(value => value !== '*'))).sort();
-  const options = rows.some(row => row[sourceIndex] === '*') ? [...concrete, FREE_ENTRY_OPTION_{suffix}] : concrete;
-  return {{ options }};
-}};
-
-const firstValidationForSource_{suffix} = (source) =>
-  RELATED_VALIDATIONS_{concept['name'].upper()}.find(validation => validation.columns.includes(source));
-
-const validationErrorText_{suffix} = (error) => {{
-  if (!error) return '';
-  if (typeof error === 'string') return error;
-  if (typeof error.message === 'string') return error.message;
-  if (error.message) return validationErrorText_{suffix}(error.message);
-  return '';
-}};
-
-const {validate_name} = (values) => {{
-  const errors = {{}};
-  for (const field of REQUIRED_FIELDS_{concept['name'].upper()}) {{
-    if (values[field] === undefined || values[field] === null || values[field] === '') {{
-      errors[field] = 'Required';
-    }}
-  }}
-  for (const validation of RELATED_VALIDATIONS_{concept['name'].upper()}) {{
-    const complete = validation.columns.every(column => values[column] !== undefined && values[column] !== null && values[column] !== '');
-    if (!complete) continue;
-    if (!matchesValidationRow_{suffix}(validation, values)) {{
-      for (const column of validation.columns) errors[column] = 'Invalid combination';
-    }}
-  }}
-  return errors;
-}};
+const {validate_name} = (values) => validateRecord('{cname}', values, REQUIRED_FIELDS_{suffix});
 
 const {comp_name} = ({{ source }}) => {{
   const {{ watch, setValue, formState }} = useFormContext();
   const values = watch();
-  const validation = firstValidationForSource_{suffix}(source);
+  const validation = firstValidationForSource('{cname}', source);
   const currentValue = values[source] ?? '';
-  const {{ options }} = validation ? optionInfo_{suffix}(validation, values, source) : {{ options: [FREE_ENTRY_OPTION_{suffix}] }};
+  const {{ options }} = validation ? optionsFor(validation, source, values) : {{ options: [FREE_ENTRY_OPTION] }};
   const fieldError = formState.errors?.[source];
 
   const setFieldValue = (value) => {{
-    const nextValue = value === FREE_ENTRY_OPTION_{suffix} ? '' : value;
+    const nextValue = value === FREE_ENTRY_OPTION ? '' : value;
     setValue(source, nextValue, {{ shouldDirty: true, shouldValidate: true }});
   }};
 
@@ -419,8 +365,8 @@ const {comp_name} = ({{ source }}) => {{
     if (!validation) return;
     for (const column of validation.columns) {{
       if (values[column]) continue;
-      const {{ options: columnOptions }} = optionInfo_{suffix}(validation, values, column);
-      const concrete = columnOptions.filter(option => option !== FREE_ENTRY_OPTION_{suffix});
+      const {{ options: columnOptions }} = optionsFor(validation, column, values);
+      const concrete = columnOptions.filter(option => option !== FREE_ENTRY_OPTION);
       if (columnOptions.length === 1 && concrete.length === 1) {{
         setValue(column, concrete[0], {{ shouldDirty: true, shouldValidate: true }});
       }}
@@ -454,7 +400,7 @@ const {comp_name} = ({{ source }}) => {{
           margin="none"
           size="small"
           error={{!!fieldError}}
-          helperText={{validationErrorText_{suffix}(fieldError)}}
+          helperText={{validationErrorText(fieldError)}}
         />
       )}}
     />
@@ -564,6 +510,10 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
 
     if has_prefill or validation_concepts:
         component_imports.append("import { useFormContext } from 'react-hook-form';")
+    if validation_concepts:
+        component_imports.append(
+            "import { firstValidationForSource, optionsFor, validateRecord, validationErrorText, FREE_ENTRY_OPTION } from '../../presentation/lib/validations';"
+        )
     if has_prefill:
         component_imports.append("import { useQueryClient } from '@tanstack/react-query';")
     if has_documents:

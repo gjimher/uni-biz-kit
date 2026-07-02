@@ -44,6 +44,17 @@ class TestAppFrontend:
         assert output_dir.exists()
 
         frontend_dir = output_dir / 'frontend'
+
+        # The shared helper library for custom presentation pages must be generated.
+        lib_dir = frontend_dir / 'src' / 'presentation' / 'lib'
+        for module in ('auth.js', 'profile.js', 'payment.js', 'validations.js', 'format.js', 'workflow.js', 'storage.js', 'index.js'):
+            assert (lib_dir / module).exists(), f"Missing generated presentation lib module: {module}"
+
+        # Validation logic must be deduplicated: resources import it from the shared lib.
+        address_resource = (frontend_dir / 'src' / 'resources' / 'address' / 'address.jsx').read_text()
+        assert "from '../../presentation/lib/validations'" in address_resource, \
+            "Validation resource should import shared logic from presentation/lib/validations"
+
         # Change to frontend directory
         original_cwd = os.getcwd()
         
