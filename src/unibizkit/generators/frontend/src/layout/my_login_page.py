@@ -317,8 +317,30 @@ const LoginWithTabs = (props) => {{
     );
 }};
 
+// Returns the user to a storefront page after login when the login URL carries a
+// `redirectTo` parameter (e.g. ?redirectTo=%23%2F?add=42 from "add to cart").
+// React-Admin's own post-login redirect is confined to the /admin basename and
+// cannot reach a storefront hash route, so we perform the jump ourselves once a
+// session exists. The deferred hash write wins over React-Admin's default nav.
+const StorefrontRedirectOnLogin = () => {{
+    React.useEffect(() => {{
+        const redirect = readRedirectTo();
+        if (!redirect) return;
+        const target = toHashPath(redirect);
+        if (target.startsWith('#/admin')) return;
+        const {{ data: {{ subscription }} }} = supabaseClient.auth.onAuthStateChange((_event, session) => {{
+            if (session) {{
+                setTimeout(() => {{ window.location.hash = target; }}, 0);
+            }}
+        }});
+        return () => subscription.unsubscribe();
+    }}, []);
+    return null;
+}};
+
 export const MyLoginPage = props => (
     <LoginPage {{...props}}>
+        <StorefrontRedirectOnLogin />
         <LoginWithTabs />
         <Notification />
     </LoginPage>
