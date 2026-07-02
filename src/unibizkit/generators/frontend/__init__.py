@@ -92,7 +92,7 @@ class ReactAdminGenerator:
         # port. Tests/tooling use the direct Kong URL in backend/.env instead.
         api_path = f"{base_prefix}/api"
         _upsert_env(ctx.output_dir / ".env.development", {
-            "VITE_BASE_URL": f"http://localhost:{dev_ports.FRONTEND}",
+            "VITE_BASE_URL": f"http://localhost:{dev_ports.FRONTEND}{base_uri}",
             "VITE_BASE_URI": base_uri,
             "VITE_SUPABASE_URL": api_path,
         })
