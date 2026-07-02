@@ -65,6 +65,15 @@
       "additionalProperties": {
         "type": "string"
       }
+    },
+    "list_sort": {
+      "type": "object",
+      "description": "Default sort for list views. Keys are concept names, values are '<field> ASC|DESC' (e.g. 'id DESC' to show newest records first). Concepts without an entry keep the React-Admin default.",
+      "default": {},
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^\\w+ (ASC|DESC)$"
+      }
     }
   },
   "definitions": {

@@ -497,7 +497,9 @@ def generate_field_components(
             list_html = f'      <{list_comp} source="{field_name}"{col_label_prop} />'
             show_html = list_html
 
-        if list_html and visibility != "internal":
+        # The workflow-injected state field is internal (forms use the
+        # WorkflowSelector instead) but is still a useful list column.
+        if list_html and (visibility != "internal" or field_name == "state"):
             list_fields.append((field_name, list_html))
         if show_html and visibility != "internal":
             show_fields.append(show_html)

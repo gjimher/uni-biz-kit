@@ -211,8 +211,10 @@ class SchemaProcessor:
 
         for concept in self.concepts:
             c_name = concept["name"]
-            # Pool includes id_presentation and all non-internal fields
-            pool = ["id_presentation"] + [f["name"] for f in concept["fields"] if f.get("_fe_visibility", "visible") != "internal"]
+            # Pool includes id_presentation and all non-internal fields.
+            # state_info (workflow history JSON) is never a useful list column
+            # or filter; state stays in the pool so rules can position it.
+            pool = ["id_presentation"] + [f["name"] for f in concept["fields"] if f.get("_fe_visibility", "visible") != "internal" and f["name"] != "state_info"]
             
             # Level 1
             rule1 = get_matched_rule(c_name, l1_rules) or "*"
@@ -401,6 +403,9 @@ class SchemaProcessor:
             
         if "list_field_rules_level_3" not in self.presentation_extended:
             self.presentation_extended["list_field_rules_level_3"] = {}
+
+        if "list_sort" not in self.presentation_extended:
+            self.presentation_extended["list_sort"] = {}
 
     def _enrich_security(self):
         """Inject default roles and users if missing, and expand rule wildcards."""

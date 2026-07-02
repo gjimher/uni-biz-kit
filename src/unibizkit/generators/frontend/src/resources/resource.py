@@ -454,6 +454,13 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
 
     has_prefill = bool(concept.get("_prefill_groups"))
 
+    list_sort = ctx.presentation_config["list_sort"].get(resource_name)
+    if list_sort:
+        sort_field, sort_order = list_sort.split(" ")
+        list_sort_prop = f" sort={{{{ field: '{sort_field}', order: '{sort_order}' }}}}"
+    else:
+        list_sort_prop = ""
+
     mui_imports = ["Grid"]
     if owned_children or many_to_many_links:
         mui_imports.extend(["Box", "Button", "Dialog", "DialogTitle", "DialogContent", "DialogActions"])
@@ -619,7 +626,7 @@ const {resource_name}_filters = [
 export const {resource_name.upper()}_LIST = (props) => {{
   const {{ permissions }} = usePermissions();
   return (
-    <List {{...props}} filters={{{resource_name}_filters}}>
+    <List {{...props}} filters={{{resource_name}_filters}}{list_sort_prop}>
       <Datagrid rowClick="edit">
         {field_components["list_fields"]}
       </Datagrid>
