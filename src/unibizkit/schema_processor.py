@@ -276,7 +276,27 @@ class SchemaProcessor:
         # Enrich Deployment: normalize base_uri to always end with /
         self._enrich_deployment()
 
+        self._validate_payments()
+
         return self.extended_schema
+
+    def _validate_payments(self):
+        """Check that the payments config points to an existing concept and fields."""
+        payments = self.system_extended.get("payments")
+        if not payments:
+            return
+        concept = self.concept_map.get(payments["concept"])
+        if concept is None:
+            raise ValueError(
+                f"payments.concept references unknown concept '{payments['concept']}'"
+            )
+        field_names = {f["name"] for f in concept["fields"]}
+        for key in ("amount_field", "status_field", "reference_field"):
+            if payments[key] not in field_names:
+                raise ValueError(
+                    f"payments.{key} references unknown field "
+                    f"'{payments[key]}' in concept '{payments['concept']}'"
+                )
 
     def _enrich_deployment(self):
         base_uri = self.deployment_extended.get("base_uri", "/")

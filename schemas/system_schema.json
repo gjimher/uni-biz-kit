@@ -44,6 +44,48 @@
     "base_url": {
       "type": "string",
       "description": "Production base URL of the application, used in production email links and redirects. Local development uses generated VITE_BASE_URL in frontend/.env.development."
+    },
+    "payments": {
+      "type": "object",
+      "description": "Payment collection via the generated 'payment' edge function, a proxy to the payment provider. With dev_mode a built-in simulator replaces provider calls (no credentials needed).",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["stripe"],
+          "description": "Payment provider the edge function proxies to",
+          "default": "stripe"
+        },
+        "dev_mode": {
+          "type": "boolean",
+          "description": "When true the edge function simulates the provider (test card 4000000000000002 is declined). When false it calls the provider API using the STRIPE_SECRET_KEY edge function secret.",
+          "default": true
+        },
+        "concept": {
+          "type": "string",
+          "description": "Concept holding the payable record (e.g. order)"
+        },
+        "amount_field": {
+          "type": "string",
+          "description": "Field of the concept with the amount to charge, in currency units"
+        },
+        "currency": {
+          "type": "string",
+          "description": "ISO currency code used for charges",
+          "default": "usd"
+        },
+        "status_field": {
+          "type": "string",
+          "description": "Field of the concept where the payment status is recorded (unpaid/pending/paid/failed). Must be read-only for non-admin roles; the edge function writes it with the service role.",
+          "default": "payment_status"
+        },
+        "reference_field": {
+          "type": "string",
+          "description": "Field of the concept where the provider payment reference (intent id) is recorded",
+          "default": "payment_reference"
+        }
+      },
+      "required": ["concept", "amount_field"],
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

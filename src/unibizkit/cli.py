@@ -624,8 +624,9 @@ Examples:
             with open(supabase_config_file, 'w', encoding='utf-8') as f:
                 f.write(supabase_config)
 
-            # Write Supabase Edge Functions for FEEL business rules.
+            # Write Supabase Edge Functions for FEEL business rules and payments.
             supabase_rules = supabase_generator.generate_supabase_rules()
+            supabase_rules.update(supabase_generator.generate_supabase_payments())
             rules_dir = backend_dir / "supabase" / "functions"
             if rules_dir.exists():
                 for item in rules_dir.iterdir():

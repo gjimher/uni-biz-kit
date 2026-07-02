@@ -6,5 +6,12 @@
     "host": "127.0.0.1",
     "port": 3010,
     "from_email": "noreply@localhost"
+  },
+  // payments: generates the 'payment' edge function (provider proxy).
+  // dev_mode uses the built-in simulator, so no Stripe credentials are needed.
+  "payments": {
+    "dev_mode": true,
+    "concept": "order",
+    "amount_field": "total_amount"
   }
 }

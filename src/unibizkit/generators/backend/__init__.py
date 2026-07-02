@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 from .context import Context
-from . import rules, supabase_config_dev, supabase_schema, supabase_seed_data_dev
+from . import payments, rules, supabase_config_dev, supabase_schema, supabase_seed_data_dev
 
 logger = logging.getLogger(__name__)
 
@@ -35,3 +35,6 @@ class SupabaseGenerator:
 
     def generate_supabase_rules(self) -> dict[str, dict[str, str]]:
         return rules.generate_supabase_rules(self._ctx)
+
+    def generate_supabase_payments(self) -> dict[str, dict[str, str]]:
+        return payments.generate_payment_function(self._ctx)

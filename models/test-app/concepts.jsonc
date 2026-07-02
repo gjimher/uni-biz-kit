@@ -342,6 +342,24 @@
           "type": "prefill",
           "subtype": "customer.addresses",
           "description": "Billing address fields prefilled from customer saved addresses"
+        },
+        {
+          "name": "payment_status",
+          "type": "string",
+          "required": false,
+          "max_length": 20,
+          // by_rules: written only by the 'payment' edge function (service role);
+          // protected from client writes. NULL means unpaid.
+          "calculated": "by_rules",
+          "description": "Payment status: pending, paid or failed (NULL = unpaid)"
+        },
+        {
+          "name": "payment_reference",
+          "type": "string",
+          "required": false,
+          "max_length": 100,
+          "calculated": "by_rules",
+          "description": "Payment provider reference (payment intent id)"
         }
       ]
     },
