@@ -47,10 +47,16 @@ def _normalize_confirmation_url(url: str, api_url: str) -> str:
     return api_url.rstrip("/") + url[idx:]
 
 
-def _supabase_signup(api_url: str, anon_key: str, email: str, password: str) -> dict:
-    """Call Supabase signUp endpoint and return the response body."""
+def _supabase_signup(api_url: str, anon_key: str, email: str, password: str, metadata: dict | None = None) -> dict:
+    """Call Supabase signUp endpoint and return the response body.
+
+    `metadata` is stored as user metadata (signUp options.data in supabase-js).
+    """
     url = f"{api_url}/auth/v1/signup"
-    data = json.dumps({"email": email, "password": password}).encode("utf-8")
+    payload = {"email": email, "password": password}
+    if metadata is not None:
+        payload["data"] = metadata
+    data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url,
         data=data,
@@ -232,6 +238,24 @@ def _supabase_admin_create_user(
             "Content-Type": "application/json",
         },
         method="POST",
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _supabase_admin_confirm_email(api_url: str, service_key: str, user_id: str):
+    """Mark a user's email as confirmed via the admin API (skips the SMTP flow)."""
+    url = f"{api_url}/auth/v1/admin/users/{user_id}"
+    data = json.dumps({"email_confirm": True}).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": "application/json",
+        },
+        method="PUT",
     )
     with urllib.request.urlopen(req) as resp:
         return json.loads(resp.read().decode("utf-8"))
@@ -674,6 +698,59 @@ def test_seeded_users_login_and_rls():
             print("  customer.admin_field update allowed for admin")
     except urllib.error.HTTPError as e:
         pytest.fail(f"Admin failed to update customer.admin_field: {e.code} {e.read().decode()}")
+
+
+def test_signup_metadata_fills_customer_profile():
+    """
+    Registration metadata (signUp options.data, e.g. first_name/last_name) must be
+    copied into the customer profile row created on first login. Fields the user's
+    role cannot write (admin_*) must NOT be copied even if present in the metadata.
+    """
+    api_url, anon_key = _load_env()
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    db_url = os.getenv("DB_URL")
+    if not service_key or not db_url:
+        pytest.skip("SUPABASE_SERVICE_ROLE_KEY and DB_URL are required")
+
+    email = f"metadata_signup_{int(time.time())}@test.local"
+    password = "MetadataSignup123!"
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    try:
+        _supabase_signup(
+            api_url, anon_key, email, password,
+            metadata={"first_name": "Amaia", "last_name": "Ibarra", "admin_field": "not-allowed"},
+        )
+        user_id = _supabase_get_user_id_by_email(api_url, service_key, email)
+        assert user_id, "Signup should create the auth user"
+
+        # Confirm the email via the admin API; the SMTP confirmation flow itself
+        # is covered by test_register_user_and_email_flow.
+        _supabase_admin_confirm_email(api_url, service_key, user_id)
+
+        ok, token_or_err = _supabase_login(api_url, anon_key, email, password)
+        assert ok, f"Login failed after confirmation: {token_or_err}"
+
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "first_name", "last_name", "admin_field" FROM customer WHERE "_user" = %s',
+                (user_id,),
+            )
+            row = cur.fetchone()
+            assert row is not None, "First login should create a customer profile"
+            first_name, last_name, admin_field = row
+            assert first_name == "Amaia", f"first_name should come from signup metadata, got {first_name!r}"
+            assert last_name == "Ibarra", f"last_name should come from signup metadata, got {last_name!r}"
+            assert admin_field is None, "admin_field is not writable by the user role and must not be copied"
+    finally:
+        _supabase_delete_user_by_email(api_url, service_key, email)
+        with conn.cursor() as cur:
+            cur.execute(
+                'DELETE FROM customer WHERE "_user_email" = %s OR "_user_email_prev" = %s',
+                (email, email),
+            )
+        conn.close()
 
 
 def test_same_email_recreated_user_deactivates_old_profile_and_gets_new_customer():

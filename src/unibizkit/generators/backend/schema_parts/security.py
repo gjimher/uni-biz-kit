@@ -82,6 +82,38 @@ def _profile_insert_columns(concept: Dict[str, Any]) -> List[str]:
     return columns
 
 
+def _profile_metadata_column_values(
+    concept: Dict[str, Any],
+    role_name: str,
+    security_config: Dict[str, Any],
+) -> List[tuple]:
+    """Columns of a fresh profile filled from auth.users.raw_user_meta_data.
+
+    Covers plain string fields the profile's role may write (signUp options.data
+    keys matching a column, e.g. first_name/last_name). The metadata comes from
+    the token claims (target_metadata parameter) — sync_role_profiles must not
+    read auth.users. Empty/missing metadata falls back to the field default so
+    NOT NULL columns stay valid.
+    """
+    concept_acl = security_config.get("_acl", {}).get(concept["name"])
+    values = []
+    for field in concept["fields"]:
+        name = field["name"]
+        if name.startswith("_") or field["type"] != "string" or "calculated" in field:
+            continue
+        if concept_acl:
+            access = concept_acl["_fields"].get(name, {}).get(
+                role_name, concept_acl["_main"].get(role_name, "none")
+            )
+            if access not in ("write", "owner_write"):
+                continue
+        expr = f"nullif(target_metadata->>{_sql_literal(name)}, '')"
+        if "default" in field:
+            expr = f"coalesce({expr}, {_sql_literal(str(field['default']))})"
+        values.append((name, expr))
+    return values
+
+
 def _generate_profile_sync_function(
     concept_map: Dict[str, Any],
     security_config: Dict[str, Any],
@@ -95,7 +127,11 @@ def _generate_profile_sync_function(
         role_sql = _sql_literal(role_name)
         has_security_owner_id = any(f["name"] == "_security_owner_id" for f in concept["fields"])
         insert_columns = _profile_insert_columns(concept)
-        insert_columns_sql = ", ".join(_quote_ident(column) for column in insert_columns)
+        metadata_values = _profile_metadata_column_values(concept, role_name, security_config)
+        insert_columns_sql = ", ".join(
+            _quote_ident(column)
+            for column in insert_columns + [name for name, _ in metadata_values]
+        )
 
         def _col_value(column: str) -> str:
             if column == "_user":
@@ -106,7 +142,10 @@ def _generate_profile_sync_function(
                 return "target_user_id::text"
             return "NULL"
 
-        insert_values_sql = ", ".join(_col_value(col) for col in insert_columns)
+        insert_values_sql = ", ".join(
+            [_col_value(col) for col in insert_columns]
+            + [expr for _, expr in metadata_values]
+        )
         owner_id_set = ',\n          "_security_owner_id" = target_user_id::text' if has_security_owner_id else ""
 
         sync_parts.append(f"""
@@ -146,7 +185,8 @@ def _generate_profile_sync_function(
         );
       END IF;
 
-      -- Create a fresh profile if still unlinked.
+      -- Create a fresh profile if still unlinked. Registration metadata from the
+      -- token claims (signUp options.data) fills the matching profile columns.
       INSERT INTO {table_sql} ({insert_columns_sql})
       SELECT {insert_values_sql}
       WHERE NOT EXISTS (SELECT 1 FROM {table_sql} WHERE "_user" = target_user_id);
@@ -164,7 +204,10 @@ def _generate_profile_sync_function(
     sync_sql = "\n".join(sync_parts)
     return f"""
 -- Keep role profile concepts linked to the current auth state.
-CREATE OR REPLACE FUNCTION public.sync_role_profiles(target_user_id uuid, target_email text, target_roles jsonb)
+-- target_metadata is the token's user_metadata (registration signUp options.data);
+-- the function works from token identity only, with no user-table lookups.
+DROP FUNCTION IF EXISTS public.sync_role_profiles(uuid, text, jsonb);
+CREATE OR REPLACE FUNCTION public.sync_role_profiles(target_user_id uuid, target_email text, target_roles jsonb, target_metadata jsonb DEFAULT '{{}}'::jsonb)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -176,13 +219,14 @@ BEGIN
   END IF;
 
   target_roles := coalesce(target_roles, '[]'::jsonb);
+  target_metadata := coalesce(target_metadata, '{{}}'::jsonb);
   PERFORM set_config('request.jwt.claims', '', true);
 {sync_sql}
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.sync_role_profiles(uuid, text, jsonb) TO supabase_auth_admin;
-REVOKE EXECUTE ON FUNCTION public.sync_role_profiles(uuid, text, jsonb) FROM authenticated, anon, public;
+GRANT EXECUTE ON FUNCTION public.sync_role_profiles(uuid, text, jsonb, jsonb) TO supabase_auth_admin;
+REVOKE EXECUTE ON FUNCTION public.sync_role_profiles(uuid, text, jsonb, jsonb) FROM authenticated, anon, public;
 """
 
 
@@ -195,7 +239,8 @@ def _generate_access_token_hook(security_config: Dict[str, Any]) -> str:
     sync_profiles_sql = ""
     if security_config["_profile_concepts"]:
         sync_profiles_sql = """
-  PERFORM public.sync_role_profiles(current_user_id, current_email, effective_roles);
+  PERFORM public.sync_role_profiles(current_user_id, current_email, effective_roles,
+    coalesce(claims -> 'user_metadata', '{}'::jsonb));
 """
 
     return f"""
