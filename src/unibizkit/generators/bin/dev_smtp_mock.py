@@ -1,17 +1,18 @@
 from pathlib import Path
 
+from .. import dev_ports
+
 _SCRIPT = r'''#!/usr/bin/python3
 """Development SMTP mock server — captures emails and prints them to stdout."""
 
+import argparse
 import asyncio
 import html
-import os
 import quopri
 import re
-import sys
 from datetime import datetime
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("SMTP_MOCK_PORT", 3000 + 100 * int(os.environ.get("UBK_DEV_ENV_NUM", "0")) + 10))
+DEFAULT_PORT = __SMTP_PORT__
 
 
 def extract_links(body: str) -> list:
@@ -105,21 +106,29 @@ async def handle_client(reader, writer):
     await SMTPSession(reader, writer).handle()
 
 
-async def main():
-    server = await asyncio.start_server(handle_client, "0.0.0.0", PORT)
-    print(f"\n{'=' * 60}\n  Dev SMTP Mock — listening on port {PORT}\n{'=' * 60}\n", flush=True)
+async def serve(port):
+    server = await asyncio.start_server(handle_client, "0.0.0.0", port)
+    print(f"\n{'=' * 60}\n  Dev SMTP Mock — listening on port {port}\n{'=' * 60}\n", flush=True)
     async with server:
         await server.serve_forever()
 
 
-try:
-    asyncio.run(main())
-except KeyboardInterrupt:
-    print("\nSMTP mock server stopped.")
+def main():
+    parser = argparse.ArgumentParser(description="Development SMTP mock server — captures emails and prints them to stdout.")
+    parser.add_argument("port", nargs="?", type=int, default=DEFAULT_PORT, help=f"TCP port to listen on (default: {DEFAULT_PORT}).")
+    args = parser.parse_args()
+    try:
+        asyncio.run(serve(args.port))
+    except KeyboardInterrupt:
+        print("\nSMTP mock server stopped.")
+
+
+if __name__ == "__main__":
+    main()
 '''
 
 
 def generate(bin_dir: Path):
     script = bin_dir / "dev-smtp-mock.py"
-    script.write_text(_SCRIPT)
+    script.write_text(_SCRIPT.replace("__SMTP_PORT__", str(dev_ports.SMTP)))
     script.chmod(0o755)
