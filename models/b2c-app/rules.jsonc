@@ -1,0 +1,83 @@
+{
+  "$schema": "../../schemas/rules_schema.json",
+  // Rules are evaluated by the FEEL (Friendly Enough Expression Language) engine.
+  //
+  // action types:
+  //   update — writes the expression result back to the concept's fields
+  //   check  — validates; { error: "..." } aborts the transition
+  //
+  // FEEL context: db.<concept> = current record; auth.<concept> = logged-in user's profile
+  "rules": [
+    {
+      "concept": "order",
+      "name": "order-require-shipping-address",
+      // The order in 'initial' state is the shopping cart, created empty, so the
+      // shipping address fields cannot be NOT NULL at the concept level. Instead we
+      // enforce a complete shipping address here, when leaving checkout for confirmed.
+      // Aborts the transition if any required shipping field is missing.
+      "feel_expr": "if db.order.shipping_address_first_name != null and db.order.shipping_address_last_name != null and db.order.shipping_address_street_line_1 != null and db.order.shipping_address_city != null and db.order.shipping_address_state_province != null and db.order.shipping_address_postal_code != null and db.order.shipping_address_country != null then true else { error: \"A complete shipping address is required before confirming the order\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_confirmed"]
+    },
+    {
+      "concept": "order",
+      "name": "order-require-payment",
+      // The storefront charges the customer (payment edge function) while the order
+      // is still the cart; confirming without a successful payment is rejected.
+      // Runs before the update rules so a missing payment aborts the transition early.
+      "feel_expr": "if db.order.payment_status = \"paid\" then true else { error: \"The order must be paid before it can be confirmed\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_confirmed"]
+    },
+    {
+      "concept": "order",
+      "name": "order-default-billing-address",
+      // Billing defaults to the shipping address per field: any billing field left
+      // empty is filled from its shipping counterpart, so billing is always complete
+      // (same as shipping unless the customer explicitly provided a different value).
+      "feel_expr": "{ billing_address_first_name: if db.order.billing_address_first_name != null then db.order.billing_address_first_name else db.order.shipping_address_first_name, billing_address_last_name: if db.order.billing_address_last_name != null then db.order.billing_address_last_name else db.order.shipping_address_last_name, billing_address_company: if db.order.billing_address_company != null then db.order.billing_address_company else db.order.shipping_address_company, billing_address_street_line_1: if db.order.billing_address_street_line_1 != null then db.order.billing_address_street_line_1 else db.order.shipping_address_street_line_1, billing_address_street_line_2: if db.order.billing_address_street_line_2 != null then db.order.billing_address_street_line_2 else db.order.shipping_address_street_line_2, billing_address_city: if db.order.billing_address_city != null then db.order.billing_address_city else db.order.shipping_address_city, billing_address_state_province: if db.order.billing_address_state_province != null then db.order.billing_address_state_province else db.order.shipping_address_state_province, billing_address_postal_code: if db.order.billing_address_postal_code != null then db.order.billing_address_postal_code else db.order.shipping_address_postal_code, billing_address_country: if db.order.billing_address_country != null then db.order.billing_address_country else db.order.shipping_address_country }",
+      "action": "update",
+      "when": ["on_state_changed_to_confirmed"]
+    },
+    {
+      "concept": "order",
+      "name": "order-compute-totals",
+      // Computes discount_amount and grand_total atomically in a single edge function call,
+      // so grand_total always sees the freshly computed discount in the same write.
+      //
+      // Discount logic:
+      //   percentage coupon → subtotal × value / 100
+      //   fixed coupon      → value (capped to subtotal by the frontend at entry)
+      //   no coupon         → 0
+      "feel_expr": "{ discount_amount: if db.order.coupon_snapshot_type = \"percentage\" then db.order.subtotal * db.order.coupon_snapshot_value / 100 else if db.order.coupon_snapshot_type = \"fixed\" then db.order.coupon_snapshot_value else 0, grand_total: db.order.subtotal + (if db.order.shipping_costs != null then db.order.shipping_costs else 0) - (if db.order.coupon_snapshot_type = \"percentage\" then db.order.subtotal * db.order.coupon_snapshot_value / 100 else if db.order.coupon_snapshot_type = \"fixed\" then db.order.coupon_snapshot_value else 0) }",
+      "action": "update",
+      // Recalculate async while the cart is open (items, coupon and shipping change often)
+      "when_async": ["on_change_in_state_initial", "on_change_in_state_checkout"],
+      // Final synchronous recalculation before the checkout→confirmed transition commits
+      "when": ["on_state_changed_to_confirmed"]
+    },
+    {
+      "concept": "order",
+      "name": "order-snapshot-grand-total",
+      // Saves grand_total into confirmed_grand_total so that downstream checks can detect
+      // any tampering (e.g. concurrent item edits) after the order has been confirmed.
+      // Runs after order-compute-totals on the same transition (rules execute in file order).
+      "feel_expr": "{ confirmed_grand_total: db.order.grand_total }",
+      "action": "update",
+      "when": ["on_state_changed_to_confirmed"]
+    },
+    {
+      "concept": "order",
+      "name": "order-check-grand-total",
+      // Guards against the total changing after confirmation (e.g. a race condition or
+      // a manual edit). Aborts the transition if amounts don't match.
+      "feel_expr": "if db.order.grand_total = db.order.confirmed_grand_total then true else { error: \"Order total has changed since it was confirmed\" }",
+      "action": "check",
+      "when": [
+        "on_state_changed_to_processing",
+        "on_state_changed_to_shipped",
+        "on_state_changed_to_delivered"
+      ]
+    }
+  ]
+}

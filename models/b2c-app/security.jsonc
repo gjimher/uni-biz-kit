@@ -1,0 +1,72 @@
+{
+  "$schema": "../../schemas/security_schema.json",
+  "authentication_required": true,
+  "registration": {
+    // Customers can self-register; new accounts are assigned the 'user' role automatically
+    "allow": true,
+    "role": "user"
+  },
+  "roles": [
+    {
+      "name": "admin",
+      "description": "Store Administrator — full access to all concepts"
+    },
+    {
+      "name": "user",
+      "description": "Registered Customer",
+      // Links the 'user' role to the customer profile concept;
+      // enables owner_write checks (is this record linked to the logged-in user?)
+      "profile_concept": "customer"
+    }
+  ],
+  "users": [
+    {
+      "email": "admin@test.com",
+      "password": "adminadmin",
+      "roles": ["admin"]
+    },
+    {
+      "email": "user1@test.com",
+      "password": "useruser",
+      "roles": ["user"]
+    },
+    {
+      "email": "user2@test.com",
+      "password": "useruser",
+      "roles": ["user"]
+    }
+  ],
+  // rules_level_2: per-role, per-concept access enforced by Supabase RLS policies.
+  // access values:
+  //   read        — SELECT only
+  //   write       — INSERT, UPDATE, DELETE
+  //   owner_write — INSERT/UPDATE/DELETE only on records linked to the user's profile
+  "rules_level_2": [
+    // Storefront catalog: publicly readable without login
+    { "role": "_anon", "concept": "product",          "field": "*", "access": "read" },
+    { "role": "_anon", "concept": "product_variant",  "field": "*", "access": "read" },
+    { "role": "_anon", "concept": "category",         "field": "*", "access": "read" },
+    { "role": "_anon", "concept": "collection",       "field": "*", "access": "read" },
+    { "role": "_anon", "concept": "shipping_method",  "field": "*", "access": "read" },
+
+    // Customers can manage their own profile, cart/orders and reviews
+    { "role": "user", "concept": "customer",  "field": "*", "access": "owner_write" },
+    { "role": "user", "concept": "order",     "field": "*", "access": "owner_write" },
+    { "role": "user", "concept": "review",    "field": "*", "access": "owner_write" },
+
+    // Customers can read the catalog and lookup tables (coupon lookup for code entry)
+    { "role": "user", "concept": "product",           "field": "*", "access": "read" },
+    { "role": "user", "concept": "product_variant",   "field": "*", "access": "read" },
+    { "role": "user", "concept": "category",          "field": "*", "access": "read" },
+    { "role": "user", "concept": "collection",        "field": "*", "access": "read" },
+    { "role": "user", "concept": "coupon",            "field": "*", "access": "read" },
+    { "role": "user", "concept": "shipping_method",   "field": "*", "access": "read" }
+  ],
+  // rules_level_3: glob-pattern rules applied on top of level_2.
+  "rules_level_3": [
+    // Fields prefixed internal_ are read-only for customers (admin-only notes, flags)
+    { "role": "user", "concept": "*",      "field": "internal_*", "access": "read" },
+    // Review status can only be changed by admins; prevents self-approval
+    { "role": "user", "concept": "review", "field": "status",     "access": "read" }
+  ]
+}

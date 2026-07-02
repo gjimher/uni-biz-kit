@@ -19,7 +19,7 @@ _FRONTEND_PORT = _base + 0
 _PREVIEW_PORT = _base + 1
 
 # Second dev environment (UBK_DEV_MODEL), served on a +50 port offset.
-from conftest import SECONDARY_MODEL, SECONDARY_PREVIEW_PORT as _DUMMY_PREVIEW_PORT
+from conftest import SECONDARY_MODEL, SECONDARY_BASE, SECONDARY_PREVIEW_PORT as _DUMMY_PREVIEW_PORT
 
 
 @pytest.fixture(scope="module")
@@ -103,6 +103,96 @@ def test_dummy_app_server_responds(dummy_app_server):
     assert "<div id=\"root\">" in body or "<title>" in body, (
         "Dummy app server response did not look like the SPA index page"
     )
+
+
+def test_b2c_storefront_purchase_with_payment(page: Page, dummy_app_server):
+    """
+    Full storefront purchase flow on the b2c secondary app, browser only:
+    sign in (storefront page) → add to cart → checkout details (address combos,
+    shipping) → dev-mode card payment → "Order placed!". Then verify in the DB
+    that the order is confirmed and paid.
+
+    Skipped unless UBK_DEV_MODEL=b2c-app and its Supabase backend is running.
+    """
+    import re
+    import urllib.request
+    import urllib.error
+
+    if SECONDARY_MODEL != "b2c-app":
+        pytest.skip("b2c storefront test requires UBK_DEV_MODEL=b2c-app")
+
+    backend = f"http://localhost:{SECONDARY_BASE + 40}"
+    try:
+        urllib.request.urlopen(backend + "/auth/v1/health", timeout=5)
+    except urllib.error.HTTPError:
+        pass  # 401/404 still proves Kong is up
+    except Exception:
+        pytest.skip(f"b2c Supabase backend not reachable at {backend}")
+
+    with open(os.path.abspath(f"{SECONDARY_MODEL}/security_extended.json")) as f:
+        user1 = next(u for u in json.load(f)["users"] if "user" in u["roles"])
+
+    page.set_default_timeout(15000)
+    page.goto(dummy_app_server + "/b2c/#/")
+
+    # -- Sign in through the storefront page (not the admin login)
+    page.get_by_role("link", name="Log in").click()
+    page.get_by_label("Email").fill(user1["email"])
+    page.get_by_label("Password").fill(user1["password"])
+    page.get_by_role("button", name="Sign in").click()
+
+    # Back on the storefront with a session: catalog with Add to cart buttons.
+    add_button = page.get_by_role("button", name="Add to cart").first
+    add_button.wait_for(state="visible")
+    add_button.click()
+
+    # Cart drawer opens; go to checkout.
+    page.get_by_role("button", name="Checkout").click()
+
+    # -- Checkout details
+    page.get_by_label("First name *").fill("E2E")
+    page.get_by_label("Last name *").fill("Shopper")
+    page.get_by_label("Address *").fill("Gran Via 1")
+    page.get_by_label("Postal code *").fill("48001")
+
+    # Cascading combos in DOM order: City, State/Province, Country.
+    # Select country first so the cascade narrows the other two.
+    combos = page.get_by_placeholder("Select or type…")
+    combos.nth(2).click()
+    page.get_by_role("listitem").filter(has_text="Spain").first.click()
+    combos.nth(1).click()
+    page.get_by_role("listitem").filter(has_text="Bizkaia").first.click()
+    combos.nth(0).click()
+    page.get_by_role("listitem").filter(has_text="Bilbao").first.click()
+
+    page.get_by_role("button", name=re.compile(r"^Continue to payment")).click()
+
+    # -- Payment step (dev simulator, card prefilled with the success test card)
+    expect(page.get_by_text("Test mode")).to_be_visible()
+    page.get_by_role("button", name=re.compile(r"^Pay ")).click()
+
+    expect(page.get_by_text("Order placed!")).to_be_visible(timeout=30000)
+
+    # -- DB check: latest order for the flow is confirmed and paid.
+    import psycopg2
+    from dotenv import dotenv_values
+    db_url = dotenv_values(f"{SECONDARY_MODEL}/backend/.env").get("DB_URL")
+    assert db_url, f"DB_URL not found in {SECONDARY_MODEL}/backend/.env"
+    conn = psycopg2.connect(db_url)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "state", "payment_status", "payment_reference", '
+                '"shipping_address_first_name", "shipping_address_last_name" '
+                'FROM "order" ORDER BY "id" DESC LIMIT 1;'
+            )
+            state, payment_status, payment_reference, first_name, last_name = cur.fetchone()
+            assert state == "confirmed", f"Expected confirmed order, got {state}"
+            assert payment_status == "paid", f"Expected paid order, got {payment_status}"
+            assert payment_reference and payment_reference.startswith("pi_dev_")
+            assert (first_name, last_name) == ("E2E", "Shopper")
+    finally:
+        conn.close()
 
 
 def test_create_product_as_user(page: Page, app_server):

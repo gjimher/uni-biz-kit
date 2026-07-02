@@ -1,0 +1,56 @@
+{
+  "$schema": "../../schemas/presentation_schema.json",
+  "currency": "USD",
+  "locale": "en-US",
+  "number_locale": "en-US",
+  "menu": [
+    {
+      "label": "Catalog",
+      "children": [
+        { "label": "Products",        "concept": "product" },
+        { "label": "Variants",        "concept": "product_variant" },
+        { "label": "Categories",      "concept": "category" },
+        { "label": "Collections",     "concept": "collection" }
+      ]
+    },
+    {
+      "label": "Sales",
+      "children": [
+        { "label": "Orders",          "concept": "order" },
+        { "label": "Customers",       "concept": "customer" },
+        { "label": "Reviews",         "concept": "review" }
+      ]
+    },
+    {
+      "label": "Promotions",
+      "children": [
+        { "label": "Coupons",         "concept": "coupon" }
+      ]
+    },
+    {
+      "label": "Settings",
+      "children": [
+        { "label": "Shipping Methods", "concept": "shipping_method" }
+      ]
+    }
+  ],
+  "list_field_rules_level_2": {
+    // Product list: lead with status and featured flag; hide slug and raw metadata
+    "product": "!>status, !>is_featured, total_stock, !slug, !metadata",
+
+    // Variant list: lead with price and stock; attribute columns follow naturally
+    "product_variant": "!>price, stock_quantity, size, color, !is_available",
+
+    // Order list: id, grand total and date upfront; hide internal snapshot fields
+    "order": "id_presentation[0], !>grand_total, !>payment_status, order_date, !coupon_snapshot_type, !coupon_snapshot_value, !subtotal, !discount_amount, !confirmed_grand_total, !internal_notes, !payment_reference",
+
+    // Customer list: email first for quick identification
+    "customer": "!>email",
+
+    // Review list: rating and status upfront; body is too long for a list column
+    "review": "!>rating, !>status, !body",
+
+    // Coupon list: type and value upfront; date range only in edit view
+    "coupon": "!>discount_type, !>discount_value, !>is_active, !valid_from, !valid_until"
+  }
+}

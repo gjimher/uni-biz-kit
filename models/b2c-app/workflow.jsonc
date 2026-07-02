@@ -1,0 +1,44 @@
+{
+  "$schema": "../../schemas/workflow_schema.json",
+  "workflow_rules": [
+    {
+      "name": "order_workflow",
+      "description": "Order lifecycle from shopping cart to delivery.",
+      "concepts": "order",
+      // States are strictly sequential; each can only advance to the next.
+      // The 'initial' state doubles as the shopping cart.
+      "states": [
+        {
+          "name": "initial",
+          "description": "Shopping cart — items, coupon and shipping method can be freely changed.",
+          "owners": ["user", "admin"]
+        },
+        {
+          "name": "checkout",
+          "description": "Customer is reviewing the cart summary and filling in the shipping/billing addresses before confirming.",
+          "owners": ["user", "admin"]
+        },
+        {
+          "name": "confirmed",
+          "description": "Order placed by the customer. Grand total is locked; admin takes over.",
+          "owners": ["admin"]
+        },
+        {
+          "name": "processing",
+          "description": "Admin is preparing the shipment.",
+          "owners": ["admin"]
+        },
+        {
+          "name": "shipped",
+          "description": "Package handed to the carrier.",
+          "owners": ["admin"]
+        },
+        {
+          "name": "delivered",
+          "description": "Package received by the customer. Terminal state.",
+          "owners": ["admin"]
+        }
+      ]
+    }
+  ]
+}
