@@ -463,11 +463,15 @@ class SchemaProcessor:
                         f"got field '{rule['field']}' for concept '{rule['concept']}' in {level_key}"
                     )
 
-        # Map: parent concept name -> [child concept names] (via relation_to_one FK)
+        # Map: parent concept name -> [child concept names] (via 'part_of' composition).
+        # Only 'part_of' relations imply ownership, so only they inherit the parent's
+        # access rules. 'related_to' lookups (e.g. order -> shipping_method) must NOT
+        # propagate, otherwise a lookup's read rule would clobber the child's own
+        # owner_write rule (e.g. order would inherit shipping_method's 'read').
         child_concepts_map: Dict[str, list] = {}
         for concept in self.concepts:
             for field in concept["fields"]:
-                if field["type"] == "relation_to_one":
+                if field["type"] == "relation_to_one" and field.get("subtype") == "part_of":
                     parent = field["target"]
                     child_concepts_map.setdefault(parent, []).append(concept["name"])
 
