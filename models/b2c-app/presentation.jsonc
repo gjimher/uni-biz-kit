@@ -35,22 +35,37 @@
     }
   ],
   "list_field_rules_level_2": {
-    // Product list: lead with status and featured flag; hide slug and raw metadata
-    "product": "!>status, !>is_featured, total_stock, !slug, !metadata",
+    // Category/collection lists: slug duplicates name, keep it out of the list
+    "category": "!slug",
+    "collection": "!slug",
+
+    // Product list: status and featured flag right after name; long text and slug
+    // belong in the edit view, not in a list column
+    "product": "!description, !metadata, !slug, status[name], is_featured[status]",
 
     // Variant list: lead with price and stock; attribute columns follow naturally
     "product_variant": "!>price, stock_quantity, size, color, !is_available",
 
-    // Order list: id, grand total and date upfront; hide internal snapshot fields
-    "order": "id_presentation[0], !>grand_total, !>payment_status, order_date, !coupon_snapshot_type, !coupon_snapshot_value, !subtotal, !discount_amount, !confirmed_grand_total, !internal_notes, !payment_reference",
+    // Order list: id, workflow state, totals and payment status; the
+    // prefill-expanded address columns and internal snapshot/rule fields
+    // stay in the edit view only
+    "order": "id_presentation[0], state[order_date], !shipping_address_*, !billing_address_*, !coupon_snapshot_*, !subtotal, !discount_amount, !confirmed_grand_total, !payment_reference, !notes, !internal_notes",
 
     // Customer list: email first for quick identification
     "customer": "!>email",
 
-    // Review list: rating and status upfront; body is too long for a list column
-    "review": "!>rating, !>status, !body",
+    // Address list: enough to identify the address; recipient details in edit view
+    "address": "!first_name, !last_name, !company, !street_line_2, !postal_code",
 
-    // Coupon list: type and value upfront; date range only in edit view
-    "coupon": "!>discount_type, !>discount_value, !>is_active, !valid_from, !valid_until"
+    // Review list: rating and moderation status; body is too long for a list column
+    "review": "!body, status[rating]",
+
+    // Coupon list: type and value right after code; dates and internal
+    // description only in edit view
+    "coupon": "!description, !valid_from, !valid_until, discount_type[code], discount_value[discount_type]"
+  },
+  "list_sort": {
+    // Newest orders first
+    "order": "id DESC"
   }
 }

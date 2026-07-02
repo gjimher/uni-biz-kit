@@ -15,7 +15,7 @@ import {
 const EMPTY_ADDRESS = {
   label: '', first_name: '', last_name: '', company: '',
   street_line_1: '', street_line_2: '', city: '', state_province: '',
-  postal_code: '', country: '', is_default_shipping: false, is_default_billing: false,
+  postal_code: '', country: '',
 };
 const ADDRESS_REQUIRED = ['label', 'first_name', 'last_name', 'street_line_1', 'city', 'state_province', 'postal_code', 'country'];
 
@@ -157,8 +157,6 @@ function AddressesCard() {
       state_province: editing.state_province,
       postal_code: editing.postal_code,
       country: editing.country,
-      is_default_shipping: !!editing.is_default_shipping,
-      is_default_billing: !!editing.is_default_billing,
     };
     const query = editing.id
       ? supabaseClient.from('address').update(row).eq('id', editing.id)
@@ -200,11 +198,7 @@ function AddressesCard() {
           padding: '12px 0', borderTop: `1px solid ${BORDER}`, flexWrap: 'wrap',
         }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>
-              {address.label}
-              {address.is_default_shipping && <Tag>default shipping</Tag>}
-              {address.is_default_billing && <Tag>default billing</Tag>}
-            </div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{address.label}</div>
             <div style={{ color: MUTED, fontSize: 13 }}>
               {address.first_name} {address.last_name} · {address.street_line_1}
               {address.street_line_2 ? `, ${address.street_line_2}` : ''} · {address.city}, {address.state_province}, {address.postal_code}, {address.country}
@@ -238,10 +232,6 @@ function AddressesCard() {
             <ComboField label="State / Province *" value={editing.state_province} onChange={setAddr('state_province')} onClear={clearAddr('state_province')} {...addressComboProps('state_province', editing)} />
             <Field label="Postal code *" value={editing.postal_code} onChange={set('postal_code')} />
             <ComboField label="Country *" value={editing.country} onChange={setAddr('country')} onClear={clearAddr('country')} {...addressComboProps('country', editing)} />
-            <Checkbox label="Default shipping address" checked={!!editing.is_default_shipping}
-              onChange={(v) => setEditing((f) => ({ ...f, is_default_shipping: v }))} />
-            <Checkbox label="Default billing address" checked={!!editing.is_default_billing}
-              onChange={(v) => setEditing((f) => ({ ...f, is_default_billing: v }))} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
             <PrimaryButton onClick={save} disabled={!addrValid || saving}>
@@ -296,14 +286,5 @@ function LinkButton({ children, onClick, color }) {
       background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
       color: color ?? INK, fontSize: 13, fontWeight: 700, fontFamily: FONT,
     }}>{children}</button>
-  );
-}
-
-function Tag({ children }) {
-  return (
-    <span style={{
-      background: `${ACCENT}1a`, color: ACCENT, borderRadius: 999,
-      padding: '2px 8px', fontSize: 11, fontWeight: 700, marginLeft: 8,
-    }}>{children}</span>
   );
 }

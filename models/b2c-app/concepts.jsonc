@@ -413,20 +413,6 @@
           "required": true,
           "max_length": 100,
           "description": "Country name"
-        },
-        {
-          "name": "is_default_shipping",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "Pre-selected for shipping at checkout"
-        },
-        {
-          "name": "is_default_billing",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "Pre-selected for billing at checkout"
         }
       ]
     },
