@@ -367,8 +367,12 @@ def _parse_async_when(expression: str) -> str | None:
 
 
 def _generate_on_db_change_sql(rule: FeelRule, concept_name: str, state_name: str | None) -> str:
-    function_name = f"02_enqueue_rule_{_safe_sql_name(rule.name)}_trigger_function"
-    trigger_name = f"02_enqueue_rule_{_safe_sql_name(rule.name)}_trigger"
+    # One trigger per when_async expression: the state must be part of the name,
+    # otherwise a rule with several on_change_in_state_* entries would generate
+    # same-named triggers and the last DROP+CREATE would silently win.
+    state_suffix = f"_{_safe_sql_name(state_name)}" if state_name else ""
+    function_name = f"02_enqueue_rule_{_safe_sql_name(rule.name)}{state_suffix}_trigger_function"
+    trigger_name = f"02_enqueue_rule_{_safe_sql_name(rule.name)}{state_suffix}_trigger"
     function_url_path = f"/functions/v1/{rule.name}"
     state_guard = ""
     if state_name is not None:

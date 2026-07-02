@@ -26,6 +26,44 @@ def _call_edge_function_script(email, function_name, payload=None):
     return result.returncode, json.loads(result.stdout)
 
 
+def test_async_rule_generates_one_trigger_per_state():
+    """A rule with several on_change_in_state_* entries must generate distinct
+    trigger names per state — a shared name would let the last DROP+CREATE win
+    and silently disable the async rule in the other states."""
+    from unibizkit.generators.backend.context import Context
+    from unibizkit.generators.backend import rules as rules_gen
+
+    concepts = [{
+        "name": "order",
+        "plural_name": "orders",
+        "fields": [{"name": "subtotal", "type": "decimal"}],
+    }]
+    ctx = Context(
+        concepts=concepts,
+        concept_map={c["name"]: c for c in concepts},
+        security_config={},
+        business_schema={},
+        workflow_config={},
+        system_config={},
+        deployment_config={},
+        seed_data_config={},
+        rules_config={"rules": [{
+            "concept": "order",
+            "name": "order-compute-totals",
+            "feel_expr": "{ grand_total: db.order.subtotal }",
+            "action": "update",
+            "when": [],
+            "when_async": ["on_change_in_state_initial", "on_change_in_state_checkout"],
+        }]},
+        validations_config={"validations": []},
+    )
+
+    sql = "\n".join(rules_gen.generate_async_rule_execution_sql(ctx))
+    assert '"02_enqueue_rule_order_compute_totals_initial_trigger"' in sql
+    assert '"02_enqueue_rule_order_compute_totals_checkout_trigger"' in sql
+    assert sql.count("CREATE TRIGGER") == 2
+
+
 @pytest.mark.integration
 def test_workflow_state_permissions():
     """
