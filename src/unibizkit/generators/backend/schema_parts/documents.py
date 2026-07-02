@@ -100,10 +100,25 @@ CREATE TRIGGER "{table_name}_manage_current_trigger"
 
         bucket_clause = f"bucket_id = '{bucket_name}'"
 
+        # A concept readable by anonymous visitors (e.g. a storefront catalog) needs its
+        # documents served publicly so <img> tags resolve without a session. Gate the
+        # public flag on _anon read access; private concepts (orders, invoices) stay closed.
+        anon_doc_access = docs_field_acl.get("_anon") or main_acl.get("_anon", "none")
+        is_public = anon_doc_access == "read"
+        public_sql = "true" if is_public else "false"
+
         storage_sql = [f"""-- Storage bucket for {owner_name} documents
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('{bucket_name}', '{bucket_name}', false)
-ON CONFLICT (id) DO NOTHING;"""]
+VALUES ('{bucket_name}', '{bucket_name}', {public_sql})
+ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public;"""]
+
+        if is_public:
+            storage_sql.append(
+                f'DROP POLICY IF EXISTS "anon_select_{bucket_name}" ON storage.objects;'
+            )
+            storage_sql.append(f"""CREATE POLICY "anon_select_{bucket_name}" ON storage.objects
+  FOR SELECT TO anon
+  USING ({bucket_clause});""")
 
         for r in all_roles:
             role = r["name"]
