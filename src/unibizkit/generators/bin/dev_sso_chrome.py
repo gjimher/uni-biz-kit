@@ -12,7 +12,18 @@ def generate(bin_dir: Path):
 def _content() -> str:
     header = (
         '#!/usr/bin/python3\n'
-        '"""Get a Kerberos ticket and launch Google Chrome for SSO testing."""\n'
+        '"""Get a Kerberos ticket and launch Google Chrome for SSO testing.\n'
+        '\n'
+        'Reproduces the corporate desktop experience against the local SSO\n'
+        'environment (started with dev-sso-start.py):\n'
+        '\n'
+        '* Obtains a Kerberos ticket for the chosen user by running kinit inside the\n'
+        '  KDC container (users and passwords come from security_extended.json).\n'
+        '* Launches Google Chrome with a per-user profile, pointing it at the ticket\n'
+        '  cache and allowing SPNEGO negotiation with keycloak.dev.local, opening\n'
+        '  the Keycloak account page: login happens without typing a password.\n'
+        '* --remote-debug enables Chrome remote debugging (used by the E2E tests).\n'
+        '"""\n'
         '\n'
         f'REALM = "{REALM}"\n'
         f'KC_PORT = {dev_ports.KC_PORT}\n'
@@ -47,7 +58,9 @@ if not _sec_file.exists():
 USERS = json.loads(_sec_file.read_text()).get("users", [])
 USER_MAP = {u["email"].split("@")[0]: u for u in USERS}
 
-parser = argparse.ArgumentParser(description="Get Kerberos ticket and launch Google Chrome for SSO.")
+parser = argparse.ArgumentParser(
+    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+)
 parser.add_argument("user", nargs="?", default=list(USER_MAP)[0] if USER_MAP else "admin",
                     help=f"Username (default: first user). Available: {', '.join(USER_MAP)}")
 parser.add_argument(

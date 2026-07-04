@@ -8,7 +8,7 @@ A workflow defines a sequence of states that a concept can go through. For each 
 
 ## Configuration
 
-Workflows are defined in `workflow.json`.
+Workflows are defined in `workflow.jsonc` (see [Backend.md](Backend.md#the-model-directory)).
 
 ### Schema
 
@@ -47,6 +47,8 @@ When a concept has an associated workflow, the `SchemaProcessor` automatically i
 1.  **state**: A `TEXT` column storing the current state name. It defaults to the first state defined in the workflow.
 2.  **state_info**: An `XML` column storing the transition history.
 
+Transitions are applied by the `workflow-transition` [edge function](Backend.md#edge-functions), which verifies state ownership and runs the [business rules](Backend.md#business-rules-rulesjsonc) bound to the transition (`when: ["on_state_changed_to_<state>"]`).
+
 ## Frontend Implementation
 
 Concepts with workflows feature a `WorkflowSelector` component at the top of their Edit forms.
@@ -58,6 +60,6 @@ Concepts with workflows feature a `WorkflowSelector` component at the top of the
 
 ## Design Principles
 
-*   **Restrictive Roles**: The workflow system only *removes* edit permissions. It never grants more permissions than those defined in `security.json`.
+*   **Restrictive Roles**: The workflow system only *removes* edit permissions. It never grants more permissions than those defined in [`security.jsonc`](Security.md).
 *   **Linear Flow**: By default, transitions are allowed only to the immediately preceding or succeeding state.
 *   **Transparency**: Transition history is stored in an XML format in the database for auditing purposes.

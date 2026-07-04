@@ -7,7 +7,18 @@ def generate(bin_dir: Path):
     with open(script, 'w', encoding='utf-8') as f:
         f.write(f"""\
 #!/usr/bin/python3
-\"\"\"Stop and remove the local Supabase instance (no backup).\"\"\"
+\"\"\"Stop and remove the local Supabase instance (no backup).
+
+Idempotent: exits successfully when there is nothing to remove.
+
+* Asks for confirmation unless -f/--force is given.
+* Runs `supabase stop --no-backup`: removes the app's containers and data
+  volumes. All database data is lost.
+* Deletes the backend/supabase directory (config.toml, migrations, deployed
+  functions), leaving the app ready for a fresh dev-supabase-start.py.
+
+For a stop that preserves data use dev-supabase-stop.py.
+\"\"\"
 import sys
 from pathlib import Path
 
@@ -25,7 +36,9 @@ import os
 import shutil
 import subprocess
 
-parser = argparse.ArgumentParser(description="Stop and remove local Supabase instance.")
+parser = argparse.ArgumentParser(
+    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+)
 parser.add_argument('-f', '--force', action='store_true', help="Skip confirmation prompt")
 args = parser.parse_args()
 

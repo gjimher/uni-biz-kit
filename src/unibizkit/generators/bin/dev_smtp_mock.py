@@ -3,7 +3,17 @@ from pathlib import Path
 from .. import dev_ports
 
 _SCRIPT = r'''#!/usr/bin/python3
-"""Development SMTP mock server — captures emails and prints them to stdout."""
+"""Development SMTP mock server — captures emails and prints them to stdout.
+
+Implements just enough SMTP (EHLO/MAIL/RCPT/DATA/AUTH) for the app's Supabase
+to deliver its auth emails (signup confirmation, password recovery, magic
+links...). Nothing is actually sent: each message is printed to stdout with
+its headers and body, decoding quoted-printable content and listing the links
+it contains, so confirmation URLs can be opened straight from the terminal.
+
+Listens on 0.0.0.0 at this app's SMTP port (the one configured for Supabase
+in the generated config). Stop with Ctrl+C.
+"""
 
 import argparse
 import asyncio
@@ -114,7 +124,9 @@ async def serve(port):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Development SMTP mock server — captures emails and prints them to stdout.")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("port", nargs="?", type=int, default=DEFAULT_PORT, help=f"TCP port to listen on (default: {DEFAULT_PORT}).")
     args = parser.parse_args()
     try:

@@ -2,7 +2,16 @@ from pathlib import Path
 
 
 _SCRIPT = r'''#!/usr/bin/python3
-"""Log in as a seeded user and call a local Supabase Edge Function."""
+"""Log in as a seeded user and call a local Supabase Edge Function.
+
+* Reads SUPABASE_URL and the anon key from backend/.env (direct Kong URL, so
+  no dev server is needed).
+* If PASSWORD is omitted, it is looked up in security_extended.json.
+* Logs in with email + password to obtain a user JWT, then POSTs JSON_ARGS to
+  /functions/v1/EDGE_FUNCTION with it — the call runs with the user's real
+  permissions, exactly like a call made from the app.
+* Prints {"status": ..., "body": ...} as JSON; exits non-zero on HTTP >= 400.
+"""
 import sys
 from pathlib import Path
 
@@ -21,6 +30,7 @@ import urllib.request
 
 def usage():
     sys.exit(
+        __doc__ + "\n"
         "Usage:\n"
         f"  python bin/{Path(__file__).name} USER [PASSWORD] EDGE_FUNCTION [JSON_ARGS]\n\n"
         "Examples:\n"

@@ -1,6 +1,8 @@
 # Security in UniBizKit
 
-UniBizKit provides a flexible, declarative security model to handle access control for your business applications. When authentication is required, you can define roles, users, and detailed security rules that are compiled into an Access Control List (`_acl`) for the system to enforce.
+UniBizKit provides a flexible, declarative security model to handle access control for your business applications. When authentication is required, you can define roles, users, and detailed security rules in `security.jsonc` (see [Backend.md](Backend.md#the-model-directory)) that are compiled into an Access Control List (`_acl`) for the system to enforce.
+
+All enforcement happens in the backend — the [frontend](Frontend.md) is untrusted and only mirrors permissions for usability.
 
 ## The `_acl` Structure
 
@@ -225,7 +227,7 @@ When a new user registers (or is seeded by the dev script):
 
 ### Role Assignment for SSO Users (Keycloak / OIDC)
 
-SSO roles flow through two separate mechanisms:
+The full SSO login flow and its dev environment are described in [SingleSignOn.md](SingleSignOn.md). SSO roles flow through two separate mechanisms:
 
 #### 1. At JWT issuance — `custom_access_token_hook`
 

@@ -1,436 +1,129 @@
-# UniBizKit - Business Application Generator
+# Usage
 
-UniBizKit is a proof of concept for generating complete business applications from JSON definitions. It generates both Supabase (PostgreSQL) database schemas and React-Admin frontend applications.
+How to install UniBizKit and run the example applications. For the model format see [Backend.md](Backend.md); for the development workflow, ports and dev scripts see [Development.md](Development.md).
 
-## Table of Contents
+## Prerequisites
 
-- [Installation](#installation)
-- [JSON Schema Format](#json-schema-format)
-- [CLI Usage](#cli-usage)
-- [Examples](#examples)
-- [Generated Output](#generated-output)
-- [Running the Generated Application](#running-the-generated-application)
-  - [Option 1: Using Docker with Supabase (Recommended)](#option-1-using-docker-with-supabase-recommended)
-  - [Option 2: Using PostgreSQL Directly](#option-2-using-postgresql-directly)
-- [Testing](#testing)
-- [Architecture](#architecture)
+* Python 3.11+
+* Node.js
+* Docker (with Compose)
 
-## Installation
+Installation instructions for each are in the [annexes](#annex-installing-the-prerequisites) below. The Supabase CLI is run automatically through `npx` with a pinned version — no separate install needed.
 
-### Prerequisites
-
-- Python 3.8+
-- Node.js (for running the generated React-Admin application)
-- PostgreSQL (for running the generated Supabase schema)
-
-### Install UniBizKit
+## Quick Start
 
 ```bash
-# Clone the repository
+# Clone and install
 git clone https://github.com/unibizkit/unibizkit.git
 cd unibizkit
+python -m venv venv
+source venv/bin/activate
+pip install -e . -r requirements-dev.txt
 
-# Create and activate virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Linux/Mac
-# venv\Scripts\activate  # On Windows
+# Select b2c-app as the second dev model. Alternative, to set it automatically
+# in every shell: echo "export UBK_DEV_MODEL=b2c-app" > .envrc ; direnv allow
+export UBK_DEV_MODEL=b2c-app
 
-# Install dependencies
-pip install -e .
+# Generate both applications, bring up their Supabase stacks and verify everything
+pytest
+
+# Start the b2c-app frontend
+cd b2c-app/frontend
+npm install
+npm start     # http://localhost:3050/b2c/
 ```
 
-## JSON Schema Format
+The primary model (`models/test-app`) is served the same way from `test-app/frontend` at `http://localhost:3000/`.
 
-UniBizKit uses a JSON schema to define business concepts, their fields, and relationships.
+Log in with the users seeded from the model's `security.jsonc` (listed in the generated `<app>/security_extended.json`).
 
-### Basic Structure
+## Doing It by Hand
 
-```json
-{
-  "version": "1.0.0",
-  "name": "My Business Application",
-  "description": "Description of the application",
-  "concepts": [
-    {
-      "name": "ConceptName",
-      "pluralName": "ConceptNames",
-      "description": "Description of the concept",
-      "fields": [],
-      "relationships": []
-    }
-  ]
-}
-```
-
-### Field Types
-
-Supported field types:
-
-- `string`: Text fields
-- `integer`: Whole numbers
-- `decimal`: Decimal numbers (with precision and scale)
-- `boolean`: True/false values
-- `date`: Date values
-- `datetime`: Date and time values
-- `enum`: Enumerated values with explicit allowed values
-
-### Field Properties
-
-```json
-{
-  "name": "fieldName",
-  "type": "string",
-  "required": true,
-  "unique": true,
-  "default": "default value",
-  "minLength": 2,
-  "maxLength": 100,
-  "min": 0,
-  "max": 100,
-  "precision": 10,
-  "scale": 2,
-  "enumValues": ["value1", "value2"],
-  "description": "Field description"
-}
-```
-
-### Relationship Types
-
-- `belongs-to`: One-to-one or many-to-one relationship (foreign key)
-- `one-to-many`: One-to-many relationship (inverse of belongs-to)
-- `many-to-many`: Many-to-many relationship (creates join table)
-
-### Relationship Properties
-
-```json
-{
-  "type": "belongs-to",
-  "target": "TargetConcept",
-  "fieldName": "targetField",
-  "targetFieldName": "inverseField",
-  "ownership": true,
-  "required": true
-}
-```
-
-## CLI Usage
-
-### Validate a Schema
+`pytest` is the recommended path: it generates, deploys and verifies in one command. The equivalent manual steps for one application:
 
 ```bash
-uni-biz-kit --task validate path/to/model_dir
+# Generate backend + frontend from the model in b2c-app output directory
+uni-biz-kit models/b2c-app 
+
+# Create/start the app's Supabase instance (writes backend/.env with URL and keys)
+python b2c-app/bin/dev-supabase-start.py
+
+# Load the generated schema and seed data
+python b2c-app/bin/dev-supabase-reset-schema-and-data.py
 ```
 
-### Generate a Complete Application
+Then start the frontend with `npm start` as above. The full list of `bin/dev-*` scripts is documented in [Development.md](Development.md).
+
+## CLI Reference
 
 ```bash
-uni-biz-kit path/to/model_dir
-```
-
-### Generate with Custom Output Directory
-
-```bash
+uni-biz-kit path/to/model_dir                  # generate backend + frontend
+uni-biz-kit --task validate path/to/model_dir  # validate the model only
 uni-biz-kit path/to/model_dir --output-dir my-app
-```
-
-### Skip Frontend Generation
-
-```bash
 uni-biz-kit path/to/model_dir --skip-frontend
-```
-
-### Skip Backend Generation
-
-```bash
 uni-biz-kit path/to/model_dir --skip-backend
-```
-
-## Examples
-
-### ECommerce Schema
-
-The repository includes a complete e-commerce example in `models/test-app` that demonstrates:
-
-- Products with various field types
-- Categories with hierarchical relationships
-- Customers with contact information
-- Orders with status tracking
-- Order items with product relationships
-- Many-to-many relationships between products and categories
-
-### Simple CRM Schema
-
-Here's a simple CRM example:
-
-```json
-{
-  "version": "1.0.0",
-  "name": "Simple CRM",
-  "concepts": [
-    {
-      "name": "Contact",
-      "fields": [
-        {"name": "firstName", "type": "string", "required": true},
-        {"name": "lastName", "type": "string", "required": true},
-        {"name": "email", "type": "string", "required": true, "unique": true},
-        {"name": "phone", "type": "string"},
-        {"name": "company", "type": "string"},
-        {"name": "status", "type": "enum", "enumValues": ["lead", "customer", "inactive"], "default": "lead"}
-      ]
-    },
-    {
-      "name": "Deal",
-      "fields": [
-        {"name": "name", "type": "string", "required": true},
-        {"name": "amount", "type": "decimal", "precision": 10, "scale": 2},
-        {"name": "stage", "type": "enum", "enumValues": ["proposal", "negotiation", "closed-won", "closed-lost"], "default": "proposal"},
-        {"name": "closeDate", "type": "date"}
-      ],
-      "relationships": [
-        {
-          "type": "belongs-to",
-          "target": "Contact",
-          "fieldName": "contact",
-          "required": true
-        }
-      ]
-    }
-  ]
-}
 ```
 
 ## Generated Output
 
-When you run the generate command, UniBizKit creates:
-
 ```
 my-app/
-├── backend/
-│   ├── supabase_schema.sql          # PostgreSQL database schema
-│   └── supabase_sample_data.sql    # Sample data for testing
-└── frontend/                   # React-Admin frontend application
-    ├── package.json
-    ├── public/
-    ├── src/
-    │   ├── App.js
-    │   ├── dataProvider.js
-    │   ├── index.js
-    │   ├── resources/           # One directory per concept
-    │   │   └── product/
-    │   │       └── product.js
-    │   ├── components/
-    │   ├── utils/
-    │   └── layout/
-    └── ...
+├── backend/                  # SQL migrations, seed data, edge functions, Supabase config
+├── frontend/                 # React-Admin application (Vite)
+├── bin/                      # dev-* scripts to operate the local stack
+├── concepts_extended.json    # enriched IR used by the generators
+├── security_extended.json    # enriched security config (includes seeded users)
+└── *_extended*.json          # other enriched configs and their schemas
 ```
 
-### Database Schema Features
+See [Backend.md](Backend.md) and [Frontend.md](Frontend.md) for what each part contains.
 
-- Tables for each concept with proper field types
-- Primary keys and auto-incrementing IDs
-- Unique constraints for unique fields
-- Enum constraints for enum fields
-- Foreign key constraints for relationships
-- Join tables for many-to-many relationships
-- Timestamps (_created_at, _updated_at)
-- Sample data for testing
+## Testing
 
-### React-Admin Frontend Features
+```bash
+pytest                       # all tests
+pytest tests/test_backend.py # SQL generation + database deployment
+pytest tests/test_frontend.py# frontend generation + build
+```
 
-- Complete Create-Read-Update-Delete (CRUD) interface
-- List, Create, Edit, and Show views for each concept
-- Proper field components based on field types
-- Relationship handling in the UI
-- Form validation for required fields
-- Supabase data provider configuration
-- Ready-to-run React application
+More detail in [Development.md](Development.md).
 
-## Running the Generated Application
+---
 
-### Install Docker
+## Annex: Installing the Prerequisites
 
-Install Docker and Docker Compose.
-For example, on Ubuntu 22.04, run the following commands to install Docker, add your user to the Docker group, and reboot the system:
+### Python
+
+Use your distribution's Python 3.11+ package. Always create a virtual environment (`python -m venv venv`) as shown in the quick start.
+
+### Docker
+
+Install Docker and Docker Compose. For example, on Ubuntu:
+
 ```bash
 sudo apt install -y docker.io docker-compose
 sudo usermod -aG docker $USER
-sudo init 6
-docker --version # example output: 28.2.2
+sudo init 6   # reboot so the group change applies
+docker --version
 ```
 
-### Install Nvm, Npm and Supabase
+### Node.js (via nvm)
 
 ```bash
 # nvm https://github.com/nvm-sh/nvm
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 source ~/.bashrc
-nvm --version # 0.40.3
-nvm install --lts --default 24.11.0 
-npm --version # 11.6.1
-
-# supabase https://supabase.com/docs/guides/local-development/cli/getting-started
-nvm use node
-# npx checks for latest version in every execution
-npx -y supabase --version # example output: 2.70.5
+nvm install --lts
+npm --version
 ```
 
-### Generate the e-commerce application
+### direnv (optional)
+
+[direnv](https://direnv.net/) loads `.envrc` automatically when entering the project directory, so `UBK_DEV_MODEL` is set in every shell without exporting it by hand.
 
 ```bash
-uni-biz-kit models/test-app --output-dir test-app
+sudo apt install -y direnv
+# add to ~/.bashrc: eval "$(direnv hook bash)"
+echo "export UBK_DEV_MODEL=b2c-app" > .envrc
+direnv allow
 ```
-
-### configure supabase instance
-
-Create a supabase instance for the application:
-```bash
-cd test-app/backend
-
-# clean previous instance: npx supabase stop --no-backup
-npx supabase init
-# set project_id to parent directory name (replace "backend" with parent dir name)
-sed -i "s/project_id = \"backend\"/project_id = \"$(basename $(dirname $(pwd)))\"/" supabase/config.toml
-npx supabase start
-npx supabase status -o json # view urls and keys
-# view containter logs: docker ps --format '{{.Names}}' | grep '^supabase_' | xargs -I {} docker logs -f {} 
-
-# save api key
-cat > ../frontend/.env.development << EOF
-VITE_SUPABASE_URL=$(npx supabase status -o json | jq -r '.API_URL')
-VITE_SUPABASE_KEY=$(npx supabase status -o json | jq -r '.ANON_KEY')
-EOF
-
-cat > .env << EOF
-DB_URL=$(npx supabase status -o json | jq -r '.DB_URL')
-SUPABASE_URL=$(npx supabase status -o json | jq -r '.API_URL')
-SUPABASE_SERVICE_ROLE_KEY=$(npx supabase status -o json | jq -r '.SERVICE_ROLE_KEY')
-EOF
-```
-
-### Load the Generated Schema and Data
-
-```bash
-rm -rf supabase/migrations/*
-npx supabase migration new init_schema
-cp supabase_schema.sql supabase/migrations/*_init_schema.sql
-cp supabase_sample_data.sql supabase/seed.sql
-npx supabase db reset
-# check data
-source frontend/.env.development
-curl -X GET -H "apikey: $VITE_SUPABASE_KEY" "$VITE_SUPABASE_URL/rest/v1/customer?select=*" | jq '.' # ok, 3 customers
-```
-
-### Create Auth Users
-
-Since Supabase Auth users cannot be easily created via SQL in some environments, UniBizKit generates a `security_extended.json` file in the output directory. You can create these users using the Supabase Admin API:
-
-```bash
-# Load environment variables
-source .env
-
-# Create users using curl from security_extended.json (located in the parent directory)
-jq -c '.users[]' ../security_extended.json | while read user; do
-  email=$(echo $user | jq -r '.email')
-  password=$(echo $user | jq -r '.password')
-  role=$(echo $user | jq -r '.roles[0]')
-  
-  echo "Creating user: $email"
-  curl -X POST "$SUPABASE_URL/auth/v1/admin/users" \
-    -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-    -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-    -H "Content-Type: application/json" \
-    -d '{
-      "email": "'$email'",
-      "password": "'$password'",
-      "email_confirm": true,
-      "app_metadata": { "roles": ["'$role'"] }
-    }'
-done
-```
-
-### Start the React-Admin Application
-
-```bash
-# Navigate to the frontend directory
-cd frontend
-# Install dependencies
-npm install
-# Run
-npm start
-```
-
-The application will be available at `http://localhost:3000` (or another port if 3000 is occupied)
-
-## Testing
-
-Run the test suite:
-
-```bash
-# Install test dependencies
-pip install -r requirements-dev.txt
-
-# Run tests
-pytest
-
-# Run tests with coverage
-pytest --cov=src/unibizkit --cov-report=term-missing
-```
-
-### Test Categories
-
-- **Schema Validation**: Tests for JSON schema validation
-- **Supabase Generation**: Tests for database schema generation
-- **React-Admin Generation**: Tests for frontend code generation
-- **CLI Functionality**: Tests for command line interface
-
-## Architecture
-
-UniBizKit follows a modular architecture:
-
-```
-src/unibizkit/
-├── __init__.py           # Package initialization
-├── schema_loader.py     # Schema loading and validation
-├── supabase_generator.py # Supabase database schema generation
-├── react_admin_generator.py # React-Admin frontend generation
-├── cli.py               # Command line interface
-└── main.py              # Main entry point
-```
-
-### Key Components
-
-1. **Schema Loader**: Validates business schemas against the JSON schema definition
-2. **Supabase Generator**: Generates PostgreSQL database schemas with tables, constraints, and relationships
-3. **React-Admin Generator**: Generates complete React-Admin applications with CRUD interfaces
-4. **CLI**: Provides a user-friendly command line interface
-
-### Design Principles
-
-- **Explicitness**: Clear, well-documented JSON schema format
-- **Extensibility**: Easy to add new field types and features
-- **Testability**: Comprehensive test coverage
-- **Modularity**: Clear separation of concerns between components
-
-## Limitations
-
-This is a proof of concept with the following limitations:
-
-- Basic relationship handling (no complex join conditions)
-- Simple field type mapping
-- Basic React-Admin configuration
-- No authentication/authorization generation
-- Limited customization options
-
-## Future Enhancements
-
-Potential areas for future development:
-
-- More field types (arrays, JSON, etc.)
-- Advanced relationship configurations
-- Custom validation rules
-- Theming and branding options
-- Authentication integration
-- API generation
-- Mobile app generation
-- More database backends
-- More frontend frameworks

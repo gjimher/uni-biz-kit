@@ -11,7 +11,16 @@ def generate(bin_dir: Path, sso_dir: Path):
 def _content(sso_dir: Path) -> str:
     header = (
         '#!/usr/bin/python3\n'
-        '"""Stop and remove the SSO dev environment (containers + volumes). No backup."""\n'
+        '"""Stop and remove the SSO dev environment (containers + volumes). No backup.\n'
+        '\n'
+        'Idempotent: exits successfully when there is nothing to remove.\n'
+        '\n'
+        '* Asks for confirmation unless -f/--force is given.\n'
+        '* Runs `docker compose down -v`: removes the KDC and Keycloak containers\n'
+        '  and all their volumes (Kerberos database, keytabs, Keycloak database).\n'
+        '\n'
+        'For a stop that preserves state use dev-sso-stop.py.\n'
+        '"""\n'
         '\n'
         f'SSO_DIR = "{sso_dir}"\n'
         f'COMPOSE_PROJECT = "unibizkit-sso-{dev_ports.ENV_NUM:02d}"\n'
@@ -33,7 +42,9 @@ if not dc_file.exists():
     print("Nothing to remove (dev-sso/docker-compose.yml not found).")
     sys.exit(0)
 
-parser = argparse.ArgumentParser(description="Stop and remove the SSO dev environment.")
+parser = argparse.ArgumentParser(
+    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+)
 parser.add_argument('-f', '--force', action='store_true', help="Skip confirmation prompt")
 args = parser.parse_args()
 

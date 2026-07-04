@@ -6,7 +6,24 @@ def generate(bin_dir: Path):
     with open(script, 'w', encoding='utf-8') as f:
         f.write("""\
 #!/usr/bin/python3
-\"\"\"Reset the local Supabase database: reload schema, seed data and auth users.\"\"\"
+\"\"\"Reset the local Supabase database: reload schema, seed data and auth users.
+
+Leaves the database exactly as generated, wiping anything else. Requires a
+running instance (dev-supabase-start.py first). Steps:
+
+* Asks for confirmation unless -f/--force is given (all data is wiped).
+* Copies the generated backend/supabase_schema.sql into the initial migration
+  and supabase_seed_data_dev.sql into supabase/seed.sql.
+* Connects to the database (DB_URL from backend/.env) and:
+  - empties the document storage buckets (*-documents),
+  - drops every table in the public schema,
+  - deletes all rows in auth.users,
+  - reloads the schema and the seed data.
+* Uploads the seed documents (e.g. product images) through the Storage API so
+  their metadata is created by the database triggers.
+* Creates the auth users from security_extended.json through the Admin API,
+  with their roles in app_metadata (existing users are kept).
+\"\"\"
 import sys
 from pathlib import Path
 if sys.prefix == sys.base_prefix:
@@ -25,7 +42,9 @@ import urllib.request
 import urllib.error
 import urllib.parse
 
-parser = argparse.ArgumentParser(description="Reset local Supabase database.")
+parser = argparse.ArgumentParser(
+    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+)
 parser.add_argument('-f', '--force', action='store_true', help="Skip confirmation prompt")
 args = parser.parse_args()
 

@@ -11,6 +11,7 @@ if sys.prefix == sys.base_prefix:
         f"(not python3 or direct execution)"
     )
 
+import argparse
 import json
 import hashlib
 import os
@@ -23,6 +24,10 @@ import tomllib
 import http.server
 import urllib.error
 import urllib.request
+
+argparse.ArgumentParser(
+    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+).parse_args()
 
 root_dir = Path(__file__).parent.parent
 backend_dir = root_dir / 'backend'
@@ -366,7 +371,29 @@ def generate(bin_dir: Path, base_uri: str = "/"):
     base_prefix = base_uri.rstrip("/")
     head = f'''\
 #!/usr/bin/python3
-"""Create and start Supabase for local development."""
+"""Create and start the app's local Supabase instance.
+
+Idempotent: run it as many times as needed; it converges the instance to a
+running, up-to-date state. What it does depends on the current state:
+
+* First run: initializes backend/supabase (supabase init), applies the dev
+  config deltas (supabase_config_dev.toml and, when SSO is enabled,
+  supabase_sso_config_dev.toml) onto supabase/config.toml, starts the stack,
+  creates the initial migration, and writes the connection credentials:
+  - backend/.env: DB_URL, SUPABASE_URL (direct Kong URL) and the anon /
+    service-role keys, used by the test suite and the other dev scripts.
+  - frontend/.env.development: adds VITE_SUPABASE_KEY (anon key).
+* Later runs: if the config deltas or the Edge Functions changed, restarts
+  the stack to apply them; if the stack is stopped, starts it; if the Edge
+  Runtime container died, restarts the stack; otherwise does nothing.
+
+During a cold `supabase start` (no dev server running) it serves a temporary
+/api -> Kong proxy on the frontend port, so the Supabase CLI can verify
+storage through [api].external_url, which points at the Vite dev proxy.
+
+The database is not touched: load schema and data with
+dev-supabase-reset-schema-and-data.py.
+"""
 import sys
 from pathlib import Path
 

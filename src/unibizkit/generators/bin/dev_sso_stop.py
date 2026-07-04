@@ -11,7 +11,16 @@ def generate(bin_dir: Path, sso_dir: Path):
 def _content(sso_dir: Path) -> str:
     header = (
         '#!/usr/bin/python3\n'
-        '"""Stop SSO containers without removing volumes (use dev-sso-start.py to resume)."""\n'
+        '"""Stop the SSO containers without removing volumes.\n'
+        '\n'
+        'Idempotent: does nothing (successfully) when the environment does not exist\n'
+        'or is already stopped.\n'
+        '\n'
+        'Runs `docker compose stop` on the KDC and Keycloak containers. All volumes\n'
+        '(Kerberos database, keytabs, Keycloak database) are kept, so a later\n'
+        'dev-sso-start.py resumes where it left off. To delete everything use\n'
+        'dev-sso-remove.py.\n'
+        '"""\n'
         '\n'
         f'SSO_DIR = "{sso_dir}"\n'
         f'COMPOSE_PROJECT = "unibizkit-sso-{dev_ports.ENV_NUM:02d}"\n'
@@ -21,9 +30,14 @@ def _content(sso_dir: Path) -> str:
 
 def _body() -> str:
     return """
+import argparse
 import subprocess
 import sys
 from pathlib import Path
+
+argparse.ArgumentParser(
+    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+).parse_args()
 
 sso_dir = Path(SSO_DIR)
 dc_file = sso_dir / 'docker-compose.yml'

@@ -12,7 +12,27 @@ def generate(bin_dir: Path):
 def _content() -> str:
     header = (
         '#!/usr/bin/python3\n'
-        '"""Start the SSO dev environment (MIT Kerberos + Keycloak) and configure it automatically."""\n'
+        '"""Start the SSO dev environment (MIT Kerberos + Keycloak) and configure it automatically.\n'
+        '\n'
+        'Idempotent: every step checks the current state first, so it can be re-run\n'
+        'to converge or update the environment. Steps:\n'
+        '\n'
+        '* Checks the /etc/hosts entries Kerberos needs (keycloak.dev.local with its\n'
+        '  own IP for reverse DNS) and prints the commands to add them if missing.\n'
+        '* Builds and starts the KDC and Keycloak containers with Docker Compose.\n'
+        '* Configures Keycloak through its Admin API:\n'
+        '  - realm with Kerberos (SPNEGO) user federation against the KDC,\n'
+        '  - realm roles and users taken from the generated security_extended.json\n'
+        '    (users are materialized via Kerberos ROPC logins),\n'
+        '  - SPNEGO enabled in the browser authentication flow,\n'
+        '  - an OIDC client for Supabase plus a roles -> JWT claim mapper.\n'
+        '* Writes the OIDC settings to backend/supabase_sso_config_dev.toml and runs\n'
+        '  dev-supabase-start.py so Supabase picks them up.\n'
+        '* Prints the Keycloak admin URL, the OIDC client secret and the SSO users.\n'
+        '\n'
+        'After this, dev-sso-chrome.py opens a browser that logs in via Kerberos\n'
+        'without typing a password.\n'
+        '"""\n'
         '\n'
         f'REALM = "{REALM}"\n'
         f'KC_PORT = {dev_ports.KC_PORT}\n'
@@ -29,6 +49,7 @@ def _body() -> str:
     # Plain string — no f-string, so {KC_PORT} etc pass through as literals
     # that become variable references in the generated script.
     return """
+import argparse
 import json
 import subprocess
 import sys
@@ -36,6 +57,10 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+argparse.ArgumentParser(
+    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+).parse_args()
 
 root_dir = Path(__file__).parent.parent
 sso_dir = root_dir / 'dev-sso'

@@ -1,5 +1,36 @@
 # Development Guide
 
+How to work on UniBizKit itself and on application models. For first-time setup see [USAGE.md](USAGE.md); for what gets generated see [Backend.md](Backend.md) and [Frontend.md](Frontend.md).
+
+## Test-driven generation
+
+The test suite runs against the `models/test-app` model: `pytest` regenerates the code, deploys it and verifies it. Do not run `uni-biz-kit` by hand during development — change the generators, run `pytest`, and inspect the output in `test-app/`.
+
+When developing your own model, set `UBK_DEV_MODEL` (the repo's `.envrc` sets it to `b2c-app` via direnv) so that `pytest` generates and verifies **both** models, each on its own ports (see [below](#second-dev-environment-ubk_dev_model)).
+
+## One Supabase instance per model
+
+Each model gets its own Supabase instance, in dev and in production. This avoids monoliths, keeps models decoupled and makes deployment straightforward (see [Architecture.md](Architecture.md#one-supabase-instance-per-model)). The `bin/dev-*` scripts below operate the instance of the app they live in.
+
+## Dev scripts (`<app>/bin/dev-*`)
+
+Every generated app ships scripts to operate its local stack. The state-changing scripts (`start`, `stop`, `remove`) are [idempotent](Architecture.md#idempotent-operations): re-running them just converges to the requested state. This is the summary — the detail for each script is in its `-h`:
+
+| Script | What it does |
+|--------|--------------|
+| `dev-supabase-start.py` | Creates/starts the app's Supabase instance; writes `backend/.env` with URL and keys |
+| `dev-supabase-stop.py` | Stops the instance (idempotent, data preserved) |
+| `dev-supabase-remove.py` | Stops and removes the instance |
+| `dev-supabase-reset-schema-and-data.py` | Resets the database to the generated schema and seed data |
+| `dev-supabase-call-edge-function.py` | Calls an [edge function](Backend.md#edge-functions) authenticated as a given user |
+| `dev-smtp-mock.py` | SMTP mock: captures auth emails and prints them (with their links) to stdout |
+| `dev-sso-start.py` | Starts and auto-configures the [SSO](SingleSignOn.md) dev environment (Kerberos + Keycloak) |
+| `dev-sso-stop.py` | Stops the SSO containers, keeping volumes |
+| `dev-sso-remove.py` | Stops and removes the SSO environment |
+| `dev-sso-chrome.py` | Gets a Kerberos ticket and launches Chrome for SSO login |
+
+The `dev-sso-*` scripts are only generated when the model enables [SSO](SingleSignOn.md).
+
 ## Multiple dev environments on one machine
 
 Set `UBK_DEV_ENV_NUM` before running any generator command or test suite to select an isolated environment. If the variable is absent or `0`, you get the default environment.
