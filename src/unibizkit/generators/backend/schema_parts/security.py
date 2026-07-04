@@ -114,6 +114,35 @@ def _profile_metadata_column_values(
     return values
 
 
+def _owner_backfill_sql(profile_concept: str, concept_map: Dict[str, Any]) -> str:
+    """UPDATEs run when a profile is linked to an auth user for the first time.
+
+    Rows that are part_of the profile (composition implies ownership) may exist
+    before the user ever logs in — seeded demo data or records prepared by an
+    admin. They carry a NULL _security_owner_id (the owner trigger only fires
+    for authenticated inserts), so owner_write RLS would hide them from the very
+    user they belong to. Transfer those orphans to the claiming user.
+    """
+    updates = []
+    for concept in concept_map.values():
+        if not any(f["name"] == "_security_owner_id" for f in concept["fields"]):
+            continue
+        for field in concept["fields"]:
+            if (
+                field["type"] == "relation_to_one"
+                and field.get("subtype") == "part_of"
+                and field["target"] == profile_concept
+            ):
+                updates.append(f"""
+      UPDATE {_quote_ident(concept["name"])} AS linked
+      SET "_security_owner_id" = target_user_id::text
+      FROM {_quote_ident(profile_concept)} AS profile
+      WHERE profile."_user" = target_user_id
+        AND linked.{_quote_ident(field["name"])} = profile."id"
+        AND linked."_security_owner_id" IS NULL;""")
+    return "".join(updates)
+
+
 def _generate_profile_sync_function(
     concept_map: Dict[str, Any],
     security_config: Dict[str, Any],
@@ -147,6 +176,7 @@ def _generate_profile_sync_function(
             + [expr for _, expr in metadata_values]
         )
         owner_id_set = ',\n          "_security_owner_id" = target_user_id::text' if has_security_owner_id else ""
+        owner_backfill = _owner_backfill_sql(concept_name, concept_map)
 
         sync_parts.append(f"""
   -- Sync {role_name} profiles in {concept_name}.
@@ -190,6 +220,9 @@ def _generate_profile_sync_function(
       INSERT INTO {table_sql} ({insert_columns_sql})
       SELECT {insert_values_sql}
       WHERE NOT EXISTS (SELECT 1 FROM {table_sql} WHERE "_user" = target_user_id);
+
+      -- First link for this user: adopt pre-existing rows that are part_of the
+      -- claimed profile (seeded or admin-prepared) and still have no owner.{owner_backfill}
     END IF;
   ELSE
     -- User no longer holds the role: deactivate their profile.
