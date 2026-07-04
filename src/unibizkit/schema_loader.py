@@ -368,6 +368,7 @@ class SchemaLoader:
 
             concept = concept_map[concept_name]
             field_map = {field["name"]: field for field in concept["fields"]}
+            injected_fields = self._seed_injected_fields(concept_name)
             seen_ids = set()
 
             for record in records:
@@ -381,6 +382,8 @@ class SchemaLoader:
                     if field_name in ("id", "documents"):
                         continue
                     if field_name not in field_map:
+                        if field_name in injected_fields:
+                            continue
                         raise SchemaValidationError(
                             f"Seed data references unknown field '{concept_name}.{field_name}'"
                         )
@@ -401,6 +404,20 @@ class SchemaLoader:
 
                 for document in record.get("documents", []):
                     self._validate_seed_document(concept, document)
+
+    def _seed_injected_fields(self, concept_name: str) -> set:
+        """Fields injected later by the SchemaProcessor that seed data may still set:
+        'state' on workflow concepts and '_user_pending_link' on profile concepts
+        (to pre-link a seeded profile row to a seed user's email)."""
+        injected = set()
+        for rule in (self.workflow_config or {}).get("workflow_rules", []):
+            concepts = [name.strip() for name in rule["concepts"].split(",")]
+            if rule["concepts"] == "*" or concept_name in concepts:
+                injected.add("state")
+        for role in (self.security_config or {}).get("roles", []):
+            if role.get("profile_concept") == concept_name:
+                injected.add("_user_pending_link")
+        return injected
 
     def _validate_reserved_role_names(self, security_config: Dict[str, Any]):
         for role in security_config.get("roles", []):
