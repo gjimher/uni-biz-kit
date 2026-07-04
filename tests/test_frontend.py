@@ -55,6 +55,15 @@ class TestAppFrontend:
         assert "from '../../presentation/lib/validations'" in address_resource, \
             "Validation resource should import shared logic from presentation/lib/validations"
 
+        # Markdown fields must use the generated markdown editor component.
+        product_resource = (frontend_dir / 'src' / 'resources' / 'product' / 'product.jsx').read_text()
+        assert "from '../../components/markdown_input'" in product_resource, \
+            "Resource with a markdown field should import the generated markdown component"
+        assert '<MarkdownInput source="details"' in product_resource
+        package_json = (frontend_dir / 'package.json').read_text()
+        assert '"@uiw/react-md-editor"' in package_json, \
+            "Markdown editor dependency should be added when the model uses markdown fields"
+
         # Change to frontend directory
         original_cwd = os.getcwd()
         

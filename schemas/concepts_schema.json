@@ -112,6 +112,7 @@
                   "description": "Field type",
                   "enum": [
                     "string",
+                    "markdown",
                     "integer",
                     "decimal",
                     "enum",

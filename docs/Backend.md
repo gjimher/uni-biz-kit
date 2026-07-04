@@ -44,9 +44,9 @@ Each concept becomes a table plus its CRUD UI. Example (from `models/b2c-app/con
 
 ### Field types
 
-`string`, `integer`, `decimal`, `enum`, `boolean`, `date`, `datetime`, `relation_to_one`, `relation_to_many`, `prefill`.
+`string`, `markdown`, `integer`, `decimal`, `enum`, `boolean`, `date`, `datetime`, `relation_to_one`, `relation_to_many`, `prefill`.
 
-Relations declare their `target` concept; `relation_to_many` generates a join table. `prefill` copies values from a related record (e.g. a saved address into an order).
+Relations declare their `target` concept; `relation_to_many` generates a join table. `prefill` copies values from a related record (e.g. a saved address into an order). `markdown` is long-form text stored as `TEXT` and edited in the UI with a markdown editor (source + live preview).
 
 ### Field properties
 

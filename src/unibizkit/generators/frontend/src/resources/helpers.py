@@ -1,5 +1,9 @@
 from typing import Any, Dict, List
 
+# Generated components that live in src/components/ and therefore must not be
+# imported from the react-admin package.
+CUSTOM_FIELD_COMPONENTS = {'RelatedValidationInput', 'MarkdownInput', 'MarkdownField'}
+
 
 def find_owned_children(parent_concept_name: str, concepts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     children = []
@@ -215,9 +219,10 @@ def get_optimized_react_admin_imports(
     if all_descendants:
         for child in all_descendants:
             for field in child["concept"]["fields"]:
-                if field["_fe_component"] != "RelatedValidationInput":
+                if field["_fe_component"] not in CUSTOM_FIELD_COMPONENTS:
                     needed_components.add(field["_fe_component"])
-                needed_components.add(field["_fe_list_component"])
+                if field["_fe_list_component"] not in CUSTOM_FIELD_COMPONENTS:
+                    needed_components.add(field["_fe_list_component"])
 
     if many_to_many_links:
         needed_components.update([
@@ -227,9 +232,10 @@ def get_optimized_react_admin_imports(
         ])
 
     for field in concept["fields"]:
-        if field["_fe_component"] != "RelatedValidationInput":
+        if field["_fe_component"] not in CUSTOM_FIELD_COMPONENTS:
             needed_components.add(field["_fe_component"])
-        needed_components.add(field["_fe_list_component"])
+        if field["_fe_list_component"] not in CUSTOM_FIELD_COMPONENTS:
+            needed_components.add(field["_fe_list_component"])
 
         if field["type"] == "relation_to_one":
             needed_components.update(['ReferenceInput', 'ReferenceField', 'SelectInput'])
@@ -458,6 +464,11 @@ def generate_field_components(
                 pass
             else:
                 continue
+
+        elif field["type"] == "markdown":
+            # Full-width editor; the MUI text-input props do not apply. No list
+            # filter either: long-form content is not useful as a filter.
+            input_html = f'          <MarkdownInput source="{field_name}"{validation}{disabled_prop}{col_label_prop} />'
 
         elif field["type"] == "enum":
             enum_values = field["enum_values"]

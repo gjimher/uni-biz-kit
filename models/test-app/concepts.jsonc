@@ -37,6 +37,13 @@
           "description": "Detailed description of the product"
         },
         {
+          // markdown: TEXT column, edited with a markdown editor (source + live preview)
+          "name": "details",
+          "type": "markdown",
+          "required": false,
+          "description": "Long-form product details in markdown"
+        },
+        {
           "name": "price",
           "type": "decimal",
           // subtype money: renders as currency in the UI and maps to NUMERIC in SQL

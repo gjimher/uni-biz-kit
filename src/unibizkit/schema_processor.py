@@ -965,7 +965,10 @@ class SchemaProcessor:
         field["_fe_visibility"] = self._determine_visibility(field)
         field["_fe_component"] = self._determine_ui_component(field)
         field["_fe_list_component"] = self._determine_list_component(field)
-        field["_fe_grid_width"] = 6 if field["size"] in ['m', 'l'] else 3
+        if field["type"] == "markdown":
+            field["_fe_grid_width"] = 12  # editor always takes the full row
+        else:
+            field["_fe_grid_width"] = 6 if field["size"] in ['m', 'l'] else 3
 
     def _determine_sql_type(self, field: Dict[str, Any]) -> str:
         """Map abstract type to PostgreSQL type."""
@@ -986,6 +989,7 @@ class SchemaProcessor:
             
         type_mapping = {
             'string': 'TEXT',
+            'markdown': 'TEXT',
             'integer': 'INTEGER',
             'decimal': 'DECIMAL',
             'boolean': 'BOOLEAN',
@@ -1038,6 +1042,7 @@ class SchemaProcessor:
             return 'RelatedValidationInput'
         mapping = {
             'string': 'TextInput',
+            'markdown': 'MarkdownInput',
             'integer': 'NumberInput',
             'decimal': 'NumberInput',
             'boolean': 'BooleanInput',
@@ -1053,6 +1058,7 @@ class SchemaProcessor:
         """Map field type to React-Admin Field component (for lists/show)."""
         mapping = {
             'string': 'TextField',
+            'markdown': 'MarkdownField',
             'integer': 'NumberField',
             'decimal': 'NumberField',
             'boolean': 'BooleanField',

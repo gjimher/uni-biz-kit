@@ -42,7 +42,7 @@
               "properties": {
                 "_be_sql_type": {
                   "type": "string",
-                  "description": "PostgreSQL column type derived from the abstract field type. Examples: string/s→VARCHAR(255), string/m|l→TEXT, integer→INTEGER, decimal→DECIMAL(p,s), boolean→BOOLEAN, date→DATE, datetime→TIMESTAMP WITH TIME ZONE, enum→TEXT, relation_to_one→INTEGER, relation_to_many→'' (handled via join table)."
+                  "description": "PostgreSQL column type derived from the abstract field type. Examples: string/s→VARCHAR(255), string/m|l→TEXT, markdown→TEXT, integer→INTEGER, decimal→DECIMAL(p,s), boolean→BOOLEAN, date→DATE, datetime→TIMESTAMP WITH TIME ZONE, enum→TEXT, relation_to_one→INTEGER, relation_to_many→'' (handled via join table)."
                 },
                 "_be_not_null": {
                   "type": "boolean",
@@ -51,15 +51,15 @@
 
                 "_fe_component": {
                   "type": "string",
-                  "description": "React-Admin Input component used in create/edit forms. Possible values: TextInput, NumberInput, BooleanInput, DateInput, SelectInput, ReferenceInput, ReferenceManyField, RelatedValidationInput (for string fields with CSV validation)."
+                  "description": "React-Admin Input component used in create/edit forms. Possible values: TextInput, NumberInput, BooleanInput, DateInput, SelectInput, ReferenceInput, ReferenceManyField, RelatedValidationInput (for string fields with CSV validation), MarkdownInput (generated markdown editor for markdown fields)."
                 },
                 "_fe_list_component": {
                   "type": "string",
-                  "description": "React-Admin Field component used in list and show views. Possible values: TextField, NumberField, BooleanField, DateField, ReferenceField, ReferenceManyField."
+                  "description": "React-Admin Field component used in list and show views. Possible values: TextField, NumberField, BooleanField, DateField, ReferenceField, ReferenceManyField, MarkdownField (generated markdown renderer for markdown fields)."
                 },
                 "_fe_grid_width": {
                   "type": "integer",
-                  "description": "MUI Grid column span for the field in forms. 6 for medium/large fields (size m or l), 3 for small fields (size s)."
+                  "description": "MUI Grid column span for the field in forms. 6 for medium/large fields (size m or l), 3 for small fields (size s), 12 for markdown fields (full-row editor)."
                 },
                 "_fe_visibility": {
                     "type": "string",

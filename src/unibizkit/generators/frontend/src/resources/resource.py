@@ -529,6 +529,14 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         component_imports.append(f"import {{ ReorderableDatagrid }} from '../../components/reorderable_datagrid';")
     if "RecursiveParentSelector" in field_components["create_fields"] or "RecursiveParentSelector" in field_components["edit_fields"]:
         component_imports.append(f"import {{ RecursiveParentSelector }} from '../../components/recursive_parent_selector';")
+    markdown_scan = "".join([
+        field_components["create_fields"], field_components["edit_fields"],
+        field_components["list_fields"], field_components["show_fields"],
+        field_components["child_tabs"], child_dialog_components,
+    ])
+    markdown_imports = [name for name in ("MarkdownInput", "MarkdownField") if name in markdown_scan]
+    if markdown_imports:
+        component_imports.append(f"import {{ {', '.join(markdown_imports)} }} from '../../components/markdown_input';")
     if "FIELD_HELP_ICON" in field_components["create_fields"] or "FIELD_HELP_ICON" in field_components["edit_fields"] or "FIELD_HELP_ICON" in child_dialog_components:
         component_imports.append(f"import {{ FIELD_HELP_ICON }} from '../../components/field_help_icon';")
     component_imports_str = "\n".join(component_imports)

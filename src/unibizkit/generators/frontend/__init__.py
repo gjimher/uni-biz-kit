@@ -12,7 +12,8 @@ from .src.layout import (
 )
 from .src.components import (
     title, reorderable_datagrid, recursive_parent_selector,
-    custom_edit_toolbar, document_tab, workflow_selector, field_help_icon
+    custom_edit_toolbar, document_tab, workflow_selector, field_help_icon,
+    markdown_input
 )
 from .src.resources import resource
 from .src.presentation import model_js, router, custom_page
@@ -81,7 +82,7 @@ class ReactAdminGenerator:
         base_uri = ctx.deployment_config.get("base_uri", "/")
 
         # Root files
-        _write(ctx.output_dir / "package.json", package_json.generate())
+        _write(ctx.output_dir / "package.json", package_json.generate(ctx))
         _write(ctx.output_dir / "vite.config.js", vite_config.generate(base_uri))
         _write(ctx.output_dir / ".eslintrc.json", eslintrc.generate())
         _write(ctx.output_dir / "index.html", index_html.generate(ctx))
@@ -130,6 +131,8 @@ class ReactAdminGenerator:
         _write(ctx.output_dir / "src" / "components" / "field_help_icon.jsx", field_help_icon.generate())
         if any(c.get("documents") and c["documents"]["enabled"] for c in ctx.concepts):
             _write(ctx.output_dir / "src" / "components" / "document_tab.jsx", document_tab.generate())
+        if any(f["type"] == "markdown" for c in ctx.concepts for f in c["fields"]):
+            _write(ctx.output_dir / "src" / "components" / "markdown_input.jsx", markdown_input.generate())
 
         # Resources (one per concept)
         for concept in ctx.concepts:

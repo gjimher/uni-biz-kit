@@ -39,8 +39,8 @@
   //
   // Fields not mentioned keep their default visibility.
   "list_field_rules_level_2": {
-    // product: promote price to front; hide sku from list (still visible in detail view)
-    "product": "!>price, sku",
+    // product: promote price to front; hide sku and the long markdown details from list
+    "product": "!>price, sku, !details",
     // category: hide slug (URL-only field, not useful in admin lists)
     "category": "!slug",
     // order: show id as first column, then promote total_amount
