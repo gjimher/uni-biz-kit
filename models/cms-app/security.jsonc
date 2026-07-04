@@ -1,0 +1,56 @@
+{
+  "$schema": "../../schemas/security_schema.json",
+  "authentication_required": true,
+  // Employees are created by the admin; no self-registration, no SSO.
+  "registration": {
+    "allow": false
+  },
+  "sso": {
+    "enabled": false
+  },
+  "roles": [
+    {
+      "name": "admin",
+      "description": "Content administrator — full access"
+    },
+    {
+      "name": "editor",
+      "description": "Employee who writes and publishes content",
+      // Links the 'editor' role to the employee profile concept;
+      // enables owner_write checks and author auto-linking
+      "profile_concept": "employee"
+    }
+  ],
+  // Seed users (development only).
+  "users": [
+    {
+      "email": "admin@cm.com",
+      "password": "adminadmin",
+      "roles": ["admin"]
+    },
+    {
+      "email": "editor1@cm.com",
+      "password": "editoreditor",
+      "roles": ["editor"]
+    },
+    {
+      "email": "editor2@cm.com",
+      "password": "editoreditor",
+      "roles": ["editor"]
+    }
+  ],
+  "rules_level_2": [
+    // Published content is meant to be publicly readable (e.g. a future intranet
+    // or public site reading through the anon API).
+    { "role": "_anon", "concept": "article",  "field": "*", "access": "read" },
+    { "role": "_anon", "concept": "category", "field": "*", "access": "read" },
+
+    // Editors manage all content and categories
+    { "role": "editor", "concept": "article",  "field": "*", "access": "write" },
+    { "role": "editor", "concept": "category", "field": "*", "access": "write" },
+
+    // Editors can see colleague profiles (author column) and edit their own
+    { "role": "editor", "concept": "employee", "field": "*", "access": "read" },
+    { "role": "editor", "concept": "employee", "field": "*", "access": "owner_write" }
+  ]
+}

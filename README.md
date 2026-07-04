@@ -30,6 +30,7 @@ It is easier to obtain a quality application — without functional or security 
 
 * [`models/test-app`](models/test-app) — e-commerce backoffice, used by the test suite.
 * [`models/b2c-app`](models/b2c-app) — B2C storefront: custom MDX/JSX front for customers plus the generated admin UI.
+* [`models/cms-app`](models/cms-app) — content manager: a public news site plus an admin where employees publish articles with a markdown editor and photos.
 
 ## Documentation
 

@@ -15,7 +15,7 @@ A model is a directory of JSON files, each validated against a meta-schema in `s
 * `presentation.jsonc` + `presentation/` — UI config and custom pages → [Frontend.md](Frontend.md)
 * `seed_data.jsonc`, `system.jsonc`, `deployment.jsonc`, `validations/` → [Backend.md](Backend.md#the-model-directory)
 
-Examples: `models/test-app` (e-commerce backoffice), `models/b2c-app` (storefront + admin).
+Examples: `models/test-app` (e-commerce backoffice), `models/b2c-app` (storefront + admin), `models/cms-app` (public news site + admin with markdown + photos).
 
 ## The Extended IR
 

@@ -1,0 +1,30 @@
+{
+  "$schema": "../../schemas/presentation_schema.json",
+  "menu": [
+    {
+      "label": "Content",
+      "children": [
+        { "label": "Articles",   "concept": "article" },
+        { "label": "Categories", "concept": "category" }
+      ]
+    },
+    {
+      "label": "People",
+      "children": [
+        { "label": "Employees", "concept": "employee" }
+      ]
+    }
+  ],
+  "list_field_rules_level_2": {
+    // Article list: show the title (id_presentation) as first column; long text
+    // (summary, markdown body) belongs in the edit view, not in a list column
+    "article": "id_presentation[0], !title, !summary, !body",
+
+    // Employee list: email first for quick identification
+    "employee": "!>email"
+  },
+  "list_sort": {
+    // Newest content first
+    "article": "published_date DESC"
+  }
+}

@@ -1,0 +1,94 @@
+// Demo content for the Company News content manager.
+// Article cover photos are generated gradient SVGs (emoji + title) embedded as
+// base64 `img_m` documents, same approach as models/b2c-app.
+// Note: article.author is calculated (copy_logged_on_insert), so seeded articles
+// have no author; it is auto-linked when a logged-in editor creates an article.
+{
+  "$schema": "../../schemas/seed_data_schema.json",
+  "include_test_data": false,
+  "records": {
+    "category": [
+      {
+        "id": "company-news",
+        "name": "Company News",
+        "description": "Announcements and general company updates"
+      },
+      {
+        "id": "product-updates",
+        "name": "Product Updates",
+        "description": "New releases and product improvements"
+      },
+      {
+        "id": "events",
+        "name": "Events",
+        "description": "Upcoming internal and public events"
+      }
+    ],
+    "article": [
+      {
+        "id": "new-intranet",
+        "title": "Our New Intranet Is Live",
+        "category": "product-updates",
+        "summary": "The new intranet replaces the old wiki: single sign-on, faster search and a mobile-friendly design.",
+        "body": "# Our New Intranet Is Live\n\nAfter three months of work, the **new company intranet** is available to everyone at `intranet.example.com`.\n\n## What changes\n\n* **Single sign-on** — use your corporate account, no separate password.\n* **Faster search** — results across documents, people and news in one box.\n* **Mobile friendly** — works on any device, no app required.\n\n## What you need to do\n\n1. Sign in once with your corporate account.\n2. Check that your profile information is correct.\n3. Move any personal bookmarks from the old wiki before **July 31**.\n\n> The old wiki becomes read-only on August 1 and will be archived at the end of the year.\n\nQuestions? Reach out on the `#intranet` channel or read the [migration guide](https://example.com/intranet-guide).",
+        "published_date": "2026-06-22",
+        "status": "published",
+        "is_featured": true,
+        "documents": [
+          {
+            "tag": "img_m",
+            "name": "cover.svg",
+            "content_type": "image/svg+xml",
+            "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgODAwIDQ1MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM2MzY2ZjEiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMwZWE1ZTkiLz48L2xpbmVhckdyYWRpZW50Pgo8cmFkaWFsR3JhZGllbnQgaWQ9ImIiIGN4PSIwLjUiIGN5PSIwLjUiIHI9IjAuNSI+CjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIgc3RvcC1vcGFjaXR5PSIwLjUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNmZmZmZmYiIHN0b3Atb3BhY2l0eT0iMCIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPgo8cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0idXJsKCNnKSIvPgo8Y2lyY2xlIGN4PSI0MDAiIGN5PSIyMjUiIHI9IjE3MCIgZmlsbD0idXJsKCNiKSIvPgo8dGV4dCB4PSI0MDAiIHk9IjIyNSIgZm9udC1zaXplPSIxODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj7wn5qAPC90ZXh0Pgo8L3N2Zz4="
+          }
+        ]
+      },
+      {
+        "id": "q2-results",
+        "title": "Q2 2026 Results: Best Quarter Yet",
+        "category": "company-news",
+        "summary": "Revenue grew 18% year over year and we welcomed 24 new colleagues across three offices.",
+        "body": "# Q2 2026 Results\n\nWe closed the **best quarter in company history**. Thank you all!\n\n## Highlights\n\n| Metric | Q2 2025 | Q2 2026 |\n| --- | --- | --- |\n| Revenue | 4.2 M | **5.0 M** |\n| New customers | 120 | **168** |\n| Team size | 96 | **120** |\n\n## What drove it\n\n* The *spring release* shipped on time and cut onboarding from days to hours.\n* Support response times dropped below **2 hours** on average.\n* Three new partner integrations went live.\n\nFull details in the quarterly deck shared by finance — or come to the **all-hands on July 10** for the live walkthrough.",
+        "published_date": "2026-07-01",
+        "status": "published",
+        "is_featured": false,
+        "documents": [
+          {
+            "tag": "img_m",
+            "name": "cover.svg",
+            "content_type": "image/svg+xml",
+            "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgODAwIDQ1MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMxMGI5ODEiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMzNGQzOTkiLz48L2xpbmVhckdyYWRpZW50Pgo8cmFkaWFsR3JhZGllbnQgaWQ9ImIiIGN4PSIwLjUiIGN5PSIwLjUiIHI9IjAuNSI+CjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIgc3RvcC1vcGFjaXR5PSIwLjUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNmZmZmZmYiIHN0b3Atb3BhY2l0eT0iMCIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPgo8cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0idXJsKCNnKSIvPgo8Y2lyY2xlIGN4PSI0MDAiIGN5PSIyMjUiIHI9IjE3MCIgZmlsbD0idXJsKCNiKSIvPgo8dGV4dCB4PSI0MDAiIHk9IjIyNSIgZm9udC1zaXplPSIxODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj7wn5OIPC90ZXh0Pgo8L3N2Zz4="
+          }
+        ]
+      },
+      {
+        "id": "summer-party",
+        "title": "Save the Date: Summer Party 2026",
+        "category": "events",
+        "summary": "Friday August 28, riverside terrace. Families welcome — sign up before August 14.",
+        "body": "# Summer Party 2026 🎉\n\nThis year's summer party takes place on **Friday, August 28** at the *riverside terrace* downtown.\n\n## Program\n\n* **17:00** — welcome drinks\n* **18:00** — team games (yes, the trophy is back)\n* **20:00** — dinner and live music\n\n## Practical notes\n\n1. Partners and kids are welcome.\n2. Vegetarian and vegan options available — indicate it in the form.\n3. The office closes at **15:00** that day.\n\nPlease [sign up here](https://example.com/summer-party) before **August 14** so we can plan catering.",
+        "published_date": "2026-06-15",
+        "status": "published",
+        "is_featured": false,
+        "documents": [
+          {
+            "tag": "img_m",
+            "name": "cover.svg",
+            "content_type": "image/svg+xml",
+            "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgODAwIDQ1MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmNTllMGIiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNlZjQ0NDQiLz48L2xpbmVhckdyYWRpZW50Pgo8cmFkaWFsR3JhZGllbnQgaWQ9ImIiIGN4PSIwLjUiIGN5PSIwLjUiIHI9IjAuNSI+CjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIgc3RvcC1vcGFjaXR5PSIwLjUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNmZmZmZmYiIHN0b3Atb3BhY2l0eT0iMCIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPgo8cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0idXJsKCNnKSIvPgo8Y2lyY2xlIGN4PSI0MDAiIGN5PSIyMjUiIHI9IjE3MCIgZmlsbD0idXJsKCNiKSIvPgo8dGV4dCB4PSI0MDAiIHk9IjIyNSIgZm9udC1zaXplPSIxODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj7wn46JPC90ZXh0Pgo8L3N2Zz4="
+          }
+        ]
+      },
+      {
+        "id": "onboarding-guide",
+        "title": "Draft: Updated Onboarding Guide",
+        "category": "company-news",
+        "summary": "Work-in-progress rewrite of the onboarding guide — feedback welcome before it goes live.",
+        "body": "# Updated Onboarding Guide (draft)\n\nThis is a **work in progress** — please add comments before it is published.\n\n## Week 1 checklist\n\n- [ ] Laptop and accounts ready on day one\n- [ ] Buddy assigned\n- [ ] Intro sessions with each team\n\n*Target publication: mid July.*",
+        "published_date": null,
+        "status": "draft",
+        "is_featured": false
+      }
+    ]
+  }
+}
