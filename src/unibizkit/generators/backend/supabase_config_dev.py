@@ -73,7 +73,10 @@ enable_signup = {enable_signup}
 email_sent = 120
 
 [auth.email]
-enable_signup = {enable_signup}
+# Must stay true even when registration is disabled: this flag toggles the whole
+# email provider in GoTrue (false = no password logins at all, even for existing
+# users). Blocking self-registration is handled by [auth] enable_signup above.
+enable_signup = true
 enable_confirmations = true
 max_frequency = "1s"
 
