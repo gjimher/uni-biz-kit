@@ -1,0 +1,68 @@
+{
+  "$schema": "../../schemas/presentation_schema.json",
+  "currency": "EUR",
+  "locale": "en-GB",
+  "number_locale": "en-GB",
+  "menu": [
+    {
+      "label": "People",
+      "children": [
+        { "label": "Employees",    "concept": "employee" },
+        { "label": "Work Centers", "concept": "work_center" },
+        { "label": "Holidays",     "concept": "holiday" }
+      ]
+    },
+    {
+      "label": "Time & Absence",
+      "children": [
+        { "label": "Vacation Requests", "concept": "vacation_request" },
+        { "label": "Leave Requests",    "concept": "leave_request" },
+        { "label": "Work Logs",         "concept": "work_log" },
+        { "label": "Sick Leaves",       "concept": "sick_leave" }
+      ]
+    },
+    {
+      "label": "Helpdesk",
+      "children": [
+        { "label": "Tickets", "concept": "ticket" }
+      ]
+    },
+    {
+      "label": "Content",
+      "children": [
+        { "label": "Articles",   "concept": "article" },
+        { "label": "Categories", "concept": "category" }
+      ]
+    }
+  ],
+  "list_field_rules_level_2": {
+    // Directory columns; contact details, allowances and rolled-up counters
+    // belong in the edit view
+    "employee": "!phone, !>work_center",
+
+    // Requests: who/when/how-much plus workflow state; notes and the internal
+    // snapshot fields stay in the edit view
+    "vacation_request": "!comment, !hr_comment, !allowance_snapshot, !days_used_snapshot, !days_approved, state[days_count]",
+    "leave_request": "!reason, !hr_comment, !flex_earned_snapshot, !flex_used_snapshot, !flex_hours_approved, state[hours]",
+
+    // Clockings: times and computed hours; the expected-hours snapshot is noise
+    "work_log": "!expected_hours",
+
+    "sick_leave": "!notes",
+
+    // Tickets: subject (id_presentation) first, then routing info and state
+    "ticket": "id_presentation[0], !subject, !description, !resolution, state[priority]",
+
+    // Article list: title as first column; long text belongs in the edit view
+    "article": "id_presentation[0], !title, !summary, !body"
+  },
+  "list_sort": {
+    "vacation_request": "id DESC",
+    "leave_request": "id DESC",
+    "ticket": "id DESC",
+    "work_log": "work_date DESC",
+    "sick_leave": "start_date DESC",
+    "holiday": "date ASC",
+    "article": "published_date DESC"
+  }
+}

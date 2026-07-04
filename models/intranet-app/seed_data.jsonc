@@ -1,0 +1,393 @@
+// Demo dataset for the Intranet example.
+// Employee portraits and article covers are generated gradient SVGs (initials /
+// emoji) embedded as base64 documents, same approach as models/b2c-app covers.
+// Employees whose `_user_pending_link` matches a seed user email are claimed by
+// that user at first login (see docs/Security.md).
+// Note: article.author is calculated (copy_logged_on_insert), so seeded articles
+// have no author; it is auto-linked when a logged-in employee creates an article.
+{
+  "$schema": "../../schemas/seed_data_schema.json",
+  "include_test_data": false,
+  "records": {
+    "work_center": [
+      {
+        "id": "madrid",
+        "name": "Madrid HQ",
+        "address": "Calle Gran Vía 42",
+        "city": "Madrid",
+        "description": "Headquarters: management, HR, sales and platform teams"
+      },
+      {
+        "id": "bcn",
+        "name": "Barcelona Office",
+        "address": "Carrer de Pallars 108",
+        "city": "Barcelona",
+        "description": "Product and engineering hub"
+      }
+    ],
+    "holiday": [
+      { "work_center": "madrid", "date": "2026-01-01", "name": "New Year's Day" },
+      { "work_center": "madrid", "date": "2026-01-06", "name": "Epiphany" },
+      { "work_center": "madrid", "date": "2026-04-02", "name": "Maundy Thursday" },
+      { "work_center": "madrid", "date": "2026-04-03", "name": "Good Friday" },
+      { "work_center": "madrid", "date": "2026-05-01", "name": "Labour Day" },
+      { "work_center": "madrid", "date": "2026-05-15", "name": "San Isidro" },
+      { "work_center": "madrid", "date": "2026-08-15", "name": "Assumption Day" },
+      { "work_center": "madrid", "date": "2026-10-12", "name": "Hispanic Day" },
+      { "work_center": "madrid", "date": "2026-11-09", "name": "Virgin of Almudena" },
+      { "work_center": "madrid", "date": "2026-12-08", "name": "Immaculate Conception" },
+      { "work_center": "madrid", "date": "2026-12-25", "name": "Christmas Day" },
+      { "work_center": "bcn", "date": "2026-01-01", "name": "New Year's Day" },
+      { "work_center": "bcn", "date": "2026-01-06", "name": "Epiphany" },
+      { "work_center": "bcn", "date": "2026-04-03", "name": "Good Friday" },
+      { "work_center": "bcn", "date": "2026-04-06", "name": "Easter Monday" },
+      { "work_center": "bcn", "date": "2026-05-01", "name": "Labour Day" },
+      { "work_center": "bcn", "date": "2026-06-24", "name": "Sant Joan" },
+      { "work_center": "bcn", "date": "2026-08-15", "name": "Assumption Day" },
+      { "work_center": "bcn", "date": "2026-09-11", "name": "National Day of Catalonia" },
+      { "work_center": "bcn", "date": "2026-09-24", "name": "La Mercè" },
+      { "work_center": "bcn", "date": "2026-12-08", "name": "Immaculate Conception" },
+      { "work_center": "bcn", "date": "2026-12-25", "name": "Christmas Day" },
+      { "work_center": "bcn", "date": "2026-12-26", "name": "Sant Esteve" }
+    ],
+    // Org chart: Diana (CEO) → Marta (People) / Iván (Engineering) / Sofía (Sales).
+    // Managers must be listed before their reports (rows are inserted in order).
+    "employee": [
+      {
+        "id": "diana",
+        "first_name": "Diana",
+        "last_name": "Reyes",
+        "job_title": "Chief Executive Officer",
+        "phone": "+34 600 100 001",
+        "work_center": "madrid",
+        "vacation_days_per_year": 25,
+        "documents": [
+          { "tag": "photo", "name": "photo.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMjQwIDI0MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM3YzNhZWQiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNjMDg0ZmMiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIyNDAiIGZpbGw9InVybCgjZykiLz4KPGNpcmNsZSBjeD0iMTIwIiBjeT0iOTYiIHI9IjQ0IiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuMjUiLz4KPHBhdGggZD0iTTQwIDI0MCBhODAgODAgMCAwIDEgMTYwIDAgWiIgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwLjI1Ii8+Cjx0ZXh0IHg9IjEyMCIgeT0iMTI4IiBmb250LWZhbWlseT0iSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3MiIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj5EUjwvdGV4dD4KPC9zdmc+" }
+        ]
+      },
+      {
+        "id": "marta",
+        "first_name": "Marta",
+        "last_name": "López",
+        "job_title": "Head of People",
+        "phone": "+34 600 100 002",
+        "manager": "diana",
+        "work_center": "madrid",
+        "_user_pending_link": "hr@intranet.com",
+        "documents": [
+          { "tag": "photo", "name": "photo.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMjQwIDI0MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMwZjc2NmUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMyZGQ0YmYiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIyNDAiIGZpbGw9InVybCgjZykiLz4KPGNpcmNsZSBjeD0iMTIwIiBjeT0iOTYiIHI9IjQ0IiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuMjUiLz4KPHBhdGggZD0iTTQwIDI0MCBhODAgODAgMCAwIDEgMTYwIDAgWiIgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwLjI1Ii8+Cjx0ZXh0IHg9IjEyMCIgeT0iMTI4IiBmb250LWZhbWlseT0iSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3MiIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj5NTDwvdGV4dD4KPC9zdmc+" }
+        ]
+      },
+      {
+        "id": "ivan",
+        "first_name": "Iván",
+        "last_name": "Costa",
+        "job_title": "Head of Engineering",
+        "phone": "+34 600 100 003",
+        "manager": "diana",
+        "work_center": "bcn",
+        "documents": [
+          { "tag": "photo", "name": "photo.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMjQwIDI0MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMxZDRlZDgiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM2MGE1ZmEiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIyNDAiIGZpbGw9InVybCgjZykiLz4KPGNpcmNsZSBjeD0iMTIwIiBjeT0iOTYiIHI9IjQ0IiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuMjUiLz4KPHBhdGggZD0iTTQwIDI0MCBhODAgODAgMCAwIDEgMTYwIDAgWiIgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwLjI1Ii8+Cjx0ZXh0IHg9IjEyMCIgeT0iMTI4IiBmb250LWZhbWlseT0iSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3MiIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj5JQzwvdGV4dD4KPC9zdmc+" }
+        ]
+      },
+      {
+        "id": "sofia",
+        "first_name": "Sofía",
+        "last_name": "Marín",
+        "job_title": "Head of Sales",
+        "phone": "+34 600 100 004",
+        "manager": "diana",
+        "work_center": "madrid",
+        "documents": [
+          { "tag": "photo", "name": "photo.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMjQwIDI0MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNiZTE4NWQiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNmNDcyYjYiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIyNDAiIGZpbGw9InVybCgjZykiLz4KPGNpcmNsZSBjeD0iMTIwIiBjeT0iOTYiIHI9IjQ0IiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuMjUiLz4KPHBhdGggZD0iTTQwIDI0MCBhODAgODAgMCAwIDEgMTYwIDAgWiIgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwLjI1Ii8+Cjx0ZXh0IHg9IjEyMCIgeT0iMTI4IiBmb250LWZhbWlseT0iSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3MiIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj5TTTwvdGV4dD4KPC9zdmc+" }
+        ]
+      },
+      {
+        "id": "alice",
+        "first_name": "Alice",
+        "last_name": "Johnson",
+        "job_title": "Frontend Developer",
+        "phone": "+34 600 100 005",
+        "manager": "ivan",
+        "work_center": "bcn",
+        "_user_pending_link": "alice@intranet.com",
+        "documents": [
+          { "tag": "photo", "name": "photo.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMjQwIDI0MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMyNTYzZWIiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMyMmQzZWUiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIyNDAiIGZpbGw9InVybCgjZykiLz4KPGNpcmNsZSBjeD0iMTIwIiBjeT0iOTYiIHI9IjQ0IiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuMjUiLz4KPHBhdGggZD0iTTQwIDI0MCBhODAgODAgMCAwIDEgMTYwIDAgWiIgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwLjI1Ii8+Cjx0ZXh0IHg9IjEyMCIgeT0iMTI4IiBmb250LWZhbWlseT0iSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3MiIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj5BSjwvdGV4dD4KPC9zdmc+" }
+        ]
+      },
+      {
+        "id": "bob",
+        "first_name": "Bob",
+        "last_name": "Smith",
+        "job_title": "Backend Developer",
+        "phone": "+34 600 100 006",
+        "manager": "ivan",
+        "work_center": "bcn",
+        "_user_pending_link": "bob@intranet.com",
+        "documents": [
+          { "tag": "photo", "name": "photo.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMjQwIDI0MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNlYTU4MGMiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNmYWNjMTUiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIyNDAiIGZpbGw9InVybCgjZykiLz4KPGNpcmNsZSBjeD0iMTIwIiBjeT0iOTYiIHI9IjQ0IiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuMjUiLz4KPHBhdGggZD0iTTQwIDI0MCBhODAgODAgMCAwIDEgMTYwIDAgWiIgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwLjI1Ii8+Cjx0ZXh0IHg9IjEyMCIgeT0iMTI4IiBmb250LWZhbWlseT0iSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3MiIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj5CUzwvdGV4dD4KPC9zdmc+" }
+        ]
+      },
+      {
+        "id": "tom",
+        "first_name": "Tom",
+        "last_name": "Weber",
+        "job_title": "Systems Administrator",
+        "phone": "+34 600 100 007",
+        "manager": "ivan",
+        "work_center": "madrid",
+        "_user_pending_link": "it@intranet.com",
+        "documents": [
+          { "tag": "photo", "name": "photo.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMjQwIDI0MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMzMzQxNTUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM5NGEzYjgiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIyNDAiIGZpbGw9InVybCgjZykiLz4KPGNpcmNsZSBjeD0iMTIwIiBjeT0iOTYiIHI9IjQ0IiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuMjUiLz4KPHBhdGggZD0iTTQwIDI0MCBhODAgODAgMCAwIDEgMTYwIDAgWiIgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwLjI1Ii8+Cjx0ZXh0IHg9IjEyMCIgeT0iMTI4IiBmb250LWZhbWlseT0iSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3MiIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj5UVzwvdGV4dD4KPC9zdmc+" }
+        ]
+      },
+      {
+        "id": "carol",
+        "first_name": "Carol",
+        "last_name": "Díaz",
+        "job_title": "Account Executive",
+        "phone": "+34 600 100 008",
+        "manager": "sofia",
+        "work_center": "madrid",
+        "_user_pending_link": "carol@intranet.com",
+        "documents": [
+          { "tag": "photo", "name": "photo.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMjQwIDI0MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNiOTFjMWMiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNmYjkyM2MiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIyNDAiIGZpbGw9InVybCgjZykiLz4KPGNpcmNsZSBjeD0iMTIwIiBjeT0iOTYiIHI9IjQ0IiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuMjUiLz4KPHBhdGggZD0iTTQwIDI0MCBhODAgODAgMCAwIDEgMTYwIDAgWiIgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwLjI1Ii8+Cjx0ZXh0IHg9IjEyMCIgeT0iMTI4IiBmb250LWZhbWlseT0iSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3MiIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj5DRDwvdGV4dD4KPC9zdmc+" }
+        ]
+      },
+      {
+        "id": "nadia",
+        "first_name": "Nadia",
+        "last_name": "Rahman",
+        "job_title": "HR Specialist",
+        "phone": "+34 600 100 009",
+        "manager": "marta",
+        "work_center": "madrid",
+        "documents": [
+          { "tag": "photo", "name": "photo.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMjQwIDI0MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMxNTgwM2QiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM0YWRlODAiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIyNDAiIGZpbGw9InVybCgjZykiLz4KPGNpcmNsZSBjeD0iMTIwIiBjeT0iOTYiIHI9IjQ0IiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuMjUiLz4KPHBhdGggZD0iTTQwIDI0MCBhODAgODAgMCAwIDEgMTYwIDAgWiIgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwLjI1Ii8+Cjx0ZXh0IHg9IjEyMCIgeT0iMTI4IiBmb250LWZhbWlseT0iSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3MiIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj5OUjwvdGV4dD4KPC9zdmc+" }
+        ]
+      },
+      {
+        "id": "leo",
+        "first_name": "Leo",
+        "last_name": "Fischer",
+        "job_title": "Sales Development Rep",
+        "phone": "+34 600 100 010",
+        "manager": "sofia",
+        "work_center": "bcn",
+        "documents": [
+          { "tag": "photo", "name": "photo.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIiB2aWV3Qm94PSIwIDAgMjQwIDI0MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiM0MzM4Y2EiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM4MThjZjgiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIyNDAiIGZpbGw9InVybCgjZykiLz4KPGNpcmNsZSBjeD0iMTIwIiBjeT0iOTYiIHI9IjQ0IiBmaWxsPSIjZmZmZmZmIiBmaWxsLW9wYWNpdHk9IjAuMjUiLz4KPHBhdGggZD0iTTQwIDI0MCBhODAgODAgMCAwIDEgMTYwIDAgWiIgZmlsbD0iI2ZmZmZmZiIgZmlsbC1vcGFjaXR5PSIwLjI1Ii8+Cjx0ZXh0IHg9IjEyMCIgeT0iMTI4IiBmb250LWZhbWlseT0iSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI3MiIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNmZmZmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj5MRjwvdGV4dD4KPC9zdmc+" }
+        ]
+      }
+    ],
+    // Requests in mixed workflow states so the HR inbox is not empty. `state` may
+    // be seeded directly; the calculated days_approved/flex_hours_approved columns
+    // and the employee roll-ups recompute from it.
+    "vacation_request": [
+      {
+        "employee": "alice",
+        "start_date": "2026-08-10",
+        "end_date": "2026-08-21",
+        "days_count": 10,
+        "comment": "Summer break",
+        "state": "approved"
+      },
+      {
+        "employee": "alice",
+        "start_date": "2026-12-21",
+        "end_date": "2026-12-23",
+        "days_count": 3,
+        "comment": "Christmas trip to see family",
+        "state": "submitted"
+      },
+      {
+        "employee": "bob",
+        "start_date": "2026-09-07",
+        "end_date": "2026-09-11",
+        "days_count": 5,
+        "state": "submitted"
+      },
+      {
+        "employee": "carol",
+        "start_date": "2026-07-20",
+        "end_date": "2026-07-23",
+        "days_count": 4,
+        "comment": "Long weekend at the beach",
+        "state": "approved"
+      },
+      {
+        "employee": "tom",
+        "start_date": "2026-10-05",
+        "end_date": "2026-10-09",
+        "days_count": 5,
+        "comment": "Hiking week (still checking dates)"
+      }
+    ],
+    "leave_request": [
+      {
+        "employee": "alice",
+        "type": "medical",
+        "start_datetime": "2026-07-08T09:30:00Z",
+        "hours": 3,
+        "reason": "Dentist appointment",
+        "state": "submitted"
+      },
+      {
+        "employee": "carol",
+        "type": "personal",
+        "start_datetime": "2026-06-12T12:00:00Z",
+        "hours": 2,
+        "reason": "Pick up documents at the town hall",
+        "state": "approved"
+      },
+      {
+        "employee": "bob",
+        "type": "flex",
+        "start_datetime": "2026-07-10T15:00:00Z",
+        "hours": 1,
+        "reason": "Leave early on Friday"
+      }
+    ],
+    // Clockings for the current demo week (Mon 29 Jun – Fri 3 Jul 2026). Times are
+    // UTC. Alice ends the week with a positive flexibility balance; Tom has an
+    // open weekend clocking (maintenance on-call) that shows as "clocked in".
+    "work_log": [
+      { "employee": "alice", "work_date": "2026-06-29", "check_in": "2026-06-29T08:00:00Z", "check_out": "2026-06-29T16:45:00Z" },
+      { "employee": "alice", "work_date": "2026-06-30", "check_in": "2026-06-30T07:55:00Z", "check_out": "2026-06-30T16:30:00Z" },
+      { "employee": "alice", "work_date": "2026-07-01", "check_in": "2026-07-01T08:10:00Z", "check_out": "2026-07-01T16:10:00Z" },
+      { "employee": "alice", "work_date": "2026-07-02", "check_in": "2026-07-02T08:00:00Z", "check_out": "2026-07-02T17:00:00Z" },
+      { "employee": "alice", "work_date": "2026-07-03", "check_in": "2026-07-03T08:05:00Z", "check_out": "2026-07-03T15:35:00Z" },
+      { "employee": "bob", "work_date": "2026-07-01", "check_in": "2026-07-01T08:00:00Z", "check_out": "2026-07-01T17:15:00Z" },
+      { "employee": "bob", "work_date": "2026-07-02", "check_in": "2026-07-02T08:00:00Z", "check_out": "2026-07-02T16:30:00Z" },
+      { "employee": "bob", "work_date": "2026-07-03", "check_in": "2026-07-03T08:00:00Z", "check_out": "2026-07-03T16:00:00Z" },
+      { "employee": "tom", "work_date": "2026-07-04", "check_in": "2026-07-04T06:45:00Z" }
+    ],
+    "sick_leave": [
+      {
+        "employee": "nadia",
+        "start_date": "2026-06-15",
+        "end_date": "2026-06-19",
+        "type": "common_illness",
+        "notes": "Flu; medical certificate on file."
+      },
+      {
+        "employee": "leo",
+        "start_date": "2026-07-01",
+        "type": "common_illness",
+        "notes": "Open leave, awaiting confirmation of the return date."
+      }
+    ],
+    "ticket": [
+      {
+        "requester": "alice",
+        "team": "it",
+        "subject": "Laptop battery drains fast",
+        "description": "Since the last OS update my laptop barely lasts **2 hours** unplugged.\n\n* Model: ThinkPad X1 (asset `BCN-0042`)\n* Battery health reported: 61%\n\nCould you check whether it needs a replacement?",
+        "priority": "normal"
+      },
+      {
+        "requester": "bob",
+        "team": "it",
+        "subject": "VPN access for the Atlas project",
+        "description": "I need access to the **Atlas** staging network.\n\n1. Requested by: Iván Costa\n2. Environment: `staging-atlas`\n3. Needed from: July 7\n\nThanks!",
+        "priority": "high",
+        "state": "in_progress"
+      },
+      {
+        "requester": "carol",
+        "team": "hr",
+        "subject": "Employment certificate for my landlord",
+        "description": "I need a standard **employment certificate** (position + start date) to renew my rental contract. PDF by email is fine.",
+        "priority": "normal",
+        "state": "resolved",
+        "resolution": "Certificate issued and sent by email on 26 June."
+      },
+      {
+        "requester": "leo",
+        "team": "hr",
+        "subject": "Update my bank account details",
+        "description": "I changed banks — where can I safely submit the new IBAN for payroll?",
+        "priority": "low"
+      },
+      {
+        "requester": "tom",
+        "team": "it",
+        "subject": "Replace broken monitor at desk 14",
+        "description": "The left monitor at **desk 14** (Madrid, 3rd floor) shows vertical lines. Already tried another cable and input.",
+        "priority": "normal",
+        "state": "resolved",
+        "resolution": "New 27\" monitor installed and old unit sent to recycling."
+      }
+    ],
+    "category": [
+      {
+        "id": "company-news",
+        "name": "Company News",
+        "description": "Announcements and general company updates"
+      },
+      {
+        "id": "hr-announcements",
+        "name": "HR Announcements",
+        "description": "Policies, schedules, benefits and other people topics"
+      },
+      {
+        "id": "it-tools",
+        "name": "IT & Tools",
+        "description": "Systems changes, new tools and how-to guides"
+      }
+    ],
+    "article": [
+      {
+        "title": "Welcome to the New Employee Portal",
+        "category": "company-news",
+        "summary": "Directory with org chart, clock-in from your browser, vacation requests with one click and a helpdesk for HR and IT — all in one place.",
+        "body": "# Welcome to the New Employee Portal\n\nThe intranet you are reading this on is also your new **self-service portal**. Everything that used to need an email to HR now takes a couple of clicks.\n\n## What you can do here\n\n* **Find people** — search the directory or browse the org chart, photos included.\n* **Clock in and out** — the time tracking page keeps your flexibility balance up to date.\n* **Request time off** — vacations and short leaves go straight to the HR inbox; you can follow the state of each request.\n* **Open tickets** — one helpdesk for HR *and* IT requests.\n\n## Getting started\n\n1. Sign in with your corporate account.\n2. Check your profile (photo, phone, work center) and ask HR to fix anything that is off.\n3. Bookmark the portal — announcements land here first.\n\n> Feedback is welcome: open an **IT ticket** with the `portal` word in the subject and we will triage it weekly.",
+        "published_date": "2026-06-20",
+        "status": "published",
+        "is_featured": true,
+        "documents": [
+          { "tag": "img_m", "name": "cover.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgODAwIDQ1MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMyNTYzZWIiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMwZWE1ZTkiLz48L2xpbmVhckdyYWRpZW50Pgo8cmFkaWFsR3JhZGllbnQgaWQ9ImIiIGN4PSIwLjUiIGN5PSIwLjUiIHI9IjAuNSI+CjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIgc3RvcC1vcGFjaXR5PSIwLjUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNmZmZmZmYiIHN0b3Atb3BhY2l0eT0iMCIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPgo8cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0idXJsKCNnKSIvPgo8Y2lyY2xlIGN4PSI0MDAiIGN5PSIyMjUiIHI9IjE3MCIgZmlsbD0idXJsKCNiKSIvPgo8dGV4dCB4PSI0MDAiIHk9IjIyNSIgZm9udC1zaXplPSIxODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj7wn4+iPC90ZXh0Pgo8L3N2Zz4=" }
+        ]
+      },
+      {
+        "title": "Summer Intensive Schedule Starts July 1",
+        "category": "hr-announcements",
+        "summary": "From July 1 to August 31 the working day ends at 15:00. Remember to keep clocking your real hours.",
+        "body": "# Summer Intensive Schedule\n\nBetween **July 1 and August 31** we switch to the intensive summer schedule:\n\n| | Regular | Summer |\n| --- | --- | --- |\n| Start | 09:00 | 08:00 |\n| End | 18:00 | 15:00 |\n| Lunch | 1 hour | — |\n\n## What does NOT change\n\n* Clock in and out as usual — the portal computes your flexibility balance automatically.\n* Vacation requests keep needing HR approval **before** you book flights.\n\n## Reminders\n\n1. Coordinate coverage within your team before requesting Fridays off.\n2. The office AC shuts down at 16:00 — another reason to leave on time. ☀️",
+        "published_date": "2026-06-25",
+        "status": "published",
+        "documents": [
+          { "tag": "img_m", "name": "cover.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgODAwIDQ1MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmNTllMGIiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNlZjQ0NDQiLz48L2xpbmVhckdyYWRpZW50Pgo8cmFkaWFsR3JhZGllbnQgaWQ9ImIiIGN4PSIwLjUiIGN5PSIwLjUiIHI9IjAuNSI+CjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIgc3RvcC1vcGFjaXR5PSIwLjUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNmZmZmZmYiIHN0b3Atb3BhY2l0eT0iMCIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPgo8cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0idXJsKCNnKSIvPgo8Y2lyY2xlIGN4PSI0MDAiIGN5PSIyMjUiIHI9IjE3MCIgZmlsbD0idXJsKCNiKSIvPgo8dGV4dCB4PSI0MDAiIHk9IjIyNSIgZm9udC1zaXplPSIxODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj7imIDvuI88L3RleHQ+Cjwvc3ZnPg==" }
+        ]
+      },
+      {
+        "title": "New VPN: Migration Guide",
+        "category": "it-tools",
+        "summary": "The old VPN is retired on July 15. Install the new client and enrol your device in under ten minutes.",
+        "body": "# New VPN: Migration Guide\n\nWe are replacing the legacy VPN with a faster, always-on client. The old gateway is **switched off on July 15**.\n\n## How to migrate\n\n1. Install the new client from the software center (`Company VPN 2`).\n2. Sign in with your corporate account — no separate password.\n3. Approve the device enrolment notification on your phone.\n4. Test: open the intranet from outside the office network.\n\n## Troubleshooting\n\n* *Stuck at enrolment?* Reboot once; 90% of cases solved.\n* *Legacy tools failing?* They may pin the old gateway — open an **IT ticket** and we will migrate the config with you.\n\n> Working from abroad in summer? Check the travel policy first, then request the roaming profile through a ticket.",
+        "published_date": "2026-06-18",
+        "status": "published",
+        "documents": [
+          { "tag": "img_m", "name": "cover.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgODAwIDQ1MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMzMzQxNTUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMwNmI2ZDQiLz48L2xpbmVhckdyYWRpZW50Pgo8cmFkaWFsR3JhZGllbnQgaWQ9ImIiIGN4PSIwLjUiIGN5PSIwLjUiIHI9IjAuNSI+CjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIgc3RvcC1vcGFjaXR5PSIwLjUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNmZmZmZmYiIHN0b3Atb3BhY2l0eT0iMCIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPgo8cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0idXJsKCNnKSIvPgo8Y2lyY2xlIGN4PSI0MDAiIGN5PSIyMjUiIHI9IjE3MCIgZmlsbD0idXJsKCNiKSIvPgo8dGV4dCB4PSI0MDAiIHk9IjIyNSIgZm9udC1zaXplPSIxODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj7wn5SQPC90ZXh0Pgo8L3N2Zz4=" }
+        ]
+      },
+      {
+        "title": "Q2 All-Hands on July 10",
+        "category": "company-news",
+        "summary": "Quarter results, the product roadmap for H2 and a live Q&A. Friday July 10 at 12:00 in Madrid HQ and streamed everywhere.",
+        "body": "# Q2 All-Hands\n\nJoin us on **Friday, July 10 at 12:00** for the quarterly all-hands.\n\n## Agenda\n\n* **12:00** — Q2 results (Diana)\n* **12:25** — H2 product roadmap (Iván)\n* **12:45** — People updates: new joiners and internal moves (Marta)\n* **12:55** — Open Q&A\n\n## Where\n\n* Madrid HQ — auditorium, 3rd floor\n* Barcelona Office — main meeting room, streamed\n* Remote — link in the calendar invite\n\nQuestions can be submitted in advance through the usual form; anonymous ones welcome.",
+        "published_date": "2026-07-01",
+        "status": "published",
+        "documents": [
+          { "tag": "img_m", "name": "cover.svg", "content_type": "image/svg+xml", "content_base64": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgODAwIDQ1MCI+CjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgo8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMxMGI5ODEiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMzNGQzOTkiLz48L2xpbmVhckdyYWRpZW50Pgo8cmFkaWFsR3JhZGllbnQgaWQ9ImIiIGN4PSIwLjUiIGN5PSIwLjUiIHI9IjAuNSI+CjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZmZmZiIgc3RvcC1vcGFjaXR5PSIwLjUiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNmZmZmZmYiIHN0b3Atb3BhY2l0eT0iMCIvPjwvcmFkaWFsR3JhZGllbnQ+PC9kZWZzPgo8cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjQ1MCIgZmlsbD0idXJsKCNnKSIvPgo8Y2lyY2xlIGN4PSI0MDAiIGN5PSIyMjUiIHI9IjE3MCIgZmlsbD0idXJsKCNiKSIvPgo8dGV4dCB4PSI0MDAiIHk9IjIyNSIgZm9udC1zaXplPSIxODAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJjZW50cmFsIj7wn5OKPC90ZXh0Pgo8L3N2Zz4=" }
+        ]
+      },
+      {
+        "title": "Office Refurbishment Plans",
+        "category": "company-news",
+        "summary": "Draft: floor plans and phased schedule for the Madrid HQ refurbishment.",
+        "body": "# Office Refurbishment Plans\n\n*Draft — do not publish until the contractor confirms dates.*\n\nThe 2nd floor of Madrid HQ will be refurbished during Q4...",
+        "status": "draft"
+      }
+    ]
+  }
+}

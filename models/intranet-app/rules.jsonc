@@ -1,0 +1,29 @@
+{
+  "$schema": "../../schemas/rules_schema.json",
+  // Balance guards for the approval workflow. Both requests carry copy() snapshots
+  // of the employee's counters (refreshed on every write), so the FEEL checks can
+  // compare against them without cross-record lookups. The checks run at submit
+  // AND at approve time: the balance may have changed while the request sat in
+  // the HR inbox.
+  "rules": [
+    {
+      "concept": "vacation_request",
+      "name": "vacation-check-balance",
+      // days_used_snapshot counts other *approved* requests only (this one is not
+      // approved yet when the check runs), so submitted requests can still be
+      // returned to draft without corrupting the balance.
+      "feel_expr": "if db.vacation_request.days_used_snapshot + db.vacation_request.days_count <= db.vacation_request.allowance_snapshot then true else { error: \"Not enough vacation days left for this year\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_submitted", "on_state_changed_to_approved"]
+    },
+    {
+      "concept": "leave_request",
+      "name": "leave-check-flex-balance",
+      // Only 'flex' leaves spend the flexibility balance; medical/personal leaves
+      // are paid time and always pass.
+      "feel_expr": "if db.leave_request.type != \"flex\" then true else if db.leave_request.flex_used_snapshot + db.leave_request.hours <= db.leave_request.flex_earned_snapshot then true else { error: \"Not enough flexibility hours accumulated\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_submitted", "on_state_changed_to_approved"]
+    }
+  ]
+}
