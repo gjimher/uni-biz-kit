@@ -33,7 +33,7 @@ The scripts that change the state of the stack — `start`, `stop`, `remove` —
 
 ## One Supabase Instance per Model
 
-Both in development and in production, **each model gets its own Supabase instance**. This keeps models decoupled from each other, avoids monoliths, and simplifies operation (start, stop, reset, and deploy one application without touching the others). See [Development.md](Development.md) for how the dev instances are laid out.
+Both in development and in production, **each model gets its own Supabase instance**. This keeps models decoupled from each other, avoids monoliths, and simplifies operation (start, stop, reset, and deploy one application without touching the others). See [Development.md](Development.md) for how the dev instances are laid out and [Deployment.md](Deployment.md) for the production stack.
 
 ## Integration Between Models
 

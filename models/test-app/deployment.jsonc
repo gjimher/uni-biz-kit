@@ -3,5 +3,8 @@
   // base_uri: URL prefix under which the app is served.
   // Use "/" for a root deployment. Using a sub-path (e.g. "/test") allows hosting
   // multiple apps on the same domain. All asset and API paths are resolved relative to this.
-  "base_uri": "/test"
+  "base_uri": "/test",
+  // prod_version: name of the immutable version published by bin/prod-publish.py.
+  // prod_dcd_ssh_srv (default "ubk-prod") and prod_base_port (default 3000) take defaults.
+  "prod_version": "dev"
 }

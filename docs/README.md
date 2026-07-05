@@ -13,6 +13,7 @@
 | [SingleSignOn.md](SingleSignOn.md) | Kerberos/Keycloak single sign-on |
 | [Workflow.md](Workflow.md) | State machines on concepts |
 | [Development.md](Development.md) | Dev environments, ports, `bin/dev-*` scripts |
+| [Deployment.md](Deployment.md) | Production deployment over SSH, `bin/prod-dc-*` scripts |
 | [Roadmap.md](Roadmap.md) | Planned work |
 
 ---

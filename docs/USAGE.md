@@ -70,7 +70,8 @@ uni-biz-kit path/to/model_dir --skip-backend
 my-app/
 ├── backend/                  # SQL migrations, seed data, edge functions, Supabase config
 ├── frontend/                 # React-Admin application (Vite)
-├── bin/                      # dev-* scripts to operate the local stack
+├── bin/                      # dev-* scripts (local stack) and prod-* scripts (deployment)
+├── prod/docker/              # docker-compose template, Dockerfiles and configs for production
 ├── concepts_extended.json    # enriched IR used by the generators
 ├── security_extended.json    # enriched security config (includes seeded users)
 └── *_extended*.json          # other enriched configs and their schemas
@@ -87,6 +88,11 @@ pytest tests/test_frontend.py# frontend generation + build
 ```
 
 More detail in [Development.md](Development.md).
+
+## Production Deployment
+
+The generated `bin/prod-dc-*` scripts deploy the app as a docker-compose stack
+on a server reached over SSH. See [Deployment.md](Deployment.md).
 
 ---
 

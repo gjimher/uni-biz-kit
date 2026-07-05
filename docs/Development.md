@@ -31,6 +31,8 @@ Every generated app ships scripts to operate its local stack. The state-changing
 
 The `dev-sso-*` scripts are only generated when the model enables [SSO](SingleSignOn.md).
 
+Every app also ships `bin/prod-dc-*` scripts to deploy it to a production server — see [Deployment.md](Deployment.md).
+
 ## Multiple dev environments on one machine
 
 Set `UBK_DEV_ENV_NUM` before running any generator command or test suite to select an isolated environment. If the variable is absent or `0`, you get the default environment.

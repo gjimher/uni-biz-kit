@@ -1,4 +1,6 @@
 {
   "$schema": "../../schemas/deployment_schema.json",
-  "base_uri": "/b2c"
+  "base_uri": "/b2c",
+  "prod_base_port": 3050,
+  "prod_version": "dev"
 }

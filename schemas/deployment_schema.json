@@ -13,6 +13,24 @@
       "description": "Base URI path for the application. Must start with '/'. Example: '/ej' serves the app at localhost:PORT/ej/...",
       "pattern": "^/",
       "default": "/"
+    },
+    "prod_dcd_ssh_srv": {
+      "type": "string",
+      "description": "SSH host (alias from ~/.ssh/config or user@host) of the production docker-compose deployment server. Used by the generated bin/prod-* scripts.",
+      "default": "ubk-prod"
+    },
+    "prod_base_port": {
+      "type": "integer",
+      "description": "Base port for the production deployment. Services are exposed at fixed offsets (same mechanism as dev): frontend at +0, Supabase API (Kong) at +40, Postgres at +41 (loopback only).",
+      "minimum": 1024,
+      "maximum": 65000,
+      "default": 3000
+    },
+    "prod_version": {
+      "type": "string",
+      "description": "Version name of the production deployment. Versions are immutable: re-publishing an existing version with different content is an error.",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+      "default": "v1"
     }
   },
   "additionalProperties": false

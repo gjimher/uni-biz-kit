@@ -18,6 +18,7 @@ from .schema_processor import SchemaProcessor
 from .supabase_generator import SupabaseGenerator
 from .react_admin_generator import ReactAdminGenerator
 from .generators import dev_ports
+from .generators import prod as prod_generator
 from .generators.bin import generate as generate_bin_scripts
 
 # Set up logging
@@ -653,6 +654,16 @@ Examples:
             bin_dir.mkdir(exist_ok=True)
             base_uri = schema_loader.deployment_config.get("base_uri", "/")
             generate_bin_scripts(bin_dir, schema_loader.security_config, base_uri)
+
+            # Generate prod/ docker-compose deployment artifacts
+            prod_generator.generate(
+                output_dir,
+                output_dir.name,
+                schema_loader.deployment_config,
+                schema_loader.security_config,
+                schema_loader.system_config,
+            )
+            logger.info("Production deployment artifacts generated: prod/docker")
         
         # Generate React-Admin frontend
         if not args.skip_frontend:
