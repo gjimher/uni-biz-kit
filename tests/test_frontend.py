@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 from unibizkit.cli import CLI
+from conftest import PRIMARY_BASE
 
 
 class TestAppFrontend:
@@ -36,12 +37,18 @@ class TestAppFrontend:
         output_dir = Path('test-app')
         
         print("Executing uni-biz-kit: generating a complete app application from schema")
-        with patch('sys.argv', ['uni-biz-kit', 'models/test-app', '--output-dir', str(output_dir)]):
+        with patch('sys.argv', [
+            'uni-biz-kit', 'models/test-app',
+            '--output-dir', str(output_dir),
+            '--dev-base-port', str(PRIMARY_BASE),
+        ]):
             # Should not raise an exception
             cli.run()
         
         # Check that output directory was created
         assert output_dir.exists()
+        dev_info_ports = (output_dir / 'bin' / 'dev-info-ports.py').read_text()
+        assert f"BASE_PORT = {PRIMARY_BASE}" in dev_info_ports
 
         frontend_dir = output_dir / 'frontend'
 
@@ -99,7 +106,7 @@ class TestAppFrontend:
 
     @pytest.mark.integration
     @pytest.mark.timeout(600)  # 10 minutes timeout
-    def test_dummy_frontend_builds(self):
+    def test_secondary_frontend_builds(self):
         """Generate the second dev environment's frontend (UBK_DEV_MODEL) and build it.
 
         Mirrors the primary frontend test for the +50-offset secondary model: it
@@ -108,6 +115,10 @@ class TestAppFrontend:
         from conftest import generate_secondary_model
 
         output_dir = generate_secondary_model()
+        from conftest import SECONDARY_BASE
+        dev_info_ports = (output_dir / 'bin' / 'dev-info-ports.py').read_text()
+        assert f"BASE_PORT = {SECONDARY_BASE}" in dev_info_ports
+
         frontend_dir = output_dir / 'frontend'
         original_cwd = os.getcwd()
 
@@ -126,16 +137,16 @@ class TestAppFrontend:
                 )
                 assert install_result.returncode == 0, f"npm install failed with {install_result=}"
 
-            print("Building dummy frontend: executing 'npm run build -- --mode development'")
+            print("Building secondary frontend: executing 'npm run build -- --mode development'")
             build_result = subprocess.run(
                 ['npm', 'run', 'build', '--', '--mode', 'development'],
                 stdout=sys.stdout,
                 stderr=sys.stderr,
                 timeout=600,
             )
-            assert build_result.returncode == 0, f"Dummy frontend build failed. {build_result=}"
+            assert build_result.returncode == 0, f"Secondary frontend build failed. {build_result=}"
 
-            print("✓ Dummy frontend generated and built successfully!")
+            print("✓ Secondary frontend generated and built successfully!")
         finally:
             os.chdir(original_cwd)
 

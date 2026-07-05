@@ -7,7 +7,6 @@ Provides the main CLI entry point for UniBizKit.
 import argparse
 import logging
 import sys
-import os
 import json
 import copy
 import shutil
@@ -64,6 +63,12 @@ Examples:
             '--output-dir',
             type=str,
             help='Output directory for generated files (default: current directory + input directory name)'
+        )
+        parser.add_argument(
+            '--dev-base-port',
+            type=int,
+            default=3000,
+            help='Base port for generated development services (default: 3000)'
         )
         parser.add_argument(
             '--skip-frontend',
@@ -436,11 +441,7 @@ Examples:
         
         schema_path, output_dir = self._resolve_paths(args.input_path, args.output_dir)
 
-        # The UBK_DEV_MODEL is the second dev environment: generate it on the +50
-        # port offset so it can run alongside the primary model (test-app) within
-        # the same UBK_DEV_ENV_NUM block.
-        dev_model = os.environ.get("UBK_DEV_MODEL", "test-dummy-app")
-        dev_ports.set_secondary(schema_path.parent.name == dev_model)
+        dev_ports.configure(args.dev_base_port)
 
         logger.info(f"Generating application from schema: {schema_path}")
         

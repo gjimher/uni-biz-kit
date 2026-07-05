@@ -51,16 +51,24 @@ class TestCLI:
         
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
+            output_dir = temp_path / "generated"
             with open(temp_path / "concepts.jsonc", 'w') as f:
                 json.dump(valid_schema, f)
             with open(temp_path / "presentation.jsonc", 'w') as f:
                 json.dump({}, f)
             with open(temp_path / "security.jsonc", 'w') as f:
                 json.dump({"authentication_required": False}, f)
-    
-            with patch('sys.argv', ['uni-biz-kit', str(temp_path), '--task', 'validate']):
-                # Should not raise an exception
-                cli.run()
+
+            try:
+                with patch('sys.argv', [
+                    'uni-biz-kit', str(temp_path),
+                    '--task', 'validate',
+                    '--output-dir', str(output_dir),
+                ]):
+                    # Should not raise an exception
+                    cli.run()
+            finally:
+                shutil.rmtree(output_dir, ignore_errors=True)
 
     def test_cli_validate_command_invalid_schema(self):
         """Test validate command with invalid schema."""
@@ -262,13 +270,17 @@ class TestCLI:
         
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
+            default_output_dir = Path.cwd() / temp_path.name
             with open(temp_path / "concepts.jsonc", 'w') as f:
                 json.dump(invalid_schema, f)
             
-            with patch('sys.argv', ['uni-biz-kit', str(temp_path)]):
-                with pytest.raises(SystemExit) as exit_info:
-                    cli.run()
-                assert exit_info.value.code == 1
+            try:
+                with patch('sys.argv', ['uni-biz-kit', str(temp_path)]):
+                    with pytest.raises(SystemExit) as exit_info:
+                        cli.run()
+                    assert exit_info.value.code == 1
+            finally:
+                shutil.rmtree(default_output_dir, ignore_errors=True)
     
     def test_cli_generate_command_nonexistent_file(self):
         """Test generate command with non-existent directory."""

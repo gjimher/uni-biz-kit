@@ -6,13 +6,15 @@ from pathlib import Path
 from smtp_mock import MockSMTPHandler, SMTP_PORT
 
 
-# --- Secondary development environment (UBK_DEV_MODEL) ------------------------
-# A second app is generated alongside test-app and served on a +50 port offset
-# (base+50..99). The primary env uses base+0..49; see generators/dev_ports.py.
-SECONDARY_MODEL = os.environ.get("UBK_DEV_MODEL") or "test-dummy-app"
+# --- Optional secondary development environment (UBK_DEV_MODEL) ---------------
+# When UBK_DEV_MODEL is set, a second app is generated alongside test-app and
+# served on a +50 port offset. If it is unset, pytest only works with test-app.
+SECONDARY_MODEL = os.environ.get("UBK_DEV_MODEL")
+HAS_SECONDARY_MODEL = bool(SECONDARY_MODEL)
 
 _ENV_NUM = int(os.environ.get("UBK_DEV_ENV_NUM", "0"))
-SECONDARY_BASE = 3000 + 100 * _ENV_NUM + 50
+PRIMARY_BASE = 3000 + 100 * _ENV_NUM
+SECONDARY_BASE = PRIMARY_BASE + 50
 SECONDARY_FRONTEND_PORT = SECONDARY_BASE + 0
 SECONDARY_PREVIEW_PORT = SECONDARY_BASE + 1
 
@@ -20,13 +22,16 @@ SECONDARY_PREVIEW_PORT = SECONDARY_BASE + 1
 def generate_secondary_model():
     """Generate the secondary model into ./<SECONDARY_MODEL> on the +50 port offset.
 
-    The CLI applies the +50 itself because the model name matches UBK_DEV_MODEL, so
-    no extra environment variable is needed. Run in a subprocess to keep the primary
-    in-process generation (offset 0) and this one (offset 50) cleanly separated."""
+    Pytest computes and passes the exact base port. Run in a subprocess to keep the
+    primary in-process generation and this secondary generation cleanly separated."""
+    if not HAS_SECONDARY_MODEL:
+        pytest.skip("UBK_DEV_MODEL is not set; secondary dev environment disabled")
+
     result = subprocess.run(
         [
             sys.executable, "-m", "unibizkit.cli",
             f"models/{SECONDARY_MODEL}", "--output-dir", SECONDARY_MODEL,
+            "--dev-base-port", str(SECONDARY_BASE),
         ],
         capture_output=True, text=True, timeout=600,
     )

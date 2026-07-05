@@ -18,8 +18,13 @@ _base = 3000 + 100 * _env_num
 _FRONTEND_PORT = _base + 0
 _PREVIEW_PORT = _base + 1
 
-# Second dev environment (UBK_DEV_MODEL), served on a +50 port offset.
-from conftest import SECONDARY_MODEL, SECONDARY_BASE, SECONDARY_PREVIEW_PORT as _DUMMY_PREVIEW_PORT
+# Optional second dev environment (UBK_DEV_MODEL), served on a +50 port offset.
+from conftest import (
+    HAS_SECONDARY_MODEL,
+    SECONDARY_MODEL,
+    SECONDARY_BASE,
+    SECONDARY_PREVIEW_PORT as _DUMMY_PREVIEW_PORT,
+)
 
 
 @pytest.fixture(scope="module")
@@ -61,10 +66,12 @@ def app_server(xprocess, request):
 
 
 @pytest.fixture(scope="module")
-def dummy_app_server(xprocess, request):
+def secondary_app_server(xprocess, request):
     """Build and serve the second dev environment's frontend on the +50 preview port."""
     if not request.config.getoption("--slow"):
         pytest.skip("need --slow option to run")
+    if not HAS_SECONDARY_MODEL:
+        pytest.skip("UBK_DEV_MODEL is not set; secondary dev environment disabled")
 
     frontend_dir = os.path.abspath(f"{SECONDARY_MODEL}/frontend")
 
@@ -74,7 +81,7 @@ def dummy_app_server(xprocess, request):
         capture_output=True, text=True, cwd=frontend_dir
     )
     if result.returncode != 0:
-        pytest.fail(f"Dummy frontend build failed:\n{result.stderr}")
+        pytest.fail(f"Secondary frontend build failed:\n{result.stderr}")
 
     class Starter(ProcessStarter):
         pattern = "Local:"
@@ -84,28 +91,28 @@ def dummy_app_server(xprocess, request):
         timeout = 30
 
     try:
-        xprocess.getinfo("dummy_app_server_pure").terminate()
+        xprocess.getinfo("secondary_app_server_pure").terminate()
     except Exception:
         pass
 
-    xprocess.ensure("dummy_app_server_pure", Starter)
+    xprocess.ensure("secondary_app_server_pure", Starter)
     yield f"http://localhost:{_DUMMY_PREVIEW_PORT}"
-    xprocess.getinfo("dummy_app_server_pure").terminate()
+    xprocess.getinfo("secondary_app_server_pure").terminate()
 
 
-def test_dummy_app_server_responds(dummy_app_server):
+def test_secondary_app_server_responds(secondary_app_server):
     """Minimal smoke test: the second environment's frontend serves HTTP 200."""
     import urllib.request
 
-    with urllib.request.urlopen(dummy_app_server + "/", timeout=15) as resp:
-        assert resp.status == 200, f"Dummy app server returned {resp.status}"
+    with urllib.request.urlopen(secondary_app_server + "/", timeout=15) as resp:
+        assert resp.status == 200, f"Secondary app server returned {resp.status}"
         body = resp.read().decode("utf-8", errors="replace")
     assert "<div id=\"root\">" in body or "<title>" in body, (
-        "Dummy app server response did not look like the SPA index page"
+        "Secondary app server response did not look like the SPA index page"
     )
 
 
-def test_b2c_storefront_purchase_with_payment(page: Page, dummy_app_server):
+def test_b2c_storefront_purchase_with_payment(page: Page, secondary_app_server):
     """
     Full storefront purchase flow on the b2c secondary app, browser only:
     sign in (storefront page) → add to cart → checkout details (address combos,
@@ -118,6 +125,8 @@ def test_b2c_storefront_purchase_with_payment(page: Page, dummy_app_server):
     import urllib.request
     import urllib.error
 
+    if not HAS_SECONDARY_MODEL:
+        pytest.skip("b2c storefront test requires UBK_DEV_MODEL=b2c-app")
     if SECONDARY_MODEL != "b2c-app":
         pytest.skip("b2c storefront test requires UBK_DEV_MODEL=b2c-app")
 
@@ -133,7 +142,7 @@ def test_b2c_storefront_purchase_with_payment(page: Page, dummy_app_server):
         user1 = next(u for u in json.load(f)["users"] if "user" in u["roles"])
 
     page.set_default_timeout(15000)
-    page.goto(dummy_app_server + "/b2c/#/")
+    page.goto(secondary_app_server + "/b2c/#/")
 
     # -- Sign in through the storefront page (not the admin login)
     page.get_by_role("link", name="Log in").click()

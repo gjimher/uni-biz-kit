@@ -1,18 +1,13 @@
-import os
-
-ENV_NUM = int(os.environ.get('UBK_DEV_ENV_NUM', '0'))
-
-# Two parallel dev environments share one UBK_DEV_ENV_NUM block of 100 ports: the
-# primary model at offset 0 (base+0..49) and the UBK_DEV_MODEL at offset 50
-# (base+50..99). The CLI calls set_secondary(True) when it detects it is generating
-# the UBK_DEV_MODEL, so every generated artifact for that model lands on the +50 slot.
-_OFFSET = 0
+BASE = 3000
+ENV_NUM = 0
 
 
 def _recompute():
-    base = 3000 + 100 * ENV_NUM + _OFFSET
     g = globals()
-    g['BASE'] = base
+    base = g['BASE']
+    # Compatibility suffix for generated Docker names. It is derived from the
+    # selected base port, not configured independently.
+    g['ENV_NUM'] = max(0, (base - 3000) // 100)
 
     # Frontend / tooling  (base + 0..9)
     g['FRONTEND']       = base + 0
@@ -39,10 +34,10 @@ def _recompute():
     g['SUPABASE_POOLER']    = base + 46
 
 
-def set_secondary(is_secondary: bool):
-    """Shift all ports by +50 when generating the secondary model (UBK_DEV_MODEL)."""
-    global _OFFSET
-    _OFFSET = 50 if is_secondary else 0
+def configure(base_port: int = 3000):
+    """Configure generated development ports from a single base port."""
+    global BASE
+    BASE = int(base_port)
     _recompute()
 
 

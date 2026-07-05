@@ -5,7 +5,7 @@ from . import (
     dev_supabase_start, dev_supabase_stop, dev_supabase_remove, dev_supabase_reset_schema_and_data,
     dev_supabase_call_edge_function,
     dev_sso_start, dev_sso_chrome, dev_sso_stop, dev_sso_remove,
-    dev_smtp_mock,
+    dev_smtp_mock, dev_info_ports,
     prod_dc_common, prod_dc_check_infra, prod_dc_publish, prod_dc_up, prod_dc_remove,
 )
 
@@ -17,6 +17,7 @@ def generate(bin_dir: Path, security_config: Dict[str, Any], base_uri: str = "/"
     dev_supabase_reset_schema_and_data.generate(bin_dir)
     dev_supabase_call_edge_function.generate(bin_dir)
     dev_smtp_mock.generate(bin_dir)
+    dev_info_ports.generate(bin_dir)
 
     prod_dc_common.generate(bin_dir)
     prod_dc_check_infra.generate(bin_dir)

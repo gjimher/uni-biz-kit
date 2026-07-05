@@ -18,6 +18,7 @@ from unittest.mock import patch
 import psycopg2
 from dotenv import load_dotenv, dotenv_values
 from unibizkit.cli import CLI
+from conftest import PRIMARY_BASE
 
 
 def _run(cmd, timeout=600):
@@ -148,7 +149,11 @@ class TestAppBackend:
         output_dir = Path('test-app').resolve()
 
         print("Executing uni-biz-kit: generating a complete app application from schema")
-        with patch('sys.argv', ['uni-biz-kit', 'models/test-app', '--output-dir', str(output_dir)]):
+        with patch('sys.argv', [
+            'uni-biz-kit', 'models/test-app',
+            '--output-dir', str(output_dir),
+            '--dev-base-port', str(PRIMARY_BASE),
+        ]):
             cli.run()
 
         assert output_dir.exists()
@@ -191,14 +196,14 @@ class TestAppBackend:
 
     @pytest.mark.integration
     @pytest.mark.timeout(600)  # 10 minutes timeout
-    def test_dummy_backend_postgres_responds(self):
+    def test_secondary_backend_postgres_responds(self):
         """Smoke-test the second dev environment's Supabase (UBK_DEV_MODEL).
 
         Generates the secondary model on the +50 port offset, brings up its own
         Supabase stack, resets its schema/seed data, then connects to its Postgres
         and verifies the generated schema is present — i.e. the second environment's
         database is live and independent from the primary one. Kept model-agnostic
-        so it works with any UBK_DEV_MODEL, not just test-dummy-app.
+        so it works with any UBK_DEV_MODEL.
         """
         from conftest import generate_secondary_model, SECONDARY_MODEL
 
