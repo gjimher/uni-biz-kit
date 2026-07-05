@@ -42,20 +42,13 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
     sso_redirect_element = ""
     ra_extra_imports = "AdminContext, AdminUI, Resource"
     if has_auth_provider:
-        allow_registration = ctx.security_config["registration"]["allow"]
         sso_enabled = ctx.security_config["sso"]["enabled"]
-        if allow_registration or sso_enabled:
-            login_import = "import { MyLoginPage } from './layout/MyLoginPage';"
-            login_prop_name = "MyLoginPage"
-        else:
-            login_import = ""
-            login_prop_name = "LoginPage"
-        ra_supabase_imports = f"{login_prop_name + ', ' if login_prop_name == 'LoginPage' else ''}ForgotPasswordPage, defaultI18nProvider"
+        login_prop_name = "MyLoginPage"
         auth_import = (
-            f"import {{ authProvider }} from './authProvider';\n"
-            f"{login_import}\n"
-            f"import {{ MySetPasswordPage }} from './layout/MySetPasswordPage';\n"
-            f"import {{ {ra_supabase_imports} }} from 'ra-supabase';"
+            "import { authProvider } from './authProvider';\n"
+            "import { MyLoginPage } from './layout/MyLoginPage';\n"
+            "import { MySetPasswordPage } from './layout/MySetPasswordPage';\n"
+            "import { ForgotPasswordPage, defaultI18nProvider } from 'ra-supabase';"
         )
         if sso_enabled:
             sso_redirect_import = "\nimport { supabaseClient } from './supabaseClient';"

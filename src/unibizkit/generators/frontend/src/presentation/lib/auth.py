@@ -1,3 +1,5 @@
+import json
+
 from ....context import Context
 
 
@@ -25,10 +27,25 @@ export const getPermissions = async () => ({});
 """
     )
 
+    test_users = (
+        [
+            {"email": u["email"], "password": u["password"], "roles": u["roles"]}
+            for u in ctx.security_config["users"]
+        ]
+        if auth_required
+        else []
+    )
+    test_users_json = json.dumps(test_users, indent=2)
+
     return f"""import {{ useState, useEffect }} from 'react';
 import {{ supabaseClient }} from '../../supabaseClient';
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
+
+// Seed users from security.json: [{{ email, password, roles }}]. They are baked
+// into the bundle so example apps can offer a "fill test user" shortcut on
+// login forms — anyone can try the app without knowing the seeded credentials.
+export const testUsers = {test_users_json};
 
 // Sign in with email and password. Returns the session; throws on failure.
 export async function signIn(email, password) {{

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { signIn, useSession } from '../lib';
+import { signIn, useSession, testUsers } from '../lib';
 
 // ---------------------------------------------------------------------------
 // Storefront sign-in page. Same look & feel as the shop (see index.jsx).
@@ -61,6 +61,7 @@ export default function SignInPage() {
           {loading ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+      <TestUserPicker onPick={(user) => { setEmail(user.email); setPassword(user.password); }} />
       <div style={{ marginTop: 16, textAlign: 'center', fontSize: 14, color: MUTED }}>
         <a href="#/forgot-password" style={{ color: ACCENT, textDecoration: 'none', fontWeight: 600 }}>
           Forgot password?
@@ -76,6 +77,46 @@ export default function SignInPage() {
         </Link>
       </div>
     </AuthShell>
+  );
+}
+
+// Demo helper: lists the seed users from security.json so anyone can try the
+// shop without knowing the credentials. Picking one fills the form.
+function TestUserPicker({ onPick }) {
+  const [open, setOpen] = useState(false);
+  if (testUsers.length === 0) return null;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          width: '100%', padding: '11px 0', borderRadius: 11, border: `1px solid ${ACCENT}`,
+          background: '#fff', color: ACCENT, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT,
+        }}
+      >
+        {open ? 'Hide test users' : 'Fill test user…'}
+      </button>
+      {open && (
+        <div style={{ marginTop: 8, border: `1px solid ${BORDER}`, borderRadius: 11, overflow: 'hidden' }}>
+          {testUsers.map((user) => (
+            <button
+              key={user.email}
+              type="button"
+              onClick={() => { onPick(user); setOpen(false); }}
+              style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+                width: '100%', padding: '10px 14px', border: 'none', borderBottom: `1px solid ${BORDER}`,
+                background: BG_SOFT, cursor: 'pointer', fontFamily: FONT, fontSize: 14, color: INK, textAlign: 'left',
+              }}
+            >
+              <span style={{ fontWeight: 600 }}>{user.email}</span>
+              <span style={{ color: MUTED, fontSize: 12.5 }}>{user.roles.join(', ')}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

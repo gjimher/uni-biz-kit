@@ -110,8 +110,7 @@ class ReactAdminGenerator:
             _write(ctx.output_dir / "src" / "layout" / "MyAppBar.jsx", my_app_bar.generate())
             _write(ctx.output_dir / "src" / "layout" / "UserProfileDialog.jsx", user_profile_dialog.generate())
             _write(ctx.output_dir / "src" / "layout" / "ChangePasswordDialog.jsx", change_password_dialog.generate())
-            if ctx.security_config["registration"]["allow"] or ctx.security_config["sso"]["enabled"]:
-                _write(ctx.output_dir / "src" / "layout" / "MyLoginPage.jsx", my_login_page.generate(ctx))
+            _write(ctx.output_dir / "src" / "layout" / "MyLoginPage.jsx", my_login_page.generate(ctx))
             has_auth_provider = True
 
         has_custom_menu = False

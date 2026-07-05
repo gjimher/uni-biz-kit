@@ -51,6 +51,7 @@ const SsoButton = ({ onStart, loading }) => {
         <Box sx={{ pt: 2 }}>
             {error && <Alert severity="error" sx={{ px: 2, mb: 1 }}>{error}</Alert>}
             <LoginForm {...props} />
+            <TestUsersButton />
             <SsoButton onStart={startSso} loading={loading} />
         </Box>
     );
@@ -132,6 +133,7 @@ const SsoButton = ({ onStart, loading }) => {
             )}
             {showPasswordLogin && <>
                 <LoginForm {...props} />
+                <TestUsersButton />
                 <SsoButton onStart={startSso} loading={loading} />
             </>}
         </Box>
@@ -142,6 +144,46 @@ const SsoButton = ({ onStart, loading }) => {
         sso_button = ""
         sign_in_content = ""
 
+    # Plain string (not f-string) so JSX braces are literal in the output.
+    test_users_button = """
+// Demo helper: lets anyone try the app without knowing the seeded credentials.
+// Fills the ra-supabase LoginForm inputs through the native value setter so
+// react-hook-form picks up the change like a real keystroke.
+const fillLoginInput = (name, value) => {
+    const input = document.querySelector(`input[name="${name}"]`);
+    if (!input) return;
+    const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setValue.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+};
+
+const TestUsersButton = () => {
+    const [anchorEl, setAnchorEl] = useState(null);
+    if (testUsers.length === 0) return null;
+
+    const pickUser = (user) => {
+        fillLoginInput('email', user.email);
+        fillLoginInput('password', user.password);
+        setAnchorEl(null);
+    };
+
+    return (
+        <Box sx={{ px: 2, pb: 1 }}>
+            <Button variant="outlined" color="secondary" fullWidth onClick={(e) => setAnchorEl(e.currentTarget)}>
+                Fill test user
+            </Button>
+            <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
+                {testUsers.map((user) => (
+                    <MenuItem key={user.email} onClick={() => pickUser(user)}>
+                        <ListItemText primary={user.email} secondary={user.roles.join(', ')} />
+                    </MenuItem>
+                ))}
+            </Menu>
+        </Box>
+    );
+};
+"""
+
     tabs = ""
     if allow_registration:
         tabs = """            <Tabs value={tab} onChange={(_, v) => setTab(v)} centered>
@@ -149,10 +191,10 @@ const SsoButton = ({ onStart, loading }) => {
                 <Tab label="Register" />
             </Tabs>
 """
-        tab_body = "{tab === 0 && <SignInPanel {...props} />}\n            {tab === 1 && <RegisterForm />}" if sso_enabled else "{tab === 0 && <LoginForm {...props} />}\n            {tab === 1 && <RegisterForm />}"
+        tab_body = "{tab === 0 && <SignInPanel {...props} />}\n            {tab === 1 && <RegisterForm />}" if sso_enabled else "{tab === 0 && <><LoginForm {...props} /><TestUsersButton /></>}\n            {tab === 1 && <RegisterForm />}"
         login_component_state = "    const [tab, setTab] = useState(0);\n"
     else:
-        tab_body = "<SignInPanel {...props} />" if sso_enabled else "<LoginForm {...props} />"
+        tab_body = "<SignInPanel {...props} />" if sso_enabled else "<><LoginForm {...props} /><TestUsersButton /></>"
         login_component_state = ""
 
     return f"""import * as React from 'react';
@@ -160,7 +202,8 @@ import {{ useState }} from 'react';
 import {{ useNotify, Notification }} from 'react-admin';
 import {{ LoginPage, LoginForm }} from 'ra-supabase';
 import {{ supabaseClient }} from '../supabaseClient';
-import {{ Box, Tab, Tabs, Button, TextField, CircularProgress, Alert{divider_import} }} from '@mui/material';
+import {{ testUsers }} from '../presentation/lib/auth';
+import {{ Box, Tab, Tabs, Button, TextField, CircularProgress, Alert, Menu, MenuItem, ListItemText{divider_import} }} from '@mui/material';
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
 if (!BASE_URL) throw new Error('VITE_BASE_URL is required');
@@ -300,7 +343,7 @@ const RegisterForm = () => {{
         </Box>
     );
 }};
-{sso_button}
+{test_users_button}{sso_button}
 {sign_in_content}
 const LoginWithTabs = (props) => {{
 {login_component_state}
