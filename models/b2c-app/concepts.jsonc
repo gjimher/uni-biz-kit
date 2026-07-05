@@ -728,7 +728,7 @@
           "required": false,
           "max_length": 500,
           "size": "m",
-          // rules_level_3 makes this read-only for the 'user' role
+          // rules_level_3 makes this read-only for the 'buyer' role
           "description": "Admin-only notes (hidden from customers)"
         },
         {

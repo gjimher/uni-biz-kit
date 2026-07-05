@@ -11,12 +11,12 @@
         {
           "name": "initial",
           "description": "Shopping cart — items, coupon and shipping method can be freely changed.",
-          "owners": ["user", "admin"]
+          "owners": ["buyer", "admin"]
         },
         {
           "name": "checkout",
           "description": "Customer is reviewing the cart summary and filling in the shipping/billing addresses before confirming.",
-          "owners": ["user", "admin"]
+          "owners": ["buyer", "admin"]
         },
         {
           "name": "confirmed",

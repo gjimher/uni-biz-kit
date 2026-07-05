@@ -24,17 +24,17 @@
   // Seed users (development only).
   "users": [
     {
-      "email": "admin@cm.com",
+      "email": "admin@cms.com",
       "password": "adminadmin",
       "roles": ["admin"]
     },
     {
-      "email": "editor1@cm.com",
+      "email": "editor1@cms.com",
       "password": "editoreditor",
       "roles": ["editor"]
     },
     {
-      "email": "editor2@cm.com",
+      "email": "editor2@cms.com",
       "password": "editoreditor",
       "roles": ["editor"]
     }
