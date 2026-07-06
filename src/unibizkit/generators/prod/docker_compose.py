@@ -11,8 +11,12 @@ def generate(ctx) -> str:
     plugin, and allows depends_on conditions on healthchecks.
     """
     app = ctx.app_id
-    site_url = f"http://${{PUBLIC_HOST}}:{ctx.frontend_port}{ctx.base_uri}"
-    api_external_url = f"http://${{PUBLIC_HOST}}:{ctx.frontend_port}{ctx.base_prefix}/api"
+    if ctx.prod_origin:
+        site_url = f"{ctx.prod_origin}{ctx.base_uri}"
+        api_external_url = f"{ctx.prod_origin}{ctx.base_prefix}/api"
+    else:
+        site_url = f"http://${{PUBLIC_HOST}}:{ctx.frontend_port}{ctx.base_uri}"
+        api_external_url = f"http://${{PUBLIC_HOST}}:{ctx.frontend_port}{ctx.base_prefix}/api"
     disable_signup = "false" if ctx.allow_registration else "true"
     if ctx.smtp:
         mailer = f"""\

@@ -1,4 +1,19 @@
 {
-  "properties": {},
+  "properties": {
+    "_proxy_targets": {
+      "type": "array",
+      "description": "Enriched (proxy kind only): reverse-proxy targets resolved from proxy.models, each with the referenced model name, its base_uri (trailing slash) and its prod frontend port.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "model": { "type": "string" },
+          "base_uri": { "type": "string" },
+          "port": { "type": "integer" }
+        },
+        "required": ["model", "base_uri", "port"],
+        "additionalProperties": false
+      }
+    }
+  },
   "required": []
 }

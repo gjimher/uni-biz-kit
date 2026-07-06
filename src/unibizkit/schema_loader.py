@@ -238,6 +238,14 @@ class SchemaLoader:
 
         DefaultValidatingDraft7Validator(self.deployment_validation_schema).validate(deployment_config)
 
+        # A 'proxy' section marks a proxy-kind model (Caddy landing + reverse proxy),
+        # which is handled by a separate generation path and must not carry app sources.
+        if "proxy" in deployment_config:
+            raise SchemaValidationError(
+                f"{deployment_path}: 'proxy' section found next to app sources (concepts.jsonc). "
+                "A proxy-kind model contains only deployment.jsonc (with 'proxy'), index.md and assets/."
+            )
+
         self.deployment_config = deployment_config
         logger.info(f"Successfully loaded and validated deployment settings: {deployment_path}")
 

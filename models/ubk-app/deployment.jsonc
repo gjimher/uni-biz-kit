@@ -1,0 +1,12 @@
+{
+  // Proxy-kind model: no concepts/security/... — just this file, index.md and assets/.
+  // Deploys a single Caddy container that terminates HTTPS for `domain`, serves the
+  // landing page (index.md) and reverse-proxies the listed app models by their base_uri.
+  "$schema": "../../schemas/deployment_schema.json",
+  "prod_version": "dev",
+  "proxy": {
+    "domain": "www.unibizkit.dev",
+    "acme_email": "gjimher@gmail.com",
+    "models": ["b2c-app", "intranet-app"]
+  }
+}

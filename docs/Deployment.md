@@ -67,6 +67,8 @@ Layout on the server:
   defines the release (compose file, image build inputs, frontend build).
   Re-publishing an existing version is a no-op if the content is identical and
   an **error** if it differs: bump `prod_version` (and regenerate) instead.
+  For emergency/manual deployments, `python bin/prod-dc-publish.py --force`
+  republishes the same version and overwrites its stored content hash.
 * **Secrets** — Postgres password, JWT secret and the anon/service API keys are
   generated on the first publish and stored only in the server's
   `~/ubk/<app>/.env`. They survive version switches; `prod-dc-remove.py`
@@ -103,10 +105,52 @@ To inspect the stack on the server: `cd ~/ubk/<app> && docker-compose ps`
 reach the app through a tunnel, e.g.
 `ssh -L 3000:127.0.0.1:3000 <srv>` → `http://localhost:3000<base_uri>`.
 
+## Proxy models (HTTPS landing + reverse proxy)
+
+A **proxy** model is a second kind of model that puts a public HTTPS front in
+front of the app stacks deployed on the same server. It contains **only** a
+`deployment.jsonc` with a `proxy` section, an `index.md` (landing page) and an
+`assets/` folder — no `concepts.jsonc` or other app sources (the two kinds are
+mutually exclusive). The reference model is `models/ubk-app` (www.unibizkit.dev).
+
+```jsonc
+// models/ubk-app/deployment.jsonc
+{
+  "prod_version": "v1",
+  "proxy": {
+    "domain": "www.unibizkit.dev",   // HTTPS hostname (ACME TLS-ALPN-01)
+    "acme_email": "you@example.com",  // optional Let's Encrypt account email
+    "models": ["b2c-app"]             // app models to reverse-proxy, by name
+  }
+}
+```
+
+It generates a single **Caddy** container (`prod/docker/caddy/`) that:
+
+* terminates HTTPS for `domain`, obtaining the certificate via **ACME
+  TLS-ALPN-01 only** — the HTTP-01 challenge and the HTTP→HTTPS redirect vhost
+  are disabled, so only port **443** needs to be reachable (fits a NAT that
+  forwards only 443);
+* serves the landing page at `/` (rendered from `index.md` to static HTML at
+  build time, with the `assets/` images);
+* reverse-proxies each referenced app at its own `base_uri` (e.g. `/b2c/* →
+  127.0.0.1:3050`), read from that app's `deployment.jsonc` — the single source
+  of truth for its `base_uri` and port (they must be unique across the list).
+  The Caddy container runs with host networking, so it reaches the app ports on
+  the host loopback interface.
+
+The same `bin/prod-dc-*` scripts deploy it (no `dev-*` scripts are generated).
+The ACME certificates live in the `caddy-data` volume and survive version
+switches; `prod-dc-remove.py` deletes them, so the next deploy re-issues them
+(mind Let's Encrypt rate limits). First `prod-dc-up.py` only passes its TLS
+health check once the certificate is issued, which requires the public DNS A
+record → NAT public IP with port 443 forwarded to this host.
+
 ## Current limitations
 
 * No SSO/Keycloak in production yet (dev-only; see [SingleSignOn.md](SingleSignOn.md)).
-* HTTP only — put a TLS reverse proxy in front for real exposure.
+* App stacks serve **HTTP only** on their own port; put a proxy model (above) in
+  front, or another TLS reverse proxy, for real exposure.
 * If the model's SMTP points at the local dev mail catcher, production GoTrue
   auto-confirms emails instead of sending them (no signup confirmation or
   password-recovery mails). Configure a real `smtp` in `system.jsonc` for that.

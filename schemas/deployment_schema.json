@@ -31,6 +31,33 @@
       "description": "Version name of the production deployment. Versions are immutable: re-publishing an existing version with different content is an error.",
       "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
       "default": "v1"
+    },
+    "prod_origin": {
+      "type": "string",
+      "description": "Optional public production origin, including scheme and host but no path (e.g. 'https://www.example.com'). When set, production auth redirects and public API URLs use this origin plus base_uri instead of the direct host:port URL.",
+      "pattern": "^https?://[^/]+$"
+    },
+    "proxy": {
+      "type": "object",
+      "description": "Marks this model as a 'proxy' kind: instead of an app (concepts/security/...), it deploys a Caddy container that terminates HTTPS for 'domain', serves a static landing page (index.md) and reverse-proxies the listed app models by their base_uri. A model with a 'proxy' section must not contain concepts.jsonc or any other app source file.",
+      "properties": {
+        "domain": {
+          "type": "string",
+          "description": "Public hostname served over HTTPS (e.g. 'www.unibizkit.dev'). The TLS certificate is obtained via ACME TLS-ALPN-01 (only port 443 needs to be reachable)."
+        },
+        "acme_email": {
+          "type": "string",
+          "description": "Optional email for the ACME (Let's Encrypt) account."
+        },
+        "models": {
+          "type": "array",
+          "description": "Directory names of app models under models/ to reverse-proxy. Each is proxied at its own base_uri (read from that model's deployment.jsonc). base_uris and prod_base_ports must be unique among them.",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      },
+      "required": ["domain", "models"],
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

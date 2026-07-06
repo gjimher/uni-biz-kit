@@ -4,6 +4,7 @@ import sys
 import subprocess
 from pathlib import Path
 from smtp_mock import MockSMTPHandler, SMTP_PORT
+from unibizkit.schema_loader import _load_jsonc_file
 
 
 # --- Optional secondary development environment (UBK_DEV_MODEL) ---------------
@@ -19,6 +20,32 @@ SECONDARY_FRONTEND_PORT = SECONDARY_BASE + 0
 SECONDARY_PREVIEW_PORT = SECONDARY_BASE + 1
 
 
+def secondary_model_kind_error():
+    if not HAS_SECONDARY_MODEL:
+        return None
+    model_dir = Path("models") / SECONDARY_MODEL
+    deployment_path = model_dir / "deployment.jsonc"
+    concepts_path = model_dir / "concepts.jsonc"
+    if not deployment_path.exists() or concepts_path.exists():
+        return None
+    try:
+        deployment = _load_jsonc_file(str(deployment_path))
+    except Exception:
+        return None
+    if "proxy" not in deployment:
+        return None
+    return (
+        f"UBK_DEV_MODEL={SECONDARY_MODEL} is a proxy model; "
+        "UBK_DEV_MODEL must be a normal app model with concepts.jsonc."
+    )
+
+
+def assert_secondary_model_is_normal_app():
+    error = secondary_model_kind_error()
+    if error:
+        pytest.fail(error)
+
+
 def generate_secondary_model():
     """Generate the secondary model into ./<SECONDARY_MODEL> on the +50 port offset.
 
@@ -26,6 +53,7 @@ def generate_secondary_model():
     primary in-process generation and this secondary generation cleanly separated."""
     if not HAS_SECONDARY_MODEL:
         pytest.skip("UBK_DEV_MODEL is not set; secondary dev environment disabled")
+    assert_secondary_model_is_normal_app()
 
     result = subprocess.run(
         [

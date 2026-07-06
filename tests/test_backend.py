@@ -18,7 +18,7 @@ from unittest.mock import patch
 import psycopg2
 from dotenv import load_dotenv, dotenv_values
 from unibizkit.cli import CLI
-from conftest import PRIMARY_BASE
+from conftest import HAS_SECONDARY_MODEL, PRIMARY_BASE, assert_secondary_model_is_normal_app
 
 
 def _run(cmd, timeout=600):
@@ -126,6 +126,12 @@ def _wait_for_order_values(api_url, anon_key, token, order_id, expected, timeout
             return rows
         time.sleep(0.1)
     raise AssertionError(f"Expected order values {expected}, got {last_rows}")
+
+
+def test_ubk_dev_model_is_normal_app():
+    if not HAS_SECONDARY_MODEL:
+        pytest.skip("UBK_DEV_MODEL is not set; secondary dev environment disabled")
+    assert_secondary_model_is_normal_app()
 
 
 class TestAppBackend:

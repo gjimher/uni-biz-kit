@@ -20,6 +20,7 @@ setup(
         "jsoncomment>=0.4.0",
         "py-mini-racer>=0.6.0",
         "typing-extensions>=4.0.0",
+        "markdown>=3.5",
     ],
     entry_points={
         "console_scripts": [

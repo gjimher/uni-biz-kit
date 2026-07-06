@@ -1,4 +1,7 @@
 {
   "$schema": "../../schemas/deployment_schema.json",
-  "base_uri": "/intranet"
+  "base_uri": "/intranet",
+  "prod_origin": "https://www.unibizkit.dev",
+  "prod_base_port": 3100,
+  "prod_version": "dev"
 }

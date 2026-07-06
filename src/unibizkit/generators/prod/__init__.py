@@ -23,6 +23,7 @@ class ProdContext:
         self.app_id = app_id  # output dir name: registry namespace and ~/ubk/<app_id>
         self.base_uri = deployment_config["base_uri"]          # normalized, ends with /
         self.base_prefix = self.base_uri.rstrip("/")            # '' for root deploys
+        self.prod_origin = (deployment_config.get("prod_origin") or "").rstrip("/")
         self.base_port = deployment_config["prod_base_port"]
         self.frontend_port = self.base_port + FRONTEND_OFFSET
         self.kong_port = self.base_port + KONG_OFFSET

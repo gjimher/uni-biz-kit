@@ -155,31 +155,21 @@ def _hash_tree(digest, base: Path):
             digest.update(b"\\0")
 
 
-def release_hash(compose_content: str) -> str:
+def release_hash(compose_content: str, tree_paths, file_paths=()) -> str:
     """Content hash of everything that defines a release: the rendered compose
-    file plus every build input of the images."""
+    file plus every build input of the images.
+
+    tree_paths are hashed recursively (whole directory trees); file_paths are
+    hashed individually and skipped when absent. The caller passes the set that
+    matches its stack (app vs proxy). Note: prod/docker itself is never hashed
+    as a whole because it accumulates the rendered docker-compose-<version>.yml
+    files of previous publishes.
+    """
     digest = hashlib.sha256()
     digest.update(compose_content.encode())
-    # Note: prod/docker itself is not hashed as a whole because it accumulates
-    # the rendered docker-compose-<version>.yml files of previous publishes.
-    for rel in [
-        "prod/docker/frontend",
-        "prod/docker/db",
-        "prod/docker/kong",
-        "prod/docker/functions",
-        "prod/docker/provision",
-        "backend/supabase/functions",
-        "frontend/dist",
-    ]:
+    for rel in tree_paths:
         _hash_tree(digest, ROOT_DIR / rel)
-    for rel in [
-        "prod/docker/vendor-images.json",
-        "backend/supabase_schema.sql",
-        "backend/supabase_seed_data_dev.sql",
-        "security_extended.json",
-        "seed_data_extended.json",
-        "concepts_extended.json",
-    ]:
+    for rel in file_paths:
         path = ROOT_DIR / rel
         if path.exists():
             digest.update(rel.encode())

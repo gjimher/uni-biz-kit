@@ -1,6 +1,7 @@
 {
   "$schema": "../../schemas/deployment_schema.json",
   "base_uri": "/b2c",
+  "prod_origin": "https://www.unibizkit.dev",
   "prod_base_port": 3050,
   "prod_version": "dev"
 }

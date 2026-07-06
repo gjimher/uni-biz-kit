@@ -22,6 +22,7 @@ Steps:
      - published with identical content -> success, nothing to do (idempotent)
      - published with different content -> ERROR (versions are immutable; bump
        prod_version or pass a new --version)
+     Pass -f/--force to overwrite an existing version intentionally.
   6. Builds the app images (frontend, db, kong, functions, provision) and tags
      the vendor Supabase images, all under <registry>/<app>/...:<version>.
   7. Pushes them to the server registry through an SSH tunnel
@@ -48,6 +49,8 @@ parser = argparse.ArgumentParser(
 parser.add_argument("--version", help="Version to publish (default: prod_version from deployment_extended.json)")
 parser.add_argument("--tunnel-port", type=int, default=5000,
                     help="Local port for the SSH tunnel to the remote registry (default: 5000)")
+parser.add_argument("-f", "--force", action="store_true",
+                    help="Republish this version even if it already exists")
 args = parser.parse_args()
 
 import json
@@ -76,7 +79,11 @@ if not (frontend_dir / "node_modules").exists():
     pc.run(["npm", "install", "--no-audit", "--no-fund"], cwd=frontend_dir)
 base_uri = cfg["base_uri"]
 base_prefix = base_uri.rstrip("/")
-public_base = f"http://{env['PUBLIC_HOST']}:{cfg['prod_base_port']}{base_uri}"
+prod_origin = (cfg.get("prod_origin") or "").rstrip("/")
+if prod_origin:
+    public_base = f"{prod_origin}{base_uri}"
+else:
+    public_base = f"http://{env['PUBLIC_HOST']}:{cfg['prod_base_port']}{base_uri}"
 print("Building frontend (vite build)...")
 pc.run(["npm", "run", "build"], cwd=frontend_dir, env={
     **os.environ,
@@ -114,21 +121,47 @@ def registry_has_all_manifests():
 
 
 # 5. Immutability check
-digest = pc.release_hash(compose_content)
+digest = pc.release_hash(
+    compose_content,
+    [
+        "prod/docker/frontend",
+        "prod/docker/db",
+        "prod/docker/kong",
+        "prod/docker/functions",
+        "prod/docker/provision",
+        "backend/supabase/functions",
+        "frontend/dist",
+    ],
+    [
+        "prod/docker/vendor-images.json",
+        "backend/supabase_schema.sql",
+        "backend/supabase_seed_data_dev.sql",
+        "security_extended.json",
+        "seed_data_extended.json",
+        "concepts_extended.json",
+    ],
+)
 existing = pc.ssh(srv, f"cat {remote_dir}/releases/{version}.sha256 2>/dev/null",
                   check=False, capture=True)
 if existing.returncode == 0 and existing.stdout.strip():
     if existing.stdout.strip() != digest:
-        sys.exit(
-            f"Error: version {version} is already published on {srv} with DIFFERENT content.\\n"
-            "Published versions are immutable: bump prod_version in the model's "
-            "deployment.jsonc (and regenerate) or publish with --version <new>."
-        )
+        if not args.force:
+            sys.exit(
+                f"Error: version {version} is already published on {srv} with DIFFERENT content.\\n"
+                "Published versions are immutable: bump prod_version in the model's "
+                "deployment.jsonc (and regenerate), publish with --version <new>, "
+                "or pass --force to overwrite this version."
+            )
+        print(f"WARNING: force-publishing existing version {version} with different content.")
     # Same content: only a no-op if the registry actually has every image.
     if registry_has_all_manifests():
-        print(f"Version {version} is already published with identical content. Nothing to do.")
-        sys.exit(0)
-    print(f"Version {version} is published but images are missing from the registry — re-pushing.")
+        if args.force:
+            print(f"WARNING: force-publishing existing version {version} even though content is identical.")
+        else:
+            print(f"Version {version} is already published with identical content. Nothing to do.")
+            sys.exit(0)
+    else:
+        print(f"Version {version} is published but images are missing from the registry — re-pushing.")
 
 # 6. Build / tag images
 local_registry = f"localhost:{args.tunnel_port}"

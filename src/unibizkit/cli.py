@@ -12,7 +12,7 @@ import copy
 import shutil
 from typing import Dict, Any
 from pathlib import Path
-from .schema_loader import SchemaLoader, SchemaValidationError
+from .schema_loader import SchemaLoader, SchemaValidationError, _load_jsonc_file, DefaultValidatingDraft7Validator
 from .schema_processor import SchemaProcessor
 from .supabase_generator import SupabaseGenerator
 from .react_admin_generator import ReactAdminGenerator
@@ -436,10 +436,136 @@ Examples:
 
         return base_schema
 
+    def _handle_generate_proxy(self, input_dir: Path, output_dir: Path, emit: bool):
+        """Generate (or, when emit=False, only validate) a 'proxy' kind model.
+
+        A proxy model has no app sources: just deployment.jsonc (with a 'proxy'
+        section), index.md and assets/. It deploys a single Caddy container that
+        terminates HTTPS for proxy.domain, serves the landing page and
+        reverse-proxies the referenced app models by their base_uri.
+        """
+        from .generators import proxy as proxy_generator
+        from .generators.bin import generate_proxy as generate_bin_scripts_proxy
+
+        schemas_dir = Path(__file__).parent.parent.parent / "schemas"
+        with open(schemas_dir / "deployment_schema.json", 'r', encoding='utf-8') as f:
+            deployment_schema = json.load(f)
+
+        # Kind exclusivity: a proxy model must not carry any app source file.
+        app_sources = [
+            "concepts.jsonc", "presentation.jsonc", "security.jsonc",
+            "rules.jsonc", "workflow.jsonc", "system.jsonc", "seed_data.jsonc",
+        ]
+        present = [name for name in app_sources if (input_dir / name).exists()]
+        if present:
+            raise SchemaValidationError(
+                f"Proxy model {input_dir} must contain only deployment.jsonc, index.md and "
+                f"assets/, but also has app source(s): {', '.join(present)}."
+            )
+
+        deployment_path = input_dir / "deployment.jsonc"
+        deployment_config = _load_jsonc_file(str(deployment_path))
+        DefaultValidatingDraft7Validator(deployment_schema).validate(deployment_config)
+        if "proxy" not in deployment_config:
+            raise SchemaValidationError(
+                f"{deployment_path}: no 'proxy' section and no concepts.jsonc found — "
+                "this is neither an app model nor a proxy model."
+            )
+
+        # Resolve reverse-proxy targets from the referenced app models. Each app's
+        # own deployment.jsonc is the single source of truth for its base_uri/port.
+        proxy = deployment_config["proxy"]
+        models_dir = input_dir.parent
+        targets = []
+        seen_uris: Dict[str, str] = {}
+        seen_ports: Dict[int, str] = {}
+        for name in proxy["models"]:
+            ref_dir = models_dir / name
+            if not ref_dir.is_dir():
+                raise SchemaValidationError(
+                    f"proxy.models: referenced model '{name}' not found at {ref_dir}."
+                )
+            if not (ref_dir / "concepts.jsonc").exists():
+                raise SchemaValidationError(
+                    f"proxy.models: '{name}' is not an app model (no concepts.jsonc)."
+                )
+            ref_dep = {}
+            ref_dep_path = ref_dir / "deployment.jsonc"
+            if ref_dep_path.exists():
+                ref_dep = _load_jsonc_file(str(ref_dep_path))
+            DefaultValidatingDraft7Validator(deployment_schema).validate(ref_dep)  # inject defaults
+            base_uri = ref_dep["base_uri"]
+            if not base_uri.endswith("/"):
+                base_uri += "/"
+            if base_uri == "/":
+                raise SchemaValidationError(
+                    f"proxy.models: '{name}' has base_uri '/', which would shadow the landing "
+                    f"page. Give it a distinct base_uri (e.g. '/{name}')."
+                )
+            if ref_dep["prod_dcd_ssh_srv"] != deployment_config["prod_dcd_ssh_srv"]:
+                raise SchemaValidationError(
+                    f"proxy.models: '{name}' deploys to '{ref_dep['prod_dcd_ssh_srv']}' but the "
+                    f"proxy deploys to '{deployment_config['prod_dcd_ssh_srv']}'. Targets must "
+                    "share the host (reached via 127.0.0.1)."
+                )
+            port = ref_dep["prod_base_port"]
+            if base_uri in seen_uris:
+                raise SchemaValidationError(
+                    f"proxy.models: base_uri '{base_uri}' used by both '{seen_uris[base_uri]}' "
+                    f"and '{name}'."
+                )
+            if port in seen_ports:
+                raise SchemaValidationError(
+                    f"proxy.models: prod_base_port {port} used by both '{seen_ports[port]}' and "
+                    f"'{name}'. Give them distinct ports in their deployment.jsonc."
+                )
+            seen_uris[base_uri] = name
+            seen_ports[port] = name
+            targets.append({"model": name, "base_uri": base_uri, "port": port})
+        deployment_config["_proxy_targets"] = targets
+
+        logger.info(f"Proxy model for {proxy['domain']} → " +
+                    ", ".join(f"{t['base_uri']} (:{t['port']})" for t in targets))
+
+        # Write + validate deployment_extended.json (same contract as the app path,
+        # so bin/prod_dc_common.deployment_config() reads it unchanged).
+        output_dir.mkdir(exist_ok=True)
+        new_dep_config = {"$schema": "./deployment_extended_schema.json"}
+        dep_copy = dict(deployment_config)
+        dep_copy.pop("$schema", None)
+        new_dep_config.update(dep_copy)
+        extended_deployment_schema_def = self._generate_deployment_extended_schema_def(output_dir)
+        self._validate_extended_schema(new_dep_config, extended_deployment_schema_def, "deployment")
+        with open(output_dir / "deployment_extended.json", 'w', encoding='utf-8') as f:
+            json.dump(new_dep_config, f, indent=2)
+        logger.info(f"Deployment extended saved to: {output_dir / 'deployment_extended.json'}")
+
+        if not emit:
+            logger.info("Proxy model is valid.")
+            return
+
+        if not (input_dir / "index.md").exists():
+            raise SchemaValidationError(
+                f"Proxy model {input_dir} is missing index.md (the landing page content)."
+            )
+
+        proxy_generator.generate(output_dir, output_dir.name, new_dep_config, input_dir)
+        bin_dir = output_dir / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        generate_bin_scripts_proxy(bin_dir)
+        logger.info(f"Proxy deployment artifacts generated. Output directory: {output_dir}")
+
     def _handle_generate_command(self, args):
         """Handle the generate command."""
-        
+
         schema_path, output_dir = self._resolve_paths(args.input_path, args.output_dir)
+
+        # Proxy-kind model: only deployment.jsonc (with a 'proxy' section), no
+        # concepts. Handled by a completely separate, much smaller generation path.
+        input_dir = schema_path.parent
+        if not schema_path.exists() and (input_dir / "deployment.jsonc").exists():
+            self._handle_generate_proxy(input_dir, output_dir, emit=True)
+            return
 
         dev_ports.configure(args.dev_base_port)
 
@@ -677,9 +803,14 @@ Examples:
     
     def _handle_validate_command(self, args):
         """Handle the validate command."""
-        
+
         schema_path, output_dir = self._resolve_paths(args.input_path, args.output_dir)
-        
+
+        input_dir = schema_path.parent
+        if not schema_path.exists() and (input_dir / "deployment.jsonc").exists():
+            self._handle_generate_proxy(input_dir, output_dir, emit=False)
+            return
+
         logger.info(f"Validating schema: {schema_path}")
         
         if not schema_path.exists():
