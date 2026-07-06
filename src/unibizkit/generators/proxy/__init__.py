@@ -25,6 +25,7 @@ class ProxyContext:
         proxy = deployment_config["proxy"]
         self.domain = proxy["domain"]
         self.acme_email = proxy.get("acme_email")
+        self.html_head_title = proxy["html_head_title"]
         # [{model, base_uri (trailing slash), port}], resolved by the CLI.
         self.targets = deployment_config["_proxy_targets"]
 
@@ -48,7 +49,7 @@ prod/docker/docker-compose-*.yml
 
     # Landing page: index.md -> index.html, plus the assets/ tree.
     index_md = (model_dir / "index.md").read_text()
-    _write(site_dir / "index.html", landing.render(index_md, ctx.domain))
+    _write(site_dir / "index.html", landing.render(index_md, ctx.html_head_title))
 
     assets_src = model_dir / "assets"
     assets_dst = site_dir / "assets"

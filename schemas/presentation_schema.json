@@ -8,6 +8,11 @@
       "type": "string",
       "description": "Path to the JSON schema"
     },
+    "html_head_title": {
+      "type": "string",
+      "description": "Text used as the <title> of the generated index.html.",
+      "default": "UniBizKit"
+    },
     "locale": {
       "type": "string",
       "description": "The BCP 47 language tag for the UI messages and defaults (e.g., 'en-GB').",

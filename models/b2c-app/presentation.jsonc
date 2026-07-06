@@ -1,5 +1,6 @@
 {
   "$schema": "../../schemas/presentation_schema.json",
+  "html_head_title": "UBK B2C Demo",
   "currency": "USD",
   "locale": "en-US",
   "number_locale": "en-US",

@@ -1,5 +1,6 @@
 {
   "$schema": "../../schemas/presentation_schema.json",
+  "html_head_title": "UBK Intranet Demo",
   "currency": "EUR",
   "locale": "en-GB",
   "number_locale": "en-GB",

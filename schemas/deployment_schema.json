@@ -49,6 +49,11 @@
           "type": "string",
           "description": "Optional email for the ACME (Let's Encrypt) account."
         },
+        "html_head_title": {
+          "type": "string",
+          "description": "Text used as the <title> of the proxy landing page.",
+          "default": "UniBizKit"
+        },
         "models": {
           "type": "array",
           "description": "Directory names of app models under models/ to reverse-proxy. Each is proxied at its own base_uri (read from that model's deployment.jsonc). base_uris and prod_base_ports must be unique among them.",

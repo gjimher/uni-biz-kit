@@ -3,8 +3,6 @@
 Uses the pure-Python `markdown` library (no node toolchain). The output is a
 single HTML document with embedded CSS, served as-is by Caddy's file_server.
 """
-import re
-
 import markdown
 
 _CSS = """\
@@ -54,16 +52,7 @@ footer { margin-top: 3rem; color: #6b7280; font-size: 0.9rem; }
 """
 
 
-def _title_from_markdown(md_text: str, fallback: str) -> str:
-    for line in md_text.splitlines():
-        m = re.match(r"^#\s+(.+?)\s*$", line)
-        if m:
-            return m.group(1)
-    return fallback
-
-
-def render(md_text: str, fallback_title: str) -> str:
-    title = _title_from_markdown(md_text, fallback_title)
+def render(md_text: str, title: str) -> str:
     body = markdown.markdown(md_text, extensions=["extra"])
     return f"""\
 <!doctype html>
