@@ -2,7 +2,7 @@
 
 **UniBizKit** turns a declarative model into a complete, production-deployable business
 application. You describe your business — concepts, security roles, presentation and
-workflows — in a handful of JSONC files, and UniBizKit generates:
+workflows — in a handful of JSON files, and UniBizKit generates:
 
 - a **Supabase (PostgreSQL)** backend — schema, row-level security policies and edge functions;
 - a **React-Admin** admin backoffice — full CRUD for every concept, wired to the backend;
@@ -12,6 +12,9 @@ The model is the single source of truth: schema, security, admin UI and business
 all derived from it, so they can never drift apart. Because correctness and security are
 enforced by the generated backend — not by hand-written code — an AI agent (or a functional
 user) can safely build the whole application just by writing its model.
+
+Everything is open source: UniBizKit itself (Apache 2.0) and the whole stack it builds on —
+self-hosted Supabase, PostgreSQL and React-Admin. No SaaS dependencies, no runtime lock-in.
 
 The generated interface is the **admin backoffice**. A good compromise is to keep that
 generated backoffice for administering data and to hand-write a **custom interface just for
@@ -31,7 +34,7 @@ experience where it matters, without rebuilding the admin side or the security b
 
 ## A walk through the B2C demo
 
-A small set of JSONC files defines the whole B2C application: concepts (products, orders,
+A small set of JSON files defines the whole B2C application: concepts (products, orders,
 customers…), security roles, presentation and an order workflow. From that model, UniBizKit
 generates the Supabase backend, its row-level security policies and the React-Admin
 backoffice — no SQL or React written by hand. On top of that generated stack, the model
@@ -46,12 +49,10 @@ concepts and their seed data, declared once in the model.
 
 ![B2C product catalog](assets/b2c-catalog.png)
 
-### Sign in with seeded roles
+### Sign in with demo users
 
-Roles and their sample users are declared in the model, and every generated login form
-ships a "fill test user" picker — no credentials to remember. Pick `admin` to manage the
-whole catalog, or a `buyer` account to shop as a customer; each lands in exactly the app its
-security rules allow.
+Click "fill test user", then pick `admin` to manage the whole catalog, or a
+`buyer` account to shop as a customer.
 
 ![B2C login with the fill-test-user picker](assets/b2c-login.png)
 
@@ -71,3 +72,15 @@ records (variants, prices, categories) wired in, and the model's validations enf
 on the form and in the database.
 
 ![Editing the Aurora Phone X product in the back office](assets/b2c-edit-aurora.png)
+
+### It all comes from this
+
+The backoffice, the edit form and the rules behind them are all generated from the model.
+Here is the `product` concept as declared in the JSON: its name and description, its fields
+and their types, the versioned image documents, and the `category` relation to another
+concept.
+
+![The product concept declared in the model JSON](assets/b2c-model.png)
+
+From this one declaration UniBizKit derives the `product` table and its row-level security
+and the React-Admin list and edit views.

@@ -2,7 +2,7 @@
 
 **UniBizKit** generates complete, secure business applications (e-commerce, CRM, ERP, intranets) from a declarative model. Define the model once; get a working full-stack application.
 
-Website: [www.unibizkit.dev](https://www.unibizkit.dev)
+Website: [www.unibizkit.dev](https://www.unibizkit.dev) — with live demos you can sign into (a B2C shop and an intranet).
 
 ## What it is
 
