@@ -17,6 +17,12 @@ A model is a directory of JSON files, each validated against a meta-schema in `s
 
 Examples: `models/test-app` (e-commerce backoffice), `models/b2c-app` (storefront + admin), `models/cms-app` (public news site + admin with markdown + photos).
 
+## Schema Reference
+
+Every model file is validated against a self-documenting JSON Schema in [`schemas/`](../schemas). Each schema describes every property a model can use — its `description`, type, default, allowed values and constraints — so the schemas are the **canonical, exhaustive reference** for the model format, more detailed than the prose in these docs.
+
+Because each `.jsonc` file declares its `$schema`, editors with JSON Schema support surface these descriptions as inline autocompletion and validation while you write the model.
+
 ## The Extended IR
 
 The generator validates each file, injects defaults, and enriches the result with internal `_`-prefixed metadata. The enriched intermediate representation is written next to the generated code (`concepts_extended.json`, `security_extended.json`, …) together with a dynamically generated schema for each, so it can be inspected and validated.

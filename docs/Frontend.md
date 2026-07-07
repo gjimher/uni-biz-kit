@@ -38,8 +38,58 @@ Configuration in `presentation.jsonc`:
 
 * `locale`, `number_locale`, `currency` — UI language and number/currency formatting.
 * `menu` — custom left menu; defaults to a flat list of all resources.
-* `list_field_rules_level_1..3`, `list_sort` — which columns list views show and their default sort (higher levels override lower, same pattern as the [security rules](Security.md#how-rules-are-resolved)).
+* `list_field_rules_level_1..3`, `list_sort` — which columns list views show and their default sort (see below).
 * `authenticated_pages` — which custom pages require login (see below).
+
+### List field rules
+
+Each list view starts from a **pool** of candidate columns: `id_presentation` plus every model field, in model order (only `state_info`, the workflow history, is left out). The three rule levels `list_field_rules_level_1..3` transform that pool into the final column list. The levels run **one after another** — the result of one level is fed to the next, so a higher level refines what the lower ones left. The default level 1 is `*,!id_presentation,!_*`: add every field, then drop `id_presentation` and the internal `_`-prefixed metadata — so those are removed by the default *rule*, not hard-excluded from the pool.
+
+Each level maps a concept to a rule string. The key can be the exact concept name, a `prefix*` pattern, or `*` as a fallback (most specific wins).
+
+A rule string is a comma-separated list of tokens, applied left to right:
+
+| Token | Effect |
+|-------|--------|
+| `field` | move/ensure `field` at the end |
+| `*` | add every field in the pool |
+| `prefix*` | add every field starting with `prefix` |
+| `field[anchor]` | position `field`: **after** the `anchor` column, or at the **start** with `[0]` / the **end** with `[-1]` |
+| `>field` / `>=field` | add the fields after / from `field` onward |
+| `<field` / `<=field` | add the fields before / up to `field` |
+| `!field` | hide `field` |
+| `!prefix*` | hide every field starting with `prefix` |
+| `!>field` / `!>=field` | hide the fields after / from `field` onward |
+| `!<field` / `!<=field` | hide the fields before / up to `field` |
+
+Examples from [`models/test-app/presentation.jsonc`](../models/test-app/presentation.jsonc) (level 2):
+
+```jsonc
+"list_field_rules_level_2": {
+  // remove fields after price, add sku to the end, hide details
+  //  (same as: "!*,name,description,details,price,sku")
+  "product": "!>price, sku, !details",
+  // hide slug (URL-only field, not useful in admin lists)
+  "category": "!slug",
+  // show id as the first column, remove fields after total_amount
+  "order": "id_presentation[0], !>total_amount",
+  // keep only up to the email column
+  "customer": "!>email"
+}
+```
+
+### List sort
+
+`list_sort` sets the default ordering of a concept's list view — an object mapping each concept name to a `"<field> ASC|DESC"` string. Concepts without an entry keep React-Admin's default sort. Unlike the field rules, keys are exact concept names (no levels, no `*` patterns).
+
+Example from [`models/test-app/presentation.jsonc`](../models/test-app/presentation.jsonc):
+
+```jsonc
+"list_sort": {
+  // Newest orders first
+  "order": "order_date DESC"
+}
+```
 
 ## Custom Pages (MDX / JSX)
 
