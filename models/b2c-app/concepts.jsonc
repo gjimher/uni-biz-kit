@@ -8,108 +8,29 @@
       "name": "category",
       "plural_name": "categories",
       "description": "Hierarchical product categories (tree via self-referential parent)",
-      "id_presentation": {
-        "fields": ["parent.id_presentation", "name"],
-        "separator": " / ",
-        "show": true
-      },
-      "documents": {
-        "enabled": true,
-        "tags": ["img_s", "img_m"]
-      },
+      "id_presentation": { "fields": ["parent.id_presentation", "name"], "separator": " / ", "show": true },
+      "documents": { "enabled": true, "tags": ["img_s", "img_m"] },
       "fields": [
-        {
-          "name": "parent",
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "category",
-          "description": "Parent category (null for root)"
-        },
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "unique": true,
-          "min_length": 2,
-          "max_length": 80,
-          "description": "Category display name"
-        },
-        {
-          "name": "description",
-          "type": "string",
-          "required": false,
-          "max_length": 500,
-          "size": "l",
-          "description": "Short category description"
-        },
-        {
-          "name": "slug",
-          "type": "string",
-          "unique": true,
-          "max_length": 80,
-          // Auto-derived from name; read-only in the UI (GENERATED ALWAYS AS)
-          "calculated": "lower(regexp_replace(regexp_replace(name, '[^a-zA-Z0-9[:space:]-]', '', 'g'), '[[:space:]]+', '-', 'g'))",
-          "description": "URL-friendly slug derived from name"
-        },
-        {
-          "name": "is_active",
-          "type": "boolean",
-          "required": false,
-          "default": true,
-          "description": "Whether this category is visible in the storefront"
-        }
+        { "name": "parent", "type": "relation_to_one", "subtype": "part_of", "target": "category", "description": "Parent category (null for root)" },
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 80, "description": "Category display name" },
+        { "name": "description", "type": "string", "max_length": 500, "size": "l", "description": "Short category description" },
+        // Auto-derived from name; read-only in the UI (GENERATED ALWAYS AS)
+        { "name": "slug", "type": "string", "unique": true, "max_length": 80, "calculated": "lower(regexp_replace(regexp_replace(name, '[^a-zA-Z0-9[:space:]-]', '', 'g'), '[[:space:]]+', '-', 'g'))", "description": "URL-friendly slug derived from name" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Whether this category is visible in the storefront" }
       ]
     },
     {
       "name": "collection",
       "plural_name": "collections",
       "description": "Curated flat groups of products (e.g. 'New Arrivals', 'Best Sellers')",
-      "id_presentation": {
-        "fields": ["name"]
-      },
-      "documents": {
-        "enabled": true,
-        "tags": ["img_s", "img_m"]
-      },
+      "id_presentation": { "fields": ["name"] },
+      "documents": { "enabled": true, "tags": ["img_s", "img_m"] },
       "fields": [
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "unique": true,
-          "min_length": 2,
-          "max_length": 80,
-          "description": "Collection display name"
-        },
-        {
-          "name": "description",
-          "type": "string",
-          "required": false,
-          "max_length": 500,
-          "size": "l",
-          "description": "Collection description shown in the storefront"
-        },
-        {
-          "name": "slug",
-          "type": "string",
-          "unique": true,
-          "max_length": 80,
-          "calculated": "lower(regexp_replace(regexp_replace(name, '[^a-zA-Z0-9[:space:]-]', '', 'g'), '[[:space:]]+', '-', 'g'))",
-          "description": "URL-friendly slug derived from name"
-        },
-        {
-          "name": "is_published",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "Whether the collection is visible in the storefront"
-        },
-        {
-          "name": "products",
-          "type": "relation_to_many",
-          "target": "product",
-          "description": "Products included in this collection"
-        }
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 80, "description": "Collection display name" },
+        { "name": "description", "type": "string", "max_length": 500, "size": "l", "description": "Collection description shown in the storefront" },
+        { "name": "slug", "type": "string", "unique": true, "max_length": 80, "calculated": "lower(regexp_replace(regexp_replace(name, '[^a-zA-Z0-9[:space:]-]', '', 'g'), '[[:space:]]+', '-', 'g'))", "description": "URL-friendly slug derived from name" },
+        { "name": "is_published", "type": "boolean", "default": false, "description": "Whether the collection is visible in the storefront" },
+        { "name": "products", "type": "relation_to_many", "target": "product", "description": "Products included in this collection" }
       ]
     },
     {
@@ -117,77 +38,20 @@
       "plural_name": "products",
       "description": "A product in the store. Variants carry the price, SKU and stock.",
       "data_size": "m",
-      "id_presentation": {
-        "fields": ["name"]
-      },
-      "documents": {
-        "enabled": true,
-        "versioned": true,
-        "tags": ["img_s", "img_m", "img_l", "datasheet"]
-      },
+      "id_presentation": { "fields": ["name"] },
+      "documents": { "enabled": true, "versioned": true, "tags": ["img_s", "img_m", "img_l", "datasheet"] },
       "fields": [
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "min_length": 2,
-          "max_length": 200,
-          "description": "Product name"
-        },
-        {
-          "name": "description",
-          "type": "string",
-          "required": false,
-          "max_length": 5000,
-          "size": "l",
-          "description": "Full product description"
-        },
-        {
-          "name": "metadata",
-          "type": "string",
-          "required": false,
-          "size": "l",
-          // Plain text stored as JSON; custom JSX pages parse this for SEO tags,
-          // structured attributes or third-party integration payloads.
-          "description": "JSON bag for SEO metadata and custom attributes"
-        },
-        {
-          "name": "category",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "category",
-          "required": false,
-          "description": "Primary category"
-        },
-        {
-          "name": "slug",
-          "type": "string",
-          "max_length": 200,
-          "calculated": "lower(regexp_replace(regexp_replace(name, '[^a-zA-Z0-9[:space:]-]', '', 'g'), '[[:space:]]+', '-', 'g'))",
-          "description": "URL-friendly slug derived from name"
-        },
-        {
-          "name": "status",
-          "type": "enum",
-          "required": true,
-          "enum_values": ["draft", "published", "archived"],
-          "default": "draft",
-          "description": "Publication status; only 'published' products appear in the storefront"
-        },
-        {
-          "name": "is_featured",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "Promoted on the homepage or featured sections"
-        },
-        {
-          "name": "total_stock",
-          "type": "integer",
-          // Kept in sync by a DB trigger whenever a product_variant.stock_quantity changes
-          "calculated": "rollup(sum,product_variant,stock_quantity)",
-          "description": "Total available units across all variants"
-        }
+        { "name": "name", "type": "string", "required": true, "min_length": 2, "max_length": 200, "description": "Product name" },
+        { "name": "description", "type": "string", "max_length": 5000, "size": "l", "description": "Full product description" },
+        // Plain text stored as JSON; custom JSX pages parse this for SEO tags, structured
+        // attributes or third-party integration payloads.
+        { "name": "metadata", "type": "string", "size": "l", "description": "JSON bag for SEO metadata and custom attributes" },
+        { "name": "category", "type": "relation_to_one", "subtype": "related_to", "target": "category", "description": "Primary category" },
+        { "name": "slug", "type": "string", "max_length": 200, "calculated": "lower(regexp_replace(regexp_replace(name, '[^a-zA-Z0-9[:space:]-]', '', 'g'), '[[:space:]]+', '-', 'g'))", "description": "URL-friendly slug derived from name" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["draft", "published", "archived"], "default": "draft", "description": "Publication status; only 'published' products appear in the storefront" },
+        { "name": "is_featured", "type": "boolean", "default": false, "description": "Promoted on the homepage or featured sections" },
+        // Kept in sync by a DB trigger whenever a product_variant.stock_quantity changes
+        { "name": "total_stock", "type": "integer", "calculated": "rollup(sum,product_variant,stock_quantity)", "description": "Total available units across all variants" }
       ]
     },
     {
@@ -195,79 +59,18 @@
       "plural_name": "product_variants",
       "description": "A specific buyable variant of a product (e.g. 'L / Blue'). Carries its own price, SKU and stock.",
       "data_size": "m",
-      "id_presentation": {
-        "fields": ["product.id_presentation", "name"],
-        "separator": " — ",
-        "show": true
-      },
-      "documents": {
-        "enabled": true,
-        "tags": ["img_s"]
-      },
+      "id_presentation": { "fields": ["product.id_presentation", "name"], "separator": " — ", "show": true },
+      "documents": { "enabled": true, "tags": ["img_s"] },
       "fields": [
-        {
-          "name": "product",
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "product",
-          "description": "Parent product"
-        },
-        {
-          "name": "sku",
-          "type": "string",
-          "required": true,
-          "unique": true,
-          "min_length": 2,
-          "max_length": 80,
-          "description": "Stock Keeping Unit — unique across all variants"
-        },
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "max_length": 100,
-          // Human-readable label such as "S / Red"; snapshotted into order_item.product_name at cart time
-          "description": "Variant label shown to customers"
-        },
-        {
-          "name": "price",
-          "type": "decimal",
-          "subtype": "money",
-          "required": true,
-          "precision": 10,
-          "scale": 2,
-          "min": 0.01,
-          "description": "Selling price for this variant"
-        },
-        {
-          "name": "stock_quantity",
-          "type": "integer",
-          "required": true,
-          "min": 0,
-          "default": 0,
-          "description": "Units currently in stock"
-        },
-        {
-          "name": "size",
-          "type": "enum",
-          "required": false,
-          "enum_values": ["xs", "s", "m", "l", "xl", "xxl", "one_size"],
-          "description": "Clothing/footwear size (omit for non-sized products)"
-        },
-        {
-          "name": "color",
-          "type": "enum",
-          "required": false,
-          "enum_values": ["black", "white", "red", "blue", "green", "yellow", "orange", "purple", "grey", "beige", "brown", "pink"],
-          "description": "Color option (omit for colorless products)"
-        },
-        {
-          "name": "is_available",
-          "type": "boolean",
-          "required": false,
-          "default": true,
-          "description": "Whether this variant can be added to cart"
-        }
+        { "name": "product", "type": "relation_to_one", "subtype": "part_of", "target": "product", "description": "Parent product" },
+        { "name": "sku", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 80, "description": "Stock Keeping Unit — unique across all variants" },
+        // Human-readable label such as "S / Red"; snapshotted into order_item.product_name at cart time
+        { "name": "name", "type": "string", "required": true, "max_length": 100, "description": "Variant label shown to customers" },
+        { "name": "price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0.01, "description": "Selling price for this variant" },
+        { "name": "stock_quantity", "type": "integer", "required": true, "min": 0, "default": 0, "description": "Units currently in stock" },
+        { "name": "size", "type": "enum", "enum_values": ["xs", "s", "m", "l", "xl", "xxl", "one_size"], "description": "Clothing/footwear size (omit for non-sized products)" },
+        { "name": "color", "type": "enum", "enum_values": ["black", "white", "red", "blue", "green", "yellow", "orange", "purple", "grey", "beige", "brown", "pink"], "description": "Color option (omit for colorless products)" },
+        { "name": "is_available", "type": "boolean", "default": true, "description": "Whether this variant can be added to cart" }
       ]
     },
     {
@@ -275,145 +78,33 @@
       "plural_name": "customers",
       "description": "Customer profile linked to a registered user account",
       "data_size": "m",
-      "id_presentation": {
-        "fields": ["first_name", "last_name"],
-        "separator": " "
-      },
+      "id_presentation": { "fields": ["first_name", "last_name"] },
       "fields": [
-        {
-          "name": "first_name",
-          "type": "string",
-          "required": true,
-          "default": "Pending",
-          "min_length": 1,
-          "max_length": 50,
-          "description": "First name"
-        },
-        {
-          "name": "last_name",
-          "type": "string",
-          "required": true,
-          "default": "Profile",
-          "min_length": 1,
-          "max_length": 50,
-          "description": "Last name"
-        },
-        {
-          "name": "email",
-          "type": "string",
-          "calculated": "\"_user_email\"",
-          "required": false,
-          "unique": false,
-          "min_length": 5,
-          "max_length": 100,
-          "description": "Email — auto-set from the authenticated user at INSERT; read-only"
-        },
-        {
-          "name": "phone",
-          "type": "string",
-          "required": false,
-          "min_length": 7,
-          "max_length": 20,
-          "description": "Contact phone number"
-        },
-        {
-          "name": "accepts_marketing",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "Consent to receive promotional emails"
-        }
+        { "name": "first_name", "type": "string", "required": true, "default": "Pending", "min_length": 1, "max_length": 50, "description": "First name" },
+        { "name": "last_name", "type": "string", "required": true, "default": "Profile", "min_length": 1, "max_length": 50, "description": "Last name" },
+        { "name": "email", "type": "string", "calculated": "\"_user_email\"", "min_length": 5, "max_length": 100, "description": "Email — auto-set from the authenticated user at INSERT; read-only" },
+        { "name": "phone", "type": "string", "min_length": 7, "max_length": 20, "description": "Contact phone number" },
+        { "name": "accepts_marketing", "type": "boolean", "default": false, "description": "Consent to receive promotional emails" }
       ]
     },
     {
       "name": "address",
       "plural_name": "addresses",
       "description": "Saved address belonging to a customer; prefilled into orders at checkout",
-      "id_presentation": {
-        "fields": ["label"],
-        "show": true
-      },
+      "id_presentation": { "fields": ["label"], "show": true },
       "fields": [
-        {
-          "name": "customer",
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "customer",
-          "description": "Owner of this address"
-        },
-        {
-          "name": "label",
-          "type": "string",
-          "required": true,
-          "max_length": 50,
-          "description": "Address nickname (e.g. Home, Work)"
-        },
-        {
-          "name": "first_name",
-          "type": "string",
-          "required": true,
-          "max_length": 50,
-          "description": "Recipient first name"
-        },
-        {
-          "name": "last_name",
-          "type": "string",
-          "required": true,
-          "max_length": 50,
-          "description": "Recipient last name"
-        },
-        {
-          "name": "company",
-          "type": "string",
-          "required": false,
-          "max_length": 100,
-          "description": "Company name (optional)"
-        },
-        {
-          "name": "street_line_1",
-          "type": "string",
-          "required": true,
-          "max_length": 200,
-          "size": "m",
-          "description": "Street address or P.O. box"
-        },
-        {
-          "name": "street_line_2",
-          "type": "string",
-          "required": false,
-          "max_length": 200,
-          "size": "m",
-          "description": "Apartment, suite, floor (optional)"
-        },
-        {
-          // country/state_province/city are validated together via validations/address.csv
-          "name": "city",
-          "type": "string",
-          "required": true,
-          "max_length": 100,
-          "description": "City"
-        },
-        {
-          "name": "state_province",
-          "type": "string",
-          "required": true,
-          "max_length": 100,
-          "description": "State or province"
-        },
-        {
-          "name": "postal_code",
-          "type": "string",
-          "required": true,
-          "max_length": 20,
-          "description": "Postal / ZIP code"
-        },
-        {
-          "name": "country",
-          "type": "string",
-          "required": true,
-          "max_length": 100,
-          "description": "Country name"
-        }
+        { "name": "customer", "type": "relation_to_one", "subtype": "part_of", "target": "customer", "description": "Owner of this address" },
+        { "name": "label", "type": "string", "required": true, "max_length": 50, "description": "Address nickname (e.g. Home, Work)" },
+        { "name": "first_name", "type": "string", "required": true, "max_length": 50, "description": "Recipient first name" },
+        { "name": "last_name", "type": "string", "required": true, "max_length": 50, "description": "Recipient last name" },
+        { "name": "company", "type": "string", "max_length": 100, "description": "Company name (optional)" },
+        { "name": "street_line_1", "type": "string", "required": true, "max_length": 200, "size": "m", "description": "Street address or P.O. box" },
+        { "name": "street_line_2", "type": "string", "max_length": 200, "size": "m", "description": "Apartment, suite, floor (optional)" },
+        // country/state_province/city are validated together via validations/address.csv
+        { "name": "city", "type": "string", "required": true, "max_length": 100, "description": "City" },
+        { "name": "state_province", "type": "string", "required": true, "max_length": 100, "description": "State or province" },
+        { "name": "postal_code", "type": "string", "required": true, "max_length": 20, "description": "Postal / ZIP code" },
+        { "name": "country", "type": "string", "required": true, "max_length": 100, "description": "Country name" }
       ]
     },
     {
@@ -426,136 +117,31 @@
         // Expiry date must not precede the start date
         "valid_until IS NULL OR valid_from IS NULL OR valid_until >= valid_from"
       ],
-      "id_presentation": {
-        "fields": ["code"]
-      },
+      "id_presentation": { "fields": ["code"] },
       "fields": [
-        {
-          "name": "code",
-          "type": "string",
-          "required": true,
-          "unique": true,
-          "min_length": 3,
-          "max_length": 50,
-          "description": "Coupon code entered by the customer at checkout (e.g. SUMMER20)"
-        },
-        {
-          "name": "description",
-          "type": "string",
-          "required": false,
-          "max_length": 200,
-          "size": "m",
-          "description": "Internal description of the promotion"
-        },
-        {
-          "name": "discount_type",
-          "type": "enum",
-          "required": true,
-          "enum_values": ["percentage", "fixed"],
-          "description": "Percentage discount (0–100) or fixed monetary amount"
-        },
-        {
-          "name": "discount_value",
-          "type": "decimal",
-          "required": true,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          "description": "Discount amount: percent value or fixed currency amount"
-        },
-        {
-          "name": "min_order_amount",
-          "type": "decimal",
-          "subtype": "money",
-          "required": false,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          "description": "Minimum subtotal required to use this coupon"
-        },
-        {
-          "name": "max_uses",
-          "type": "integer",
-          "required": false,
-          "min": 1,
-          "description": "Maximum total redemptions; null = unlimited"
-        },
-        {
-          "name": "valid_from",
-          "type": "date",
-          "required": false,
-          "description": "First day the coupon is valid (inclusive)"
-        },
-        {
-          "name": "valid_until",
-          "type": "date",
-          "required": false,
-          "description": "Last day the coupon is valid (inclusive)"
-        },
-        {
-          "name": "is_active",
-          "type": "boolean",
-          "required": false,
-          "default": true,
-          "description": "Manual enable/disable switch"
-        }
+        { "name": "code", "type": "string", "required": true, "unique": true, "min_length": 3, "max_length": 50, "description": "Coupon code entered by the customer at checkout (e.g. SUMMER20)" },
+        { "name": "description", "type": "string", "max_length": 200, "size": "m", "description": "Internal description of the promotion" },
+        { "name": "discount_type", "type": "enum", "required": true, "enum_values": ["percentage", "fixed"], "description": "Percentage discount (0–100) or fixed monetary amount" },
+        { "name": "discount_value", "type": "decimal", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Discount amount: percent value or fixed currency amount" },
+        { "name": "min_order_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "description": "Minimum subtotal required to use this coupon" },
+        { "name": "max_uses", "type": "integer", "min": 1, "description": "Maximum total redemptions; null = unlimited" },
+        { "name": "valid_from", "type": "date", "description": "First day the coupon is valid (inclusive)" },
+        { "name": "valid_until", "type": "date", "description": "Last day the coupon is valid (inclusive)" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Manual enable/disable switch" }
       ]
     },
     {
       "name": "shipping_method",
       "plural_name": "shipping_methods",
       "description": "Shipping options shown to customers at checkout",
-      "id_presentation": {
-        "fields": ["name"]
-      },
+      "id_presentation": { "fields": ["name"] },
       "fields": [
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "unique": true,
-          "min_length": 2,
-          "max_length": 100,
-          "description": "Method name shown to customers (e.g. Standard Shipping)"
-        },
-        {
-          "name": "carrier",
-          "type": "string",
-          "required": false,
-          "max_length": 100,
-          "description": "Carrier name (e.g. FedEx, UPS)"
-        },
-        {
-          "name": "base_cost",
-          "type": "decimal",
-          "subtype": "money",
-          "required": true,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          "description": "Flat shipping cost"
-        },
-        {
-          "name": "estimated_days_min",
-          "type": "integer",
-          "required": false,
-          "min": 0,
-          "description": "Minimum estimated delivery days"
-        },
-        {
-          "name": "estimated_days_max",
-          "type": "integer",
-          "required": false,
-          "min": 0,
-          "description": "Maximum estimated delivery days"
-        },
-        {
-          "name": "is_active",
-          "type": "boolean",
-          "required": false,
-          "default": true,
-          "description": "Whether this method is offered at checkout"
-        }
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 100, "description": "Method name shown to customers (e.g. Standard Shipping)" },
+        { "name": "carrier", "type": "string", "max_length": 100, "description": "Carrier name (e.g. FedEx, UPS)" },
+        { "name": "base_cost", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Flat shipping cost" },
+        { "name": "estimated_days_min", "type": "integer", "min": 0, "description": "Minimum estimated delivery days" },
+        { "name": "estimated_days_max", "type": "integer", "min": 0, "description": "Maximum estimated delivery days" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Whether this method is offered at checkout" }
       ]
     },
     {
@@ -563,181 +149,40 @@
       "plural_name": "orders",
       "description": "Customer order. In the 'initial' workflow state it acts as the shopping cart.",
       "data_size": "l",
-      "id_presentation": {
-        "fields": ["id"]
-      },
-      "documents": {
-        "enabled": true,
-        "tags": ["invoice", "receipt"]
-      },
+      "id_presentation": { "fields": ["id"] },
+      "documents": { "enabled": true, "tags": ["invoice", "receipt"] },
       "fields": [
-        {
-          "name": "customer",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "customer",
-          "required": false,
-          // Set to the logged-in user's customer profile on INSERT; write-locked after that
-          "calculated": "copy_logged_on_insert(customer)",
-          "description": "Customer who owns this order"
-        },
-        {
-          "name": "order_date",
-          "type": "datetime",
-          "required": false,
-          "description": "When the customer confirmed the order (checkout → confirmed)"
-        },
-        {
-          "name": "shipping_address",
-          "type": "prefill",
-          // Inline-expands all address fields from the customer's saved addresses.
-          // Not required at cart creation (initial state); filled in at checkout.
-          "subtype": "customer.addresses",
-          "description": "Delivery address (prefilled from saved addresses)"
-        },
-        {
-          "name": "billing_address",
-          "type": "prefill",
-          "subtype": "customer.addresses",
-          "description": "Billing address (prefilled from saved addresses)"
-        },
-        {
-          "name": "coupon",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "coupon",
-          "required": false,
-          "description": "Applied coupon code (if any)"
-        },
-        {
-          "name": "coupon_snapshot_type",
-          "type": "string",
-          "required": false,
-          "max_length": 20,
-          // Copied from coupon.discount_type when the coupon FK changes;
-          // decouples the order total from later coupon edits or deletion
-          "calculated": "copy(coupon,discount_type,on_change)",
-          "description": "Coupon discount type at the time of application"
-        },
-        {
-          "name": "coupon_snapshot_value",
-          "type": "decimal",
-          "required": false,
-          "precision": 10,
-          "scale": 2,
-          "calculated": "copy(coupon,discount_value,on_change)",
-          "description": "Coupon discount value at the time of application"
-        },
-        {
-          "name": "shipping_method",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "shipping_method",
-          "required": false,
-          "description": "Chosen shipping method"
-        },
-        {
-          "name": "shipping_costs",
-          "type": "decimal",
-          "subtype": "money",
-          "required": false,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          // Copied from shipping_method.base_cost when the method changes
-          "calculated": "copy(shipping_method,base_cost,on_change)",
-          "description": "Shipping cost snapshotted from the chosen method"
-        },
-        {
-          "name": "subtotal",
-          "type": "decimal",
-          "subtype": "money",
-          "required": false,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          // Kept in sync by trigger whenever an order_item.total_price changes
-          "calculated": "rollup(sum,order_item,total_price)",
-          "description": "Sum of all order item line totals"
-        },
-        {
-          "name": "discount_amount",
-          "type": "decimal",
-          "subtype": "money",
-          "required": false,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          // Computed by order-compute-totals rule from coupon snapshots + subtotal
-          "calculated": "by_rules",
-          "description": "Discount amount applied to this order"
-        },
-        {
-          "name": "grand_total",
-          "type": "decimal",
-          "subtype": "money",
-          "required": false,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          // subtotal + shipping_costs - discount_amount; updated by order-compute-totals
-          "calculated": "by_rules",
-          "description": "Final amount the customer pays"
-        },
-        {
-          "name": "confirmed_grand_total",
-          "type": "decimal",
-          "subtype": "money",
-          "required": false,
-          "precision": 10,
-          "scale": 2,
-          // Snapshot captured when the order moves to 'confirmed';
-          // subsequent state transitions check that grand_total still matches this value
-          "calculated": "by_rules",
-          "description": "Grand total locked at order confirmation"
-        },
-        {
-          "name": "payment_status",
-          "type": "string",
-          "required": false,
-          "max_length": 20,
-          // Written only by the 'payment' edge function (service role);
-          // protected from client writes. NULL means unpaid.
-          "calculated": "by_rules",
-          "description": "Payment status: pending, paid or failed (NULL = unpaid)"
-        },
-        {
-          "name": "payment_reference",
-          "type": "string",
-          "required": false,
-          "max_length": 100,
-          "calculated": "by_rules",
-          "description": "Payment provider reference (payment intent id)"
-        },
-        {
-          "name": "notes",
-          "type": "string",
-          "required": false,
-          "max_length": 500,
-          "size": "m",
-          "description": "Customer-visible delivery instructions"
-        },
-        {
-          "name": "internal_notes",
-          "type": "string",
-          "required": false,
-          "max_length": 500,
-          "size": "m",
-          // rules_level_3 makes this read-only for the 'buyer' role
-          "description": "Admin-only notes (hidden from customers)"
-        },
-        {
-          "name": "is_cancelled",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "Soft-cancel flag; set by admin when an order needs to be voided"
-        }
+        // Set to the logged-in user's customer profile on INSERT; write-locked after that
+        { "name": "customer", "type": "relation_to_one", "subtype": "related_to", "target": "customer", "calculated": "copy_logged_on_insert(customer)", "description": "Customer who owns this order" },
+        { "name": "order_date", "type": "datetime", "description": "When the customer confirmed the order (checkout → confirmed)" },
+        // Inline-expands all address fields from the customer's saved addresses.
+        // Not required at cart creation (initial state); filled in at checkout.
+        { "name": "shipping_address", "type": "prefill", "subtype": "customer.addresses", "description": "Delivery address (prefilled from saved addresses)" },
+        { "name": "billing_address", "type": "prefill", "subtype": "customer.addresses", "description": "Billing address (prefilled from saved addresses)" },
+        { "name": "coupon", "type": "relation_to_one", "subtype": "related_to", "target": "coupon", "description": "Applied coupon code (if any)" },
+        // Copied from coupon.discount_type when the coupon FK changes; decouples the order
+        // total from later coupon edits or deletion.
+        { "name": "coupon_snapshot_type", "type": "string", "max_length": 20, "calculated": "copy(coupon,discount_type,on_change)", "description": "Coupon discount type at the time of application" },
+        { "name": "coupon_snapshot_value", "type": "decimal", "precision": 10, "scale": 2, "calculated": "copy(coupon,discount_value,on_change)", "description": "Coupon discount value at the time of application" },
+        { "name": "shipping_method", "type": "relation_to_one", "subtype": "related_to", "target": "shipping_method", "description": "Chosen shipping method" },
+        // Copied from shipping_method.base_cost when the method changes
+        { "name": "shipping_costs", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "calculated": "copy(shipping_method,base_cost,on_change)", "description": "Shipping cost snapshotted from the chosen method" },
+        // Kept in sync by trigger whenever an order_item.total_price changes
+        { "name": "subtotal", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "calculated": "rollup(sum,order_item,total_price)", "description": "Sum of all order item line totals" },
+        // Computed by order-compute-totals rule from coupon snapshots + subtotal
+        { "name": "discount_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "calculated": "by_rules", "description": "Discount amount applied to this order" },
+        // subtotal + shipping_costs - discount_amount; updated by order-compute-totals
+        { "name": "grand_total", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "calculated": "by_rules", "description": "Final amount the customer pays" },
+        // Snapshot captured when the order moves to 'confirmed'; subsequent state transitions
+        // check that grand_total still matches this value.
+        { "name": "confirmed_grand_total", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "by_rules", "description": "Grand total locked at order confirmation" },
+        // Written only by the 'payment' edge function (service role); protected from client writes. NULL means unpaid.
+        { "name": "payment_status", "type": "string", "max_length": 20, "calculated": "by_rules", "description": "Payment status: pending, paid or failed (NULL = unpaid)" },
+        { "name": "payment_reference", "type": "string", "max_length": 100, "calculated": "by_rules", "description": "Payment provider reference (payment intent id)" },
+        { "name": "notes", "type": "string", "max_length": 500, "size": "m", "description": "Customer-visible delivery instructions" },
+        // rules_level_3 makes this read-only for the 'buyer' role
+        { "name": "internal_notes", "type": "string", "max_length": 500, "size": "m", "description": "Admin-only notes (hidden from customers)" },
+        { "name": "is_cancelled", "type": "boolean", "default": false, "description": "Soft-cancel flag; set by admin when an order needs to be voided" }
       ]
     },
     {
@@ -745,65 +190,17 @@
       "plural_name": "order_items",
       "description": "A single product variant line in an order",
       "data_size": "l",
-      "id_presentation": {
-        "fields": ["id"]
-      },
+      "id_presentation": { "fields": ["id"] },
       "fields": [
-        {
-          "name": "order",
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "order",
-          "description": "Parent order"
-        },
-        {
-          "name": "variant",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "product_variant",
-          "required": false,
-          "description": "Product variant ordered"
-        },
-        {
-          "name": "product_name",
-          "type": "string",
-          "required": false,
-          "max_length": 300,
-          // Snapshot of the variant name while the parent order is in 'initial';
-          // preserves the label even if the variant is later renamed or deleted
-          "calculated": "copy(variant,name,on_change_in_state_initial)",
-          "description": "Variant name captured at cart time"
-        },
-        {
-          "name": "quantity",
-          "type": "integer",
-          "required": true,
-          "min": 1,
-          "description": "Number of units"
-        },
-        {
-          "name": "unit_price",
-          "type": "decimal",
-          "subtype": "money",
-          "required": true,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          // Price follows the variant while the order is in 'initial'; frozen when order advances
-          "calculated": "copy(variant,price,on_change_in_state_initial)",
-          "description": "Price per unit captured at cart time"
-        },
-        {
-          "name": "total_price",
-          "type": "decimal",
-          "subtype": "money",
-          "required": true,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          "calculated": "quantity*unit_price",
-          "description": "Line total (quantity × unit_price)"
-        }
+        { "name": "order", "type": "relation_to_one", "subtype": "part_of", "target": "order", "description": "Parent order" },
+        { "name": "variant", "type": "relation_to_one", "subtype": "related_to", "target": "product_variant", "description": "Product variant ordered" },
+        // Snapshot of the variant name while the parent order is in 'initial'; preserves the
+        // label even if the variant is later renamed or deleted.
+        { "name": "product_name", "type": "string", "max_length": 300, "calculated": "copy(variant,name,on_change_in_state_initial)", "description": "Variant name captured at cart time" },
+        { "name": "quantity", "type": "integer", "required": true, "min": 1, "description": "Number of units" },
+        // Price follows the variant while the order is in 'initial'; frozen when order advances
+        { "name": "unit_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "calculated": "copy(variant,price,on_change_in_state_initial)", "description": "Price per unit captured at cart time" },
+        { "name": "total_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "calculated": "quantity*unit_price", "description": "Line total (quantity × unit_price)" }
       ]
     },
     {
@@ -811,60 +208,16 @@
       "plural_name": "reviews",
       "description": "Customer product review and star rating (moderated before appearing in storefront)",
       "data_size": "m",
-      "id_presentation": {
-        "fields": ["id"]
-      },
+      "id_presentation": { "fields": ["id"] },
       "fields": [
-        {
-          "name": "product",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "product",
-          "required": true,
-          "description": "Reviewed product"
-        },
-        {
-          "name": "customer",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "customer",
-          "required": false,
-          // Linked to the logged-in user's customer profile on INSERT; cannot be changed after
-          "calculated": "copy_logged_on_insert(customer)",
-          "description": "Reviewer profile"
-        },
-        {
-          "name": "rating",
-          "type": "integer",
-          "required": true,
-          "min": 1,
-          "max": 5,
-          "description": "Star rating from 1 (worst) to 5 (best)"
-        },
-        {
-          "name": "title",
-          "type": "string",
-          "required": false,
-          "max_length": 100,
-          "description": "Short review headline"
-        },
-        {
-          "name": "body",
-          "type": "string",
-          "required": false,
-          "max_length": 2000,
-          "size": "l",
-          "description": "Full review text"
-        },
-        {
-          "name": "status",
-          "type": "enum",
-          "required": true,
-          "enum_values": ["pending", "approved", "rejected"],
-          "default": "pending",
-          // rules_level_3 prevents customers from changing their own review status
-          "description": "Moderation status; only 'approved' reviews appear in the storefront"
-        }
+        { "name": "product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "required": true, "description": "Reviewed product" },
+        // Linked to the logged-in user's customer profile on INSERT; cannot be changed after
+        { "name": "customer", "type": "relation_to_one", "subtype": "related_to", "target": "customer", "calculated": "copy_logged_on_insert(customer)", "description": "Reviewer profile" },
+        { "name": "rating", "type": "integer", "required": true, "min": 1, "max": 5, "description": "Star rating from 1 (worst) to 5 (best)" },
+        { "name": "title", "type": "string", "max_length": 100, "description": "Short review headline" },
+        { "name": "body", "type": "string", "max_length": 2000, "size": "l", "description": "Full review text" },
+        // rules_level_3 prevents customers from changing their own review status
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["pending", "approved", "rejected"], "default": "pending", "description": "Moderation status; only 'approved' reviews appear in the storefront" }
       ]
     }
   ]

@@ -7,134 +7,26 @@
   "include_test_data": false,
   "records": {
     "shipping_method": [
-      {
-        "id": "standard",
-        "name": "Standard Shipping",
-        "carrier": "National Post",
-        "base_cost": 5.99,
-        "estimated_days_min": 3,
-        "estimated_days_max": 7,
-        "is_active": true
-      },
-      {
-        "id": "express",
-        "name": "Express Shipping",
-        "carrier": "FedEx",
-        "base_cost": 14.99,
-        "estimated_days_min": 1,
-        "estimated_days_max": 3,
-        "is_active": true
-      },
-      {
-        "id": "free",
-        "name": "Free Shipping",
-        "carrier": null,
-        "base_cost": 0.0,
-        "estimated_days_min": 5,
-        "estimated_days_max": 10,
-        "is_active": true
-      }
+      { "id": "standard", "name": "Standard Shipping", "carrier": "National Post", "base_cost": 5.99, "estimated_days_min": 3, "estimated_days_max": 7, "is_active": true },
+      { "id": "express", "name": "Express Shipping", "carrier": "FedEx", "base_cost": 14.99, "estimated_days_min": 1, "estimated_days_max": 3, "is_active": true },
+      { "id": "free", "name": "Free Shipping", "carrier": null, "base_cost": 0.0, "estimated_days_min": 5, "estimated_days_max": 10, "is_active": true }
     ],
     "category": [
-      {
-        "id": "electronics",
-        "parent": null,
-        "name": "Electronics",
-        "description": "Gadgets, devices and accessories",
-        "is_active": true
-      },
-      {
-        "id": "clothing",
-        "parent": null,
-        "name": "Clothing",
-        "description": "Apparel for all occasions",
-        "is_active": true
-      },
-      {
-        "id": "home",
-        "parent": null,
-        "name": "Home & Garden",
-        "description": "Everything for your home",
-        "is_active": true
-      },
-      {
-        "id": "smartphones",
-        "parent": "electronics",
-        "name": "Smartphones",
-        "description": "Mobile phones and accessories",
-        "is_active": true
-      },
-      {
-        "id": "laptops",
-        "parent": "electronics",
-        "name": "Laptops",
-        "description": "Portable computers",
-        "is_active": true
-      },
-      {
-        "id": "audio",
-        "parent": "electronics",
-        "name": "Audio",
-        "description": "Headphones and speakers",
-        "is_active": true
-      },
-      {
-        "id": "tshirts",
-        "parent": "clothing",
-        "name": "T-Shirts",
-        "description": "Casual everyday tees",
-        "is_active": true
-      },
-      {
-        "id": "hoodies",
-        "parent": "clothing",
-        "name": "Hoodies",
-        "description": "Sweatshirts and hooded tops",
-        "is_active": true
-      },
-      {
-        "id": "footwear",
-        "parent": "clothing",
-        "name": "Footwear",
-        "description": "Sneakers and shoes",
-        "is_active": true
-      },
-      {
-        "id": "kitchen",
-        "parent": "home",
-        "name": "Kitchen",
-        "description": "Cookware and tableware",
-        "is_active": true
-      },
-      {
-        "id": "decor",
-        "parent": "home",
-        "name": "Decor",
-        "description": "Make your space cozy",
-        "is_active": true
-      }
+      { "id": "electronics", "parent": null, "name": "Electronics", "description": "Gadgets, devices and accessories", "is_active": true },
+      { "id": "clothing", "parent": null, "name": "Clothing", "description": "Apparel for all occasions", "is_active": true },
+      { "id": "home", "parent": null, "name": "Home & Garden", "description": "Everything for your home", "is_active": true },
+      { "id": "smartphones", "parent": "electronics", "name": "Smartphones", "description": "Mobile phones and accessories", "is_active": true },
+      { "id": "laptops", "parent": "electronics", "name": "Laptops", "description": "Portable computers", "is_active": true },
+      { "id": "audio", "parent": "electronics", "name": "Audio", "description": "Headphones and speakers", "is_active": true },
+      { "id": "tshirts", "parent": "clothing", "name": "T-Shirts", "description": "Casual everyday tees", "is_active": true },
+      { "id": "hoodies", "parent": "clothing", "name": "Hoodies", "description": "Sweatshirts and hooded tops", "is_active": true },
+      { "id": "footwear", "parent": "clothing", "name": "Footwear", "description": "Sneakers and shoes", "is_active": true },
+      { "id": "kitchen", "parent": "home", "name": "Kitchen", "description": "Cookware and tableware", "is_active": true },
+      { "id": "decor", "parent": "home", "name": "Decor", "description": "Make your space cozy", "is_active": true }
     ],
     "coupon": [
-      {
-        "id": "welcome10",
-        "code": "WELCOME10",
-        "description": "10% off for new customers — no minimum order",
-        "discount_type": "percentage",
-        "discount_value": 10,
-        "min_order_amount": null,
-        "max_uses": null,
-        "is_active": true
-      },
-      {
-        "id": "save20",
-        "code": "SAVE20",
-        "description": "20 USD off orders over 100 USD",
-        "discount_type": "fixed",
-        "discount_value": 20.0,
-        "min_order_amount": 100.0,
-        "max_uses": 500,
-        "is_active": true
-      }
+      { "id": "welcome10", "code": "WELCOME10", "description": "10% off for new customers — no minimum order", "discount_type": "percentage", "discount_value": 10, "min_order_amount": null, "max_uses": null, "is_active": true },
+      { "id": "save20", "code": "SAVE20", "description": "20 USD off orders over 100 USD", "discount_type": "fixed", "discount_value": 20.0, "min_order_amount": 100.0, "max_uses": 500, "is_active": true }
     ],
     "product": [
       {
@@ -379,333 +271,38 @@
       }
     ],
     "product_variant": [
-      {
-        "id": "aurora-x-blk128",
-        "product": "aurora-x",
-        "sku": "AUR-BLK-128",
-        "name": "Black / 128 GB",
-        "price": 799.0,
-        "stock_quantity": 15,
-        "is_available": true,
-        "color": "black"
-      },
-      {
-        "id": "aurora-x-wht256",
-        "product": "aurora-x",
-        "sku": "AUR-WHT-256",
-        "name": "White / 256 GB",
-        "price": 899.0,
-        "stock_quantity": 9,
-        "is_available": true,
-        "color": "white"
-      },
-      {
-        "id": "nebula-mini-blu128",
-        "product": "nebula-mini",
-        "sku": "NEB-BLU-128",
-        "name": "Blue / 128 GB",
-        "price": 599.0,
-        "stock_quantity": 22,
-        "is_available": true,
-        "color": "blue"
-      },
-      {
-        "id": "nebula-mini-grn128",
-        "product": "nebula-mini",
-        "sku": "NEB-GRN-128",
-        "name": "Green / 128 GB",
-        "price": 599.0,
-        "stock_quantity": 14,
-        "is_available": true,
-        "color": "green"
-      },
-      {
-        "id": "stratos-14-i5",
-        "product": "stratos-14",
-        "sku": "STR-14-I5",
-        "name": "Core i5 / 16 GB",
-        "price": 1099.0,
-        "stock_quantity": 10,
-        "is_available": true,
-        "color": "grey"
-      },
-      {
-        "id": "stratos-14-i7",
-        "product": "stratos-14",
-        "sku": "STR-14-I7",
-        "name": "Core i7 / 32 GB",
-        "price": 1499.0,
-        "stock_quantity": 6,
-        "is_available": true,
-        "color": "grey"
-      },
-      {
-        "id": "stratos-pro16-pro",
-        "product": "stratos-pro16",
-        "sku": "STR-16-PRO",
-        "name": "Pro / 1 TB",
-        "price": 2199.0,
-        "stock_quantity": 4,
-        "is_available": true,
-        "color": "black"
-      },
-      {
-        "id": "pulse-headphones-blk",
-        "product": "pulse-headphones",
-        "sku": "PLS-BLK",
-        "name": "Midnight Black",
-        "price": 199.0,
-        "stock_quantity": 30,
-        "is_available": true,
-        "color": "black"
-      },
-      {
-        "id": "pulse-headphones-wht",
-        "product": "pulse-headphones",
-        "sku": "PLS-WHT",
-        "name": "Cloud White",
-        "price": 199.0,
-        "stock_quantity": 25,
-        "is_available": true,
-        "color": "white"
-      },
-      {
-        "id": "boom-speaker-one",
-        "product": "boom-speaker",
-        "sku": "BOOM-1",
-        "name": "One Size",
-        "price": 79.0,
-        "stock_quantity": 40,
-        "is_available": true,
-        "size": "one_size",
-        "color": "black"
-      },
-      {
-        "id": "organic-tee-s-blk",
-        "product": "organic-tee",
-        "sku": "OCT-S-BLK",
-        "name": "S / Black",
-        "price": 24.99,
-        "stock_quantity": 60,
-        "is_available": true,
-        "size": "s",
-        "color": "black"
-      },
-      {
-        "id": "organic-tee-m-blk",
-        "product": "organic-tee",
-        "sku": "OCT-M-BLK",
-        "name": "M / Black",
-        "price": 24.99,
-        "stock_quantity": 55,
-        "is_available": true,
-        "size": "m",
-        "color": "black"
-      },
-      {
-        "id": "organic-tee-l-wht",
-        "product": "organic-tee",
-        "sku": "OCT-L-WHT",
-        "name": "L / White",
-        "price": 24.99,
-        "stock_quantity": 48,
-        "is_available": true,
-        "size": "l",
-        "color": "white"
-      },
-      {
-        "id": "organic-tee-xl-blu",
-        "product": "organic-tee",
-        "sku": "OCT-XL-BLU",
-        "name": "XL / Blue",
-        "price": 24.99,
-        "stock_quantity": 30,
-        "is_available": true,
-        "size": "xl",
-        "color": "blue"
-      },
-      {
-        "id": "graphic-tee-m-blk",
-        "product": "graphic-tee",
-        "sku": "GPT-M-BLK",
-        "name": "M / Black",
-        "price": 29.99,
-        "stock_quantity": 35,
-        "is_available": true,
-        "size": "m",
-        "color": "black"
-      },
-      {
-        "id": "graphic-tee-l-blk",
-        "product": "graphic-tee",
-        "sku": "GPT-L-BLK",
-        "name": "L / Black",
-        "price": 29.99,
-        "stock_quantity": 28,
-        "is_available": true,
-        "size": "l",
-        "color": "black"
-      },
-      {
-        "id": "cloud-hoodie-m-gry",
-        "product": "cloud-hoodie",
-        "sku": "CLH-M-GRY",
-        "name": "M / Grey",
-        "price": 64.99,
-        "stock_quantity": 25,
-        "is_available": true,
-        "size": "m",
-        "color": "grey"
-      },
-      {
-        "id": "cloud-hoodie-l-blk",
-        "product": "cloud-hoodie",
-        "sku": "CLH-L-BLK",
-        "name": "L / Black",
-        "price": 64.99,
-        "stock_quantity": 18,
-        "is_available": true,
-        "size": "l",
-        "color": "black"
-      },
-      {
-        "id": "classic-hoodie-m-beg",
-        "product": "classic-hoodie",
-        "sku": "CPH-M-BEG",
-        "name": "M / Beige",
-        "price": 54.99,
-        "stock_quantity": 20,
-        "is_available": true,
-        "size": "m",
-        "color": "beige"
-      },
-      {
-        "id": "classic-hoodie-l-grn",
-        "product": "classic-hoodie",
-        "sku": "CPH-L-GRN",
-        "name": "L / Green",
-        "price": 54.99,
-        "stock_quantity": 16,
-        "is_available": true,
-        "size": "l",
-        "color": "green"
-      },
-      {
-        "id": "runner-sneakers-42",
-        "product": "runner-sneakers",
-        "sku": "RUN-42",
-        "name": "EU 42",
-        "price": 119.0,
-        "stock_quantity": 12,
-        "is_available": true,
-        "color": "white"
-      },
-      {
-        "id": "runner-sneakers-43",
-        "product": "runner-sneakers",
-        "sku": "RUN-43",
-        "name": "EU 43",
-        "price": 119.0,
-        "stock_quantity": 10,
-        "is_available": true,
-        "color": "white"
-      },
-      {
-        "id": "runner-sneakers-44",
-        "product": "runner-sneakers",
-        "sku": "RUN-44",
-        "name": "EU 44",
-        "price": 119.0,
-        "stock_quantity": 8,
-        "is_available": true,
-        "color": "black"
-      },
-      {
-        "id": "chef-knife-one",
-        "product": "chef-knife",
-        "sku": "KNF-1",
-        "name": "One Size",
-        "price": 89.0,
-        "stock_quantity": 18,
-        "is_available": true,
-        "size": "one_size",
-        "color": "grey"
-      },
-      {
-        "id": "mug-set-set",
-        "product": "mug-set",
-        "sku": "MUG-4",
-        "name": "Set of 4",
-        "price": 39.0,
-        "stock_quantity": 35,
-        "is_available": true,
-        "size": "one_size",
-        "color": "brown"
-      },
-      {
-        "id": "scented-candle-one",
-        "product": "scented-candle",
-        "sku": "CND-1",
-        "name": "One Size",
-        "price": 22.0,
-        "stock_quantity": 50,
-        "is_available": true,
-        "size": "one_size",
-        "color": "beige"
-      },
-      {
-        "id": "throw-pillow-mus",
-        "product": "throw-pillow",
-        "sku": "PIL-MUS",
-        "name": "Mustard",
-        "price": 34.0,
-        "stock_quantity": 24,
-        "is_available": true,
-        "size": "one_size",
-        "color": "yellow"
-      },
-      {
-        "id": "throw-pillow-tea",
-        "product": "throw-pillow",
-        "sku": "PIL-TEA",
-        "name": "Teal",
-        "price": 34.0,
-        "stock_quantity": 20,
-        "is_available": true,
-        "size": "one_size",
-        "color": "green"
-      }
+      { "id": "aurora-x-blk128", "product": "aurora-x", "sku": "AUR-BLK-128", "name": "Black / 128 GB", "price": 799.0, "stock_quantity": 15, "is_available": true, "color": "black" },
+      { "id": "aurora-x-wht256", "product": "aurora-x", "sku": "AUR-WHT-256", "name": "White / 256 GB", "price": 899.0, "stock_quantity": 9, "is_available": true, "color": "white" },
+      { "id": "nebula-mini-blu128", "product": "nebula-mini", "sku": "NEB-BLU-128", "name": "Blue / 128 GB", "price": 599.0, "stock_quantity": 22, "is_available": true, "color": "blue" },
+      { "id": "nebula-mini-grn128", "product": "nebula-mini", "sku": "NEB-GRN-128", "name": "Green / 128 GB", "price": 599.0, "stock_quantity": 14, "is_available": true, "color": "green" },
+      { "id": "stratos-14-i5", "product": "stratos-14", "sku": "STR-14-I5", "name": "Core i5 / 16 GB", "price": 1099.0, "stock_quantity": 10, "is_available": true, "color": "grey" },
+      { "id": "stratos-14-i7", "product": "stratos-14", "sku": "STR-14-I7", "name": "Core i7 / 32 GB", "price": 1499.0, "stock_quantity": 6, "is_available": true, "color": "grey" },
+      { "id": "stratos-pro16-pro", "product": "stratos-pro16", "sku": "STR-16-PRO", "name": "Pro / 1 TB", "price": 2199.0, "stock_quantity": 4, "is_available": true, "color": "black" },
+      { "id": "pulse-headphones-blk", "product": "pulse-headphones", "sku": "PLS-BLK", "name": "Midnight Black", "price": 199.0, "stock_quantity": 30, "is_available": true, "color": "black" },
+      { "id": "pulse-headphones-wht", "product": "pulse-headphones", "sku": "PLS-WHT", "name": "Cloud White", "price": 199.0, "stock_quantity": 25, "is_available": true, "color": "white" },
+      { "id": "boom-speaker-one", "product": "boom-speaker", "sku": "BOOM-1", "name": "One Size", "price": 79.0, "stock_quantity": 40, "is_available": true, "size": "one_size", "color": "black" },
+      { "id": "organic-tee-s-blk", "product": "organic-tee", "sku": "OCT-S-BLK", "name": "S / Black", "price": 24.99, "stock_quantity": 60, "is_available": true, "size": "s", "color": "black" },
+      { "id": "organic-tee-m-blk", "product": "organic-tee", "sku": "OCT-M-BLK", "name": "M / Black", "price": 24.99, "stock_quantity": 55, "is_available": true, "size": "m", "color": "black" },
+      { "id": "organic-tee-l-wht", "product": "organic-tee", "sku": "OCT-L-WHT", "name": "L / White", "price": 24.99, "stock_quantity": 48, "is_available": true, "size": "l", "color": "white" },
+      { "id": "organic-tee-xl-blu", "product": "organic-tee", "sku": "OCT-XL-BLU", "name": "XL / Blue", "price": 24.99, "stock_quantity": 30, "is_available": true, "size": "xl", "color": "blue" },
+      { "id": "graphic-tee-m-blk", "product": "graphic-tee", "sku": "GPT-M-BLK", "name": "M / Black", "price": 29.99, "stock_quantity": 35, "is_available": true, "size": "m", "color": "black" },
+      { "id": "graphic-tee-l-blk", "product": "graphic-tee", "sku": "GPT-L-BLK", "name": "L / Black", "price": 29.99, "stock_quantity": 28, "is_available": true, "size": "l", "color": "black" },
+      { "id": "cloud-hoodie-m-gry", "product": "cloud-hoodie", "sku": "CLH-M-GRY", "name": "M / Grey", "price": 64.99, "stock_quantity": 25, "is_available": true, "size": "m", "color": "grey" },
+      { "id": "cloud-hoodie-l-blk", "product": "cloud-hoodie", "sku": "CLH-L-BLK", "name": "L / Black", "price": 64.99, "stock_quantity": 18, "is_available": true, "size": "l", "color": "black" },
+      { "id": "classic-hoodie-m-beg", "product": "classic-hoodie", "sku": "CPH-M-BEG", "name": "M / Beige", "price": 54.99, "stock_quantity": 20, "is_available": true, "size": "m", "color": "beige" },
+      { "id": "classic-hoodie-l-grn", "product": "classic-hoodie", "sku": "CPH-L-GRN", "name": "L / Green", "price": 54.99, "stock_quantity": 16, "is_available": true, "size": "l", "color": "green" },
+      { "id": "runner-sneakers-42", "product": "runner-sneakers", "sku": "RUN-42", "name": "EU 42", "price": 119.0, "stock_quantity": 12, "is_available": true, "color": "white" },
+      { "id": "runner-sneakers-43", "product": "runner-sneakers", "sku": "RUN-43", "name": "EU 43", "price": 119.0, "stock_quantity": 10, "is_available": true, "color": "white" },
+      { "id": "runner-sneakers-44", "product": "runner-sneakers", "sku": "RUN-44", "name": "EU 44", "price": 119.0, "stock_quantity": 8, "is_available": true, "color": "black" },
+      { "id": "chef-knife-one", "product": "chef-knife", "sku": "KNF-1", "name": "One Size", "price": 89.0, "stock_quantity": 18, "is_available": true, "size": "one_size", "color": "grey" },
+      { "id": "mug-set-set", "product": "mug-set", "sku": "MUG-4", "name": "Set of 4", "price": 39.0, "stock_quantity": 35, "is_available": true, "size": "one_size", "color": "brown" },
+      { "id": "scented-candle-one", "product": "scented-candle", "sku": "CND-1", "name": "One Size", "price": 22.0, "stock_quantity": 50, "is_available": true, "size": "one_size", "color": "beige" },
+      { "id": "throw-pillow-mus", "product": "throw-pillow", "sku": "PIL-MUS", "name": "Mustard", "price": 34.0, "stock_quantity": 24, "is_available": true, "size": "one_size", "color": "yellow" },
+      { "id": "throw-pillow-tea", "product": "throw-pillow", "sku": "PIL-TEA", "name": "Teal", "price": 34.0, "stock_quantity": 20, "is_available": true, "size": "one_size", "color": "green" }
     ],
     "collection": [
-      {
-        "id": "new-arrivals",
-        "name": "New Arrivals",
-        "description": "The latest additions to our store",
-        "is_published": true,
-        "products": [
-          "aurora-x",
-          "nebula-mini",
-          "stratos-14",
-          "stratos-pro16",
-          "pulse-headphones",
-          "boom-speaker"
-        ]
-      },
-      {
-        "id": "featured",
-        "name": "Featured",
-        "description": "Our hand-picked selection",
-        "is_published": true,
-        "products": [
-          "aurora-x",
-          "stratos-14",
-          "pulse-headphones",
-          "graphic-tee",
-          "cloud-hoodie",
-          "runner-sneakers",
-          "mug-set"
-        ]
-      }
+      { "id": "new-arrivals", "name": "New Arrivals", "description": "The latest additions to our store", "is_published": true, "products": ["aurora-x", "nebula-mini", "stratos-14", "stratos-pro16", "pulse-headphones", "boom-speaker"] },
+      { "id": "featured", "name": "Featured", "description": "Our hand-picked selection", "is_published": true, "products": ["aurora-x", "stratos-14", "pulse-headphones", "graphic-tee", "cloud-hoodie", "runner-sneakers", "mug-set"] }
     ]
   }
 }

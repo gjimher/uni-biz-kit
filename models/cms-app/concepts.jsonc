@@ -8,152 +8,44 @@
       "name": "employee",
       "plural_name": "employees",
       "description": "Employee profile linked to a registered user account; articles are attributed to it",
-      "id_presentation": {
-        "fields": ["first_name", "last_name"],
-        "separator": " "
-      },
+      "id_presentation": { "fields": ["first_name", "last_name"] },
       "fields": [
-        {
-          // Profile rows are auto-created empty when a user registers/is seeded,
-          // so required fields need defaults (same pattern as b2c-app customer).
-          "name": "first_name",
-          "type": "string",
-          "required": true,
-          "default": "Pending",
-          "min_length": 1,
-          "max_length": 50,
-          "description": "First name"
-        },
-        {
-          "name": "last_name",
-          "type": "string",
-          "required": true,
-          "default": "Profile",
-          "min_length": 1,
-          "max_length": 50,
-          "description": "Last name"
-        },
-        {
-          "name": "email",
-          "type": "string",
-          "calculated": "\"_user_email\"",
-          "required": false,
-          "min_length": 5,
-          "max_length": 100,
-          "description": "Email — auto-set from the authenticated user at INSERT; read-only"
-        },
-        {
-          "name": "job_title",
-          "type": "string",
-          "required": false,
-          "max_length": 100,
-          "description": "Role shown next to the author name (e.g. HR Manager)"
-        }
+        // Profile rows are auto-created empty when a user registers/is seeded, so required fields
+        // need defaults (same pattern as b2c-app customer).
+        { "name": "first_name", "type": "string", "required": true, "default": "Pending", "min_length": 1, "max_length": 50, "description": "First name" },
+        { "name": "last_name", "type": "string", "required": true, "default": "Profile", "min_length": 1, "max_length": 50, "description": "Last name" },
+        { "name": "email", "type": "string", "calculated": "\"_user_email\"", "min_length": 5, "max_length": 100, "description": "Email — auto-set from the authenticated user at INSERT; read-only" },
+        { "name": "job_title", "type": "string", "max_length": 100, "description": "Role shown next to the author name (e.g. HR Manager)" }
       ]
     },
     {
       "name": "category",
       "plural_name": "categories",
       "description": "Content categories used to group and filter articles",
-      "id_presentation": {
-        "fields": ["name"]
-      },
+      "id_presentation": { "fields": ["name"] },
       "fields": [
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "unique": true,
-          "min_length": 2,
-          "max_length": 80,
-          "description": "Category display name"
-        },
-        {
-          "name": "description",
-          "type": "string",
-          "required": false,
-          "max_length": 300,
-          "size": "m",
-          "description": "What kind of content belongs here"
-        }
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 80, "description": "Category display name" },
+        { "name": "description", "type": "string", "max_length": 300, "size": "m", "description": "What kind of content belongs here" }
       ]
     },
     {
       "name": "article",
       "plural_name": "articles",
       "description": "A news item or other content piece: standard template with title, summary, markdown body and photos",
-      "id_presentation": {
-        "fields": ["title"]
-      },
+      "id_presentation": { "fields": ["title"] },
       // Photos are attached as documents (upload tab in the edit view).
-      "documents": {
-        "enabled": true,
-        "tags": ["img_s", "img_m", "img_l"]
-      },
+      "documents": { "enabled": true, "tags": ["img_s", "img_m", "img_l"] },
       "fields": [
-        {
-          "name": "title",
-          "type": "string",
-          "required": true,
-          "min_length": 2,
-          "max_length": 200,
-          "size": "m",
-          "description": "Headline"
-        },
-        {
-          "name": "category",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "category",
-          "required": true,
-          "description": "Category this article belongs to"
-        },
-        {
-          "name": "author",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "employee",
-          "required": false,
-          // Auto-linked to the logged-in employee's profile on INSERT; read-only
-          "calculated": "copy_logged_on_insert(author)",
-          "description": "Employee who wrote the article"
-        },
-        {
-          "name": "summary",
-          "type": "string",
-          "required": false,
-          "max_length": 300,
-          "size": "l",
-          "description": "One-paragraph teaser shown in listings"
-        },
-        {
-          // markdown: edited with a rich markdown editor (toolbar, source + live preview)
-          "name": "body",
-          "type": "markdown",
-          "required": true,
-          "description": "Article content in markdown"
-        },
-        {
-          "name": "published_date",
-          "type": "date",
-          "required": false,
-          "description": "Publication date; articles are listed newest first"
-        },
-        {
-          "name": "status",
-          "type": "enum",
-          "required": true,
-          "enum_values": ["draft", "published", "archived"],
-          "default": "draft",
-          "description": "Publication status; only 'published' articles are public"
-        },
-        {
-          "name": "is_featured",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "Pinned/highlighted content"
-        }
+        { "name": "title", "type": "string", "required": true, "min_length": 2, "max_length": 200, "size": "m", "description": "Headline" },
+        { "name": "category", "type": "relation_to_one", "subtype": "related_to", "target": "category", "required": true, "description": "Category this article belongs to" },
+        // Auto-linked to the logged-in employee's profile on INSERT; read-only
+        { "name": "author", "type": "relation_to_one", "subtype": "related_to", "target": "employee", "calculated": "copy_logged_on_insert(author)", "description": "Employee who wrote the article" },
+        { "name": "summary", "type": "string", "max_length": 300, "size": "l", "description": "One-paragraph teaser shown in listings" },
+        // markdown: edited with a rich markdown editor (toolbar, source + live preview)
+        { "name": "body", "type": "markdown", "required": true, "description": "Article content in markdown" },
+        { "name": "published_date", "type": "date", "description": "Publication date; articles are listed newest first" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["draft", "published", "archived"], "default": "draft", "description": "Publication status; only 'published' articles are public" },
+        { "name": "is_featured", "type": "boolean", "default": false, "description": "Pinned/highlighted content" }
       ]
     }
   ]

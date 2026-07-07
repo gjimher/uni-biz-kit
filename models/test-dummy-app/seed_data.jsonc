@@ -4,11 +4,7 @@
   "include_test_data": false,
   "records": {
     "widget": [
-      {
-        "id": "seed-widget",
-        "name": "Seeded Widget",
-        "quantity": 7
-      }
+      { "id": "seed-widget", "name": "Seeded Widget", "quantity": 7 }
     ]
   }
 }

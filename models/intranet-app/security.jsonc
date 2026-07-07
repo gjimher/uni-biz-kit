@@ -1,107 +1,62 @@
 {
   "$schema": "../../schemas/security_schema.json",
-  "authentication_required": true,
-  // Accounts are provisioned by the company; no self-registration, no SSO.
-  "registration": {
-    "allow": false
-  },
-  "sso": {
-    "enabled": false
-  },
+  // Accounts are provisioned by the company; no self-registration, no SSO (both default off).
+  "registration": {},
+  "sso": {},
   "roles": [
-    {
-      "name": "admin",
-      "description": "System administrator — full access to everything"
-    },
-    {
-      "name": "hr",
-      "description": "Human Resources — approves requests, records sick leaves, manages people, centers, holidays and content",
-      "profile_concept": "employee"
-    },
-    {
-      "name": "it",
-      "description": "IT / Systems — handles IT helpdesk tickets",
-      "profile_concept": "employee"
-    },
-    {
-      "name": "employee",
-      "description": "Regular employee — portal user",
-      "profile_concept": "employee"
-    }
+    { "name": "admin", "description": "System administrator — full access to everything" },
+    { "name": "hr", "description": "Human Resources — approves requests, records sick leaves, manages people, centers, holidays and content", "profile_concept": "employee" },
+    { "name": "it", "description": "IT / Systems — handles IT helpdesk tickets", "profile_concept": "employee" },
+    { "name": "employee", "description": "Regular employee — portal user", "profile_concept": "employee" }
   ],
-  // Seed users (development only). HR and IT staff are employees too, so they
-  // carry both roles and share the same employee profile concept.
+  // Seed users (development only). HR and IT staff are employees too, so they carry
+  // both roles and share the same employee profile concept.
   "users": [
-    {
-      "email": "admin@intranet.com",
-      "password": "adminadmin",
-      "roles": ["admin"]
-    },
-    {
-      "email": "hr@intranet.com",
-      "password": "useruser",
-      "roles": ["employee", "hr"]
-    },
-    {
-      "email": "it@intranet.com",
-      "password": "useruser",
-      "roles": ["employee", "it"]
-    },
-    {
-      "email": "alice@intranet.com",
-      "password": "useruser",
-      "roles": ["employee"]
-    },
-    {
-      "email": "bob@intranet.com",
-      "password": "useruser",
-      "roles": ["employee"]
-    },
-    {
-      "email": "carol@intranet.com",
-      "password": "useruser",
-      "roles": ["employee"]
-    }
+    { "email": "admin@intranet.com", "password": "adminadmin", "roles": ["admin"] },
+    { "email": "hr@intranet.com", "password": "useruser", "roles": ["employee", "hr"] },
+    { "email": "it@intranet.com", "password": "useruser", "roles": ["employee", "it"] },
+    { "email": "alice@intranet.com", "password": "useruser", "roles": ["employee"] },
+    { "email": "bob@intranet.com", "password": "useruser", "roles": ["employee"] },
+    { "email": "carol@intranet.com", "password": "useruser", "roles": ["employee"] }
   ],
   "rules_level_2": [
-    // Employees: the directory (profiles + photos) is company-wide readable.
-    // People data is HR-managed, so employees do not edit their own profile
-    // (one access level per role+concept: 'read' here would be overridden by
-    // an 'owner_write' rule, hiding colleagues from the directory).
-    { "role": "employee", "concept": "employee", "field": "*", "access": "read" },
+    // Employees: the directory (profiles + photos) is company-wide readable. People data is
+    // HR-managed, so employees do not edit their own profile (one access level per role+concept:
+    // 'read' here would be overridden by an 'owner_write' rule, hiding colleagues from the directory).
+    { "role": "employee", "concept": "employee", "access": "read" },
 
     // Reference data and internal content: read-only for employees
-    { "role": "employee", "concept": "work_center", "field": "*", "access": "read" },
-    { "role": "employee", "concept": "holiday",     "field": "*", "access": "read" },
-    { "role": "employee", "concept": "category",    "field": "*", "access": "read" },
-    { "role": "employee", "concept": "article",     "field": "*", "access": "read" },
+    { "role": "employee", "concept": "work_center", "access": "read" },
+    { "role": "employee", "concept": "holiday", "access": "read" },
+    { "role": "employee", "concept": "category", "access": "read" },
+    { "role": "employee", "concept": "article", "access": "read" },
 
     // Own requests, clockings and tickets (owner_write also scopes reads to own rows).
     // sick_leave has intentionally NO employee rule: leaves are HR-private.
-    { "role": "employee", "concept": "vacation_request", "field": "*", "access": "owner_write" },
-    { "role": "employee", "concept": "leave_request",    "field": "*", "access": "owner_write" },
-    { "role": "employee", "concept": "work_log",         "field": "*", "access": "owner_write" },
-    { "role": "employee", "concept": "ticket",           "field": "*", "access": "owner_write" },
+    { "role": "employee", "concept": "vacation_request", "access": "owner_write" },
+    { "role": "employee", "concept": "leave_request", "access": "owner_write" },
+    { "role": "employee", "concept": "work_log", "access": "owner_write" },
+    { "role": "employee", "concept": "ticket", "access": "owner_write" },
 
     // HR manages people, calendars, absences, content and the HR helpdesk
-    { "role": "hr", "concept": "employee",         "field": "*", "access": "write" },
-    { "role": "hr", "concept": "work_center",      "field": "*", "access": "write" },
-    { "role": "hr", "concept": "holiday",          "field": "*", "access": "write" },
-    { "role": "hr", "concept": "vacation_request", "field": "*", "access": "write" },
-    { "role": "hr", "concept": "leave_request",    "field": "*", "access": "write" },
-    { "role": "hr", "concept": "sick_leave",       "field": "*", "access": "write" },
-    { "role": "hr", "concept": "work_log",         "field": "*", "access": "write" },
-    { "role": "hr", "concept": "ticket",           "field": "*", "access": "write" },
-    { "role": "hr", "concept": "article",          "field": "*", "access": "write" },
-    { "role": "hr", "concept": "category",         "field": "*", "access": "write" },
+    { "role": "hr", "concept": "employee", "access": "write" },
+    { "role": "hr", "concept": "work_center", "access": "write" },
+    { "role": "hr", "concept": "holiday", "access": "write" },
+    { "role": "hr", "concept": "vacation_request", "access": "write" },
+    { "role": "hr", "concept": "leave_request", "access": "write" },
+    { "role": "hr", "concept": "sick_leave", "access": "write" },
+    { "role": "hr", "concept": "work_log", "access": "write" },
+    { "role": "hr", "concept": "ticket", "access": "write" },
+    { "role": "hr", "concept": "article", "access": "write" },
+    { "role": "hr", "concept": "category", "access": "write" },
 
     // IT handles the helpdesk (both teams' tickets are visible to triage misrouted ones)
-    { "role": "it", "concept": "ticket",   "field": "*", "access": "write" },
-    { "role": "it", "concept": "employee", "field": "*", "access": "read" }
+    { "role": "it", "concept": "ticket", "access": "write" },
+    { "role": "it", "concept": "employee", "access": "read" }
   ],
   "rules_level_3": [
     // Decision fields belong to the handling team; employees only read them
-    { "role": "employee", "concept": "*",      "field": "hr_*",      "access": "read" },
+    { "role": "employee", "concept": "*", "field": "hr_*", "access": "read" },
     { "role": "employee", "concept": "ticket", "field": "resolution", "access": "read" }
   ]
 }

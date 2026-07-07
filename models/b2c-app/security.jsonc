@@ -1,40 +1,17 @@
 {
   "$schema": "../../schemas/security_schema.json",
-  "authentication_required": true,
-  "registration": {
-    // Customers can self-register; new accounts are assigned the 'buyer' role automatically
-    "allow": true,
-    "role": "buyer"
-  },
+  // Customers can self-register; new accounts are assigned the 'buyer' role automatically
+  "registration": { "allow": true, "role": "buyer" },
   "roles": [
-    {
-      "name": "admin",
-      "description": "Store Administrator — full access to all concepts"
-    },
-    {
-      "name": "buyer",
-      "description": "Registered Customer — shops the storefront",
-      // Links the 'buyer' role to the customer profile concept;
-      // enables owner_write checks (is this record linked to the logged-in user?)
-      "profile_concept": "customer"
-    }
+    { "name": "admin", "description": "Store Administrator — full access to all concepts" },
+    // Links the 'buyer' role to the customer profile concept; enables owner_write checks
+    // (is this record linked to the logged-in user?)
+    { "name": "buyer", "description": "Registered Customer — shops the storefront", "profile_concept": "customer" }
   ],
   "users": [
-    {
-      "email": "admin@b2c.com",
-      "password": "adminadmin",
-      "roles": ["admin"]
-    },
-    {
-      "email": "buyer1@b2c.com",
-      "password": "buyerbuyer",
-      "roles": ["buyer"]
-    },
-    {
-      "email": "buyer2@b2c.com",
-      "password": "buyerbuyer",
-      "roles": ["buyer"]
-    }
+    { "email": "admin@b2c.com", "password": "adminadmin", "roles": ["admin"] },
+    { "email": "buyer1@b2c.com", "password": "buyerbuyer", "roles": ["buyer"] },
+    { "email": "buyer2@b2c.com", "password": "buyerbuyer", "roles": ["buyer"] }
   ],
   // rules_level_2: per-role, per-concept access enforced by Supabase RLS policies.
   // access values:
@@ -43,30 +20,30 @@
   //   owner_write — INSERT/UPDATE/DELETE only on records linked to the user's profile
   "rules_level_2": [
     // Storefront catalog: publicly readable without login
-    { "role": "_anon", "concept": "product",          "field": "*", "access": "read" },
-    { "role": "_anon", "concept": "product_variant",  "field": "*", "access": "read" },
-    { "role": "_anon", "concept": "category",         "field": "*", "access": "read" },
-    { "role": "_anon", "concept": "collection",       "field": "*", "access": "read" },
-    { "role": "_anon", "concept": "shipping_method",  "field": "*", "access": "read" },
+    { "role": "_anon", "concept": "product", "access": "read" },
+    { "role": "_anon", "concept": "product_variant", "access": "read" },
+    { "role": "_anon", "concept": "category", "access": "read" },
+    { "role": "_anon", "concept": "collection", "access": "read" },
+    { "role": "_anon", "concept": "shipping_method", "access": "read" },
 
     // Customers can manage their own profile, cart/orders and reviews
-    { "role": "buyer", "concept": "customer",  "field": "*", "access": "owner_write" },
-    { "role": "buyer", "concept": "order",     "field": "*", "access": "owner_write" },
-    { "role": "buyer", "concept": "review",    "field": "*", "access": "owner_write" },
+    { "role": "buyer", "concept": "customer", "access": "owner_write" },
+    { "role": "buyer", "concept": "order", "access": "owner_write" },
+    { "role": "buyer", "concept": "review", "access": "owner_write" },
 
     // Customers can read the catalog and lookup tables (coupon lookup for code entry)
-    { "role": "buyer", "concept": "product",           "field": "*", "access": "read" },
-    { "role": "buyer", "concept": "product_variant",   "field": "*", "access": "read" },
-    { "role": "buyer", "concept": "category",          "field": "*", "access": "read" },
-    { "role": "buyer", "concept": "collection",        "field": "*", "access": "read" },
-    { "role": "buyer", "concept": "coupon",            "field": "*", "access": "read" },
-    { "role": "buyer", "concept": "shipping_method",   "field": "*", "access": "read" }
+    { "role": "buyer", "concept": "product", "access": "read" },
+    { "role": "buyer", "concept": "product_variant", "access": "read" },
+    { "role": "buyer", "concept": "category", "access": "read" },
+    { "role": "buyer", "concept": "collection", "access": "read" },
+    { "role": "buyer", "concept": "coupon", "access": "read" },
+    { "role": "buyer", "concept": "shipping_method", "access": "read" }
   ],
   // rules_level_3: glob-pattern rules applied on top of level_2.
   "rules_level_3": [
     // Fields prefixed internal_ are read-only for customers (admin-only notes, flags)
-    { "role": "buyer", "concept": "*",      "field": "internal_*", "access": "read" },
+    { "role": "buyer", "concept": "*", "field": "internal_*", "access": "read" },
     // Review status can only be changed by admins; prevents self-approval
-    { "role": "buyer", "concept": "review", "field": "status",     "access": "read" }
+    { "role": "buyer", "concept": "review", "field": "status", "access": "read" }
   ]
 }

@@ -33,69 +33,29 @@
   ],
   // Seed users created at deploy time (development only — use strong passwords in production)
   "users": [
-    {
-      "email": "admin@test.com",
-      "password": "adminadmin",
-      "roles": ["admin"]
-    },
-    {
-      "email": "user1@test.com",
-      "password": "useruser",
-      "roles": ["user"]
-    },
-    {
-      "email": "user2@test.com",
-      "password": "useruser",
-      "roles": ["user"]
-    }
+    { "email": "admin@test.com", "password": "adminadmin", "roles": ["admin"] },
+    { "email": "user1@test.com", "password": "useruser", "roles": ["user"] },
+    { "email": "user2@test.com", "password": "useruser", "roles": ["user"] }
   ],
-  // rules_level_2: per-role, per-concept, per-field access rules.
-  // These are enforced at the database level via Supabase RLS policies.
-  //
+  // rules_level_2: per-role, per-concept, per-field access rules, enforced at the DB level via Supabase RLS.
   // access values:
   //   read        — SELECT only
   //   write       — INSERT, UPDATE, DELETE
   //   owner_write — INSERT/UPDATE/DELETE only on records linked to the user's profile
   "rules_level_2": [
-    {
-      // _anon: built-in role for unauthenticated requests (Supabase anon key).
-      // Products and categories are publicly readable without login.
-      "role": "_anon",
-      "concept": "product",
-      "field": "*",
-      "access": "read"
-    },
-    {
-      "role": "_anon",
-      "concept": "category",
-      "field": "*",
-      "access": "read"
-    },
-    {
-      // owner_write: users can only create/edit their own customer profile
-      "role": "user",
-      "concept": "customer",
-      "field": "*",
-      "access": "owner_write"
-    },
-    {
-      // owner_write: users can only create/edit their own orders
-      "role": "user",
-      "concept": "order",
-      "field": "*",
-      "access": "owner_write"
-    }
+    // _anon: built-in role for unauthenticated requests (Supabase anon key). Products and categories
+    // are publicly readable without login.
+    { "role": "_anon", "concept": "product", "access": "read" },
+    { "role": "_anon", "concept": "category", "access": "read" },
+    // owner_write: users can only create/edit their own customer profile
+    { "role": "user", "concept": "customer", "access": "owner_write" },
+    // owner_write: users can only create/edit their own orders
+    { "role": "user", "concept": "order", "access": "owner_write" }
   ],
-  // rules_level_3: glob-pattern rules applied on top of level_2.
-  // Useful for cross-cutting field-level policies that apply to many concepts at once.
+  // rules_level_3: glob-pattern rules applied on top of level_2, for cross-cutting field policies.
   "rules_level_3": [
-    {
-      // admin_* glob: any field whose name starts with "admin_" is read-only for users.
-      // Matches customer.admin_field. Admins retain full write access via their default privileges.
-      "role": "user",
-      "concept": "*",
-      "field": "admin_*",
-      "access": "read"
-    }
+    // admin_* glob: any field starting with "admin_" is read-only for users (matches customer.admin_field).
+    // Admins retain full write access via their default privileges.
+    { "role": "user", "concept": "*", "field": "admin_*", "access": "read" }
   ]
 }

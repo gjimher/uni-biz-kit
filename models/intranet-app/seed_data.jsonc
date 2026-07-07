@@ -10,20 +10,8 @@
   "include_test_data": false,
   "records": {
     "work_center": [
-      {
-        "id": "madrid",
-        "name": "Madrid HQ",
-        "address": "Calle Gran Vía 42",
-        "city": "Madrid",
-        "description": "Headquarters: management, HR, sales and platform teams"
-      },
-      {
-        "id": "bcn",
-        "name": "Barcelona Office",
-        "address": "Carrer de Pallars 108",
-        "city": "Barcelona",
-        "description": "Product and engineering hub"
-      }
+      { "id": "madrid", "name": "Madrid HQ", "address": "Calle Gran Vía 42", "city": "Madrid", "description": "Headquarters: management, HR, sales and platform teams" },
+      { "id": "bcn", "name": "Barcelona Office", "address": "Carrer de Pallars 108", "city": "Barcelona", "description": "Product and engineering hub" }
     ],
     "holiday": [
       { "work_center": "madrid", "date": "2026-01-01", "name": "New Year's Day" },
@@ -183,69 +171,16 @@
     // be seeded directly; the calculated days_approved/flex_hours_approved columns
     // and the employee roll-ups recompute from it.
     "vacation_request": [
-      {
-        "employee": "alice",
-        "start_date": "2026-08-10",
-        "end_date": "2026-08-21",
-        "days_count": 10,
-        "comment": "Summer break",
-        "state": "approved"
-      },
-      {
-        "employee": "alice",
-        "start_date": "2026-12-21",
-        "end_date": "2026-12-23",
-        "days_count": 3,
-        "comment": "Christmas trip to see family",
-        "state": "submitted"
-      },
-      {
-        "employee": "bob",
-        "start_date": "2026-09-07",
-        "end_date": "2026-09-11",
-        "days_count": 5,
-        "state": "submitted"
-      },
-      {
-        "employee": "carol",
-        "start_date": "2026-07-20",
-        "end_date": "2026-07-23",
-        "days_count": 4,
-        "comment": "Long weekend at the beach",
-        "state": "approved"
-      },
-      {
-        "employee": "tom",
-        "start_date": "2026-10-05",
-        "end_date": "2026-10-09",
-        "days_count": 5,
-        "comment": "Hiking week (still checking dates)"
-      }
+      { "employee": "alice", "start_date": "2026-08-10", "end_date": "2026-08-21", "days_count": 10, "comment": "Summer break", "state": "approved" },
+      { "employee": "alice", "start_date": "2026-12-21", "end_date": "2026-12-23", "days_count": 3, "comment": "Christmas trip to see family", "state": "submitted" },
+      { "employee": "bob", "start_date": "2026-09-07", "end_date": "2026-09-11", "days_count": 5, "state": "submitted" },
+      { "employee": "carol", "start_date": "2026-07-20", "end_date": "2026-07-23", "days_count": 4, "comment": "Long weekend at the beach", "state": "approved" },
+      { "employee": "tom", "start_date": "2026-10-05", "end_date": "2026-10-09", "days_count": 5, "comment": "Hiking week (still checking dates)" }
     ],
     "leave_request": [
-      {
-        "employee": "alice",
-        "type": "medical",
-        "start_datetime": "2026-07-08T09:30:00Z",
-        "hours": 3,
-        "reason": "Dentist appointment",
-        "state": "submitted"
-      },
-      {
-        "employee": "carol",
-        "type": "personal",
-        "start_datetime": "2026-06-12T12:00:00Z",
-        "hours": 2,
-        "reason": "Pick up documents at the town hall",
-        "state": "approved"
-      },
-      {
-        "employee": "bob",
-        "type": "flex",
-        "start_datetime": "2026-07-10T15:00:00Z",
-        "hours": 1,
-        "reason": "Leave early on Friday"
-      }
+      { "employee": "alice", "type": "medical", "start_datetime": "2026-07-08T09:30:00Z", "hours": 3, "reason": "Dentist appointment", "state": "submitted" },
+      { "employee": "carol", "type": "personal", "start_datetime": "2026-06-12T12:00:00Z", "hours": 2, "reason": "Pick up documents at the town hall", "state": "approved" },
+      { "employee": "bob", "type": "flex", "start_datetime": "2026-07-10T15:00:00Z", "hours": 1, "reason": "Leave early on Friday" }
     ],
     // Clockings for the current demo week (Mon 29 Jun – Fri 3 Jul 2026). Times are
     // UTC. Alice ends the week with a positive flexibility balance; Tom has an
@@ -262,19 +197,8 @@
       { "employee": "tom", "work_date": "2026-07-04", "check_in": "2026-07-04T06:45:00Z" }
     ],
     "sick_leave": [
-      {
-        "employee": "nadia",
-        "start_date": "2026-06-15",
-        "end_date": "2026-06-19",
-        "type": "common_illness",
-        "notes": "Flu; medical certificate on file."
-      },
-      {
-        "employee": "leo",
-        "start_date": "2026-07-01",
-        "type": "common_illness",
-        "notes": "Open leave, awaiting confirmation of the return date."
-      }
+      { "employee": "nadia", "start_date": "2026-06-15", "end_date": "2026-06-19", "type": "common_illness", "notes": "Flu; medical certificate on file." },
+      { "employee": "leo", "start_date": "2026-07-01", "type": "common_illness", "notes": "Open leave, awaiting confirmation of the return date." }
     ],
     "ticket": [
       {
@@ -319,21 +243,9 @@
       }
     ],
     "category": [
-      {
-        "id": "company-news",
-        "name": "Company News",
-        "description": "Announcements and general company updates"
-      },
-      {
-        "id": "hr-announcements",
-        "name": "HR Announcements",
-        "description": "Policies, schedules, benefits and other people topics"
-      },
-      {
-        "id": "it-tools",
-        "name": "IT & Tools",
-        "description": "Systems changes, new tools and how-to guides"
-      }
+      { "id": "company-news", "name": "Company News", "description": "Announcements and general company updates" },
+      { "id": "hr-announcements", "name": "HR Announcements", "description": "Policies, schedules, benefits and other people topics" },
+      { "id": "it-tools", "name": "IT & Tools", "description": "Systems changes, new tools and how-to guides" }
     ],
     "article": [
       {

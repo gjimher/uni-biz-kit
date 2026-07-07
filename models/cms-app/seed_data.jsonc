@@ -8,21 +8,9 @@
   "include_test_data": false,
   "records": {
     "category": [
-      {
-        "id": "company-news",
-        "name": "Company News",
-        "description": "Announcements and general company updates"
-      },
-      {
-        "id": "product-updates",
-        "name": "Product Updates",
-        "description": "New releases and product improvements"
-      },
-      {
-        "id": "events",
-        "name": "Events",
-        "description": "Upcoming internal and public events"
-      }
+      { "id": "company-news", "name": "Company News", "description": "Announcements and general company updates" },
+      { "id": "product-updates", "name": "Product Updates", "description": "New releases and product improvements" },
+      { "id": "events", "name": "Events", "description": "Upcoming internal and public events" }
     ],
     "article": [
       {

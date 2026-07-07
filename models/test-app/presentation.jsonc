@@ -4,27 +4,15 @@
     {
       "label": "Catalog",
       "children": [
-        {
-          "label": "Products",
-          "concept": "product"
-        },
-        {
-          "label": "Categories",
-          "concept": "category"
-        }
+        { "label": "Products", "concept": "product" },
+        { "label": "Categories", "concept": "category" }
       ]
     },
     {
       "label": "Sales",
       "children": [
-        {
-          "label": "Orders",
-          "concept": "order"
-        },
-        {
-          "label": "Customers",
-          "concept": "customer"
-        }
+        { "label": "Orders", "concept": "order" },
+        { "label": "Customers", "concept": "customer" }
       ]
     }
   ],

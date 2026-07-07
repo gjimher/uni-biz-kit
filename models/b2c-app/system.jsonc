@@ -1,16 +1,9 @@
 {
   "$schema": "../../schemas/system_schema.json",
-  "smtp": {
-    "host": "127.0.0.1",
-    "port": 3010,
-    "from_email": "noreply@b2c.local"
-  },
-  // payments: generates the 'payment' edge function (Stripe proxy).
-  // dev_mode uses the built-in simulator — no Stripe credentials needed;
-  // the storefront checkout charges grand_total before confirming the order.
-  "payments": {
-    "dev_mode": true,
-    "concept": "order",
-    "amount_field": "grand_total"
-  }
+  // host defaults to the local dev mail catcher; port and from_email are overridden here.
+  "smtp": { "port": 3010, "from_email": "noreply@b2c.local" },
+  // payments: generates the 'payment' edge function (Stripe proxy). dev_mode defaults to true
+  // (built-in simulator — no Stripe credentials needed); the storefront checkout charges
+  // grand_total before confirming the order.
+  "payments": { "concept": "order", "amount_field": "grand_total" }
 }

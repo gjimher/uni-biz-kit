@@ -6,21 +6,9 @@
       "description": "Employee files a request and HR approves it. Transitions are linear, so rejection is modelled as HR moving the request back to draft with a transition note.",
       "concepts": "vacation_request,leave_request",
       "states": [
-        {
-          "name": "draft",
-          "description": "Being edited by the employee; not yet visible to the HR approval inbox.",
-          "owners": ["employee", "hr", "admin"]
-        },
-        {
-          "name": "submitted",
-          "description": "Waiting for an HR decision. The employee can no longer edit it; HR approves (next) or returns it to draft (previous) with a note.",
-          "owners": ["hr", "admin"]
-        },
-        {
-          "name": "approved",
-          "description": "Approved by HR. Approved vacations/flex hours count against the employee's balances.",
-          "owners": ["hr", "admin"]
-        }
+        { "name": "draft", "description": "Being edited by the employee; not yet visible to the HR approval inbox.", "owners": ["employee", "hr", "admin"] },
+        { "name": "submitted", "description": "Waiting for an HR decision. The employee can no longer edit it; HR approves (next) or returns it to draft (previous) with a note.", "owners": ["hr", "admin"] },
+        { "name": "approved", "description": "Approved by HR. Approved vacations/flex hours count against the employee's balances.", "owners": ["hr", "admin"] }
       ]
     },
     {
@@ -28,21 +16,9 @@
       "description": "Service request lifecycle for the HR and IT helpdesks.",
       "concepts": "ticket",
       "states": [
-        {
-          "name": "open",
-          "description": "Just filed; the requester can still edit the details.",
-          "owners": ["employee", "hr", "it", "admin"]
-        },
-        {
-          "name": "in_progress",
-          "description": "Being handled by the HR or IT team.",
-          "owners": ["hr", "it", "admin"]
-        },
-        {
-          "name": "resolved",
-          "description": "Done; the resolution field explains the outcome.",
-          "owners": ["hr", "it", "admin"]
-        }
+        { "name": "open", "description": "Just filed; the requester can still edit the details.", "owners": ["employee", "hr", "it", "admin"] },
+        { "name": "in_progress", "description": "Being handled by the HR or IT team.", "owners": ["hr", "it", "admin"] },
+        { "name": "resolved", "description": "Done; the resolution field explains the outcome.", "owners": ["hr", "it", "admin"] }
       ]
     }
   ]

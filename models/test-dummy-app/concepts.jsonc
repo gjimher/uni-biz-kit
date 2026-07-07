@@ -8,28 +8,10 @@
       "name": "widget",
       "plural_name": "widgets",
       "description": "A trivial concept with a single seeded record, used to verify the generated app is correctly wired to its own Supabase instance.",
-      "id_presentation": {
-        "fields": ["name"],
-        "show": true
-      },
+      "id_presentation": { "fields": ["name"], "show": true },
       "fields": [
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "unique": true,
-          "min_length": 2,
-          "max_length": 100,
-          "description": "Widget name"
-        },
-        {
-          "name": "quantity",
-          "type": "integer",
-          "required": true,
-          "min": 0,
-          "default": 0,
-          "description": "How many widgets are in stock"
-        }
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 100, "description": "Widget name" },
+        { "name": "quantity", "type": "integer", "required": true, "min": 0, "default": 0, "description": "How many widgets are in stock" }
       ]
     }
   ]

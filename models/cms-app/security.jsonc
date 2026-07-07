@@ -1,56 +1,31 @@
 {
   "$schema": "../../schemas/security_schema.json",
-  "authentication_required": true,
-  // Employees are created by the admin; no self-registration, no SSO.
-  "registration": {
-    "allow": false
-  },
-  "sso": {
-    "enabled": false
-  },
+  // Employees are created by the admin; no self-registration, no SSO (both default off).
+  "registration": {},
+  "sso": {},
   "roles": [
-    {
-      "name": "admin",
-      "description": "Content administrator — full access"
-    },
-    {
-      "name": "editor",
-      "description": "Employee who writes and publishes content",
-      // Links the 'editor' role to the employee profile concept;
-      // enables owner_write checks and author auto-linking
-      "profile_concept": "employee"
-    }
+    { "name": "admin", "description": "Content administrator — full access" },
+    // Links the 'editor' role to the employee profile concept; enables owner_write checks and author auto-linking
+    { "name": "editor", "description": "Employee who writes and publishes content", "profile_concept": "employee" }
   ],
   // Seed users (development only).
   "users": [
-    {
-      "email": "admin@cms.com",
-      "password": "adminadmin",
-      "roles": ["admin"]
-    },
-    {
-      "email": "editor1@cms.com",
-      "password": "editoreditor",
-      "roles": ["editor"]
-    },
-    {
-      "email": "editor2@cms.com",
-      "password": "editoreditor",
-      "roles": ["editor"]
-    }
+    { "email": "admin@cms.com", "password": "adminadmin", "roles": ["admin"] },
+    { "email": "editor1@cms.com", "password": "editoreditor", "roles": ["editor"] },
+    { "email": "editor2@cms.com", "password": "editoreditor", "roles": ["editor"] }
   ],
   "rules_level_2": [
-    // Published content is meant to be publicly readable (e.g. a future intranet
-    // or public site reading through the anon API).
-    { "role": "_anon", "concept": "article",  "field": "*", "access": "read" },
-    { "role": "_anon", "concept": "category", "field": "*", "access": "read" },
+    // Published content is meant to be publicly readable (e.g. a future intranet or public site
+    // reading through the anon API).
+    { "role": "_anon", "concept": "article", "access": "read" },
+    { "role": "_anon", "concept": "category", "access": "read" },
 
     // Editors manage all content and categories
-    { "role": "editor", "concept": "article",  "field": "*", "access": "write" },
-    { "role": "editor", "concept": "category", "field": "*", "access": "write" },
+    { "role": "editor", "concept": "article", "access": "write" },
+    { "role": "editor", "concept": "category", "access": "write" },
 
     // Editors can see colleague profiles (author column) and edit their own
-    { "role": "editor", "concept": "employee", "field": "*", "access": "read" },
-    { "role": "editor", "concept": "employee", "field": "*", "access": "owner_write" }
+    { "role": "editor", "concept": "employee", "access": "read" },
+    { "role": "editor", "concept": "employee", "access": "owner_write" }
   ]
 }

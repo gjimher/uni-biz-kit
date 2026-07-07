@@ -8,364 +8,93 @@
       "name": "work_center",
       "plural_name": "work_centers",
       "description": "A physical office/site. Every employee belongs to one; public holidays are defined per center.",
-      "id_presentation": {
-        "fields": ["name"]
-      },
+      "id_presentation": { "fields": ["name"] },
       "fields": [
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "unique": true,
-          "min_length": 2,
-          "max_length": 100,
-          "description": "Center name (e.g. Madrid HQ)"
-        },
-        {
-          "name": "address",
-          "type": "string",
-          "required": false,
-          "max_length": 200,
-          "size": "m",
-          "description": "Street address"
-        },
-        {
-          "name": "city",
-          "type": "string",
-          "required": false,
-          "max_length": 100,
-          "description": "City"
-        },
-        {
-          "name": "description",
-          "type": "string",
-          "required": false,
-          "max_length": 300,
-          "size": "m",
-          "description": "What teams or functions are based here"
-        }
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 100, "description": "Center name (e.g. Madrid HQ)" },
+        { "name": "address", "type": "string", "max_length": 200, "size": "m", "description": "Street address" },
+        { "name": "city", "type": "string", "max_length": 100, "description": "City" },
+        { "name": "description", "type": "string", "max_length": 300, "size": "m", "description": "What teams or functions are based here" }
       ]
     },
     {
       "name": "holiday",
       "plural_name": "holidays",
       "description": "A public holiday for a specific work center (national + local calendar)",
-      "id_presentation": {
-        "fields": ["name"]
-      },
+      "id_presentation": { "fields": ["name"] },
       "fields": [
-        {
-          "name": "work_center",
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "work_center",
-          "description": "Center this holiday applies to"
-        },
-        {
-          "name": "date",
-          "type": "date",
-          "required": true,
-          "description": "Holiday date"
-        },
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "max_length": 100,
-          "description": "Holiday name (e.g. Labour Day)"
-        }
+        { "name": "work_center", "type": "relation_to_one", "subtype": "part_of", "target": "work_center", "description": "Center this holiday applies to" },
+        { "name": "date", "type": "date", "required": true, "description": "Holiday date" },
+        { "name": "name", "type": "string", "required": true, "max_length": 100, "description": "Holiday name (e.g. Labour Day)" }
       ]
     },
     {
       "name": "employee",
       "plural_name": "employees",
       "description": "Employee profile linked to a registered user account. Carries the vacation allowance and the rolled-up vacation/flexibility counters used by the approval rules.",
-      "id_presentation": {
-        "fields": ["first_name", "last_name"],
-        "separator": " "
-      },
+      "id_presentation": { "fields": ["first_name", "last_name"] },
       // Portrait photo shown in the directory and org chart.
-      "documents": {
-        "enabled": true,
-        "tags": ["photo"]
-      },
+      "documents": { "enabled": true, "tags": ["photo"] },
       "fields": [
-        {
-          // Profile rows are auto-created empty when a user registers/is seeded,
-          // so required fields need defaults (same pattern as b2c-app customer).
-          "name": "first_name",
-          "type": "string",
-          "required": true,
-          "default": "Pending",
-          "min_length": 1,
-          "max_length": 50,
-          "description": "First name"
-        },
-        {
-          "name": "last_name",
-          "type": "string",
-          "required": true,
-          "default": "Profile",
-          "min_length": 1,
-          "max_length": 50,
-          "description": "Last name"
-        },
-        {
-          "name": "email",
-          "type": "string",
-          "calculated": "\"_user_email\"",
-          "required": false,
-          "min_length": 5,
-          "max_length": 100,
-          "description": "Email — auto-set from the authenticated user at INSERT; read-only"
-        },
-        {
-          "name": "job_title",
-          "type": "string",
-          "required": false,
-          "max_length": 100,
-          "description": "Position shown in the directory (e.g. Frontend Developer)"
-        },
-        {
-          "name": "phone",
-          "type": "string",
-          "required": false,
-          "min_length": 7,
-          "max_length": 20,
-          "description": "Contact phone number"
-        },
-        {
-          "name": "manager",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "employee",
-          "required": false,
-          "description": "Direct manager (null for the top of the org chart)"
-        },
-        {
-          "name": "work_center",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "work_center",
-          "required": false,
-          "description": "Center this employee belongs to; determines their holiday calendar"
-        },
-        {
-          "name": "vacation_days_per_year",
-          "type": "integer",
-          "required": true,
-          "default": 23,
-          "min": 0,
-          "max": 60,
-          "description": "Vacation days granted per year"
-        },
-        {
-          "name": "daily_hours",
-          "type": "decimal",
-          "required": true,
-          "default": 8,
-          "precision": 4,
-          "scale": 2,
-          "min": 1,
-          "max": 12,
-          "description": "Expected working hours per day; work logged above this accumulates flexibility hours"
-        },
-        {
-          "name": "is_active",
-          "type": "boolean",
-          "required": false,
-          "default": true,
-          "description": "Whether the employee currently works at the company"
-        },
-        {
-          "name": "vacation_days_used",
-          "type": "integer",
-          // Sum of days_count over *approved* vacation requests (days_approved is 0 otherwise)
-          "calculated": "rollup(sum,vacation_request,days_approved)",
-          "description": "Vacation days already approved this year"
-        },
-        {
-          "name": "flex_hours_earned",
-          "type": "decimal",
-          "precision": 7,
-          "scale": 2,
-          // Overtime accumulated across all closed work logs (can be negative on short days)
-          "calculated": "rollup(sum,work_log,overtime_hours)",
-          "description": "Flexibility hours accumulated by working above the daily hours"
-        },
-        {
-          "name": "flex_hours_used",
-          "type": "decimal",
-          "precision": 7,
-          "scale": 2,
-          // Sum of hours over *approved* leave requests of type 'flex'
-          "calculated": "rollup(sum,leave_request,flex_hours_approved)",
-          "description": "Flexibility hours already spent through approved flex leave requests"
-        }
+        // Profile rows are auto-created empty when a user registers/is seeded, so required fields
+        // need defaults (same pattern as b2c-app customer).
+        { "name": "first_name", "type": "string", "required": true, "default": "Pending", "min_length": 1, "max_length": 50, "description": "First name" },
+        { "name": "last_name", "type": "string", "required": true, "default": "Profile", "min_length": 1, "max_length": 50, "description": "Last name" },
+        { "name": "email", "type": "string", "calculated": "\"_user_email\"", "min_length": 5, "max_length": 100, "description": "Email — auto-set from the authenticated user at INSERT; read-only" },
+        { "name": "job_title", "type": "string", "max_length": 100, "description": "Position shown in the directory (e.g. Frontend Developer)" },
+        { "name": "phone", "type": "string", "min_length": 7, "max_length": 20, "description": "Contact phone number" },
+        { "name": "manager", "type": "relation_to_one", "subtype": "related_to", "target": "employee", "description": "Direct manager (null for the top of the org chart)" },
+        { "name": "work_center", "type": "relation_to_one", "subtype": "related_to", "target": "work_center", "description": "Center this employee belongs to; determines their holiday calendar" },
+        { "name": "vacation_days_per_year", "type": "integer", "required": true, "default": 23, "min": 0, "max": 60, "description": "Vacation days granted per year" },
+        { "name": "daily_hours", "type": "decimal", "required": true, "default": 8, "precision": 4, "scale": 2, "min": 1, "max": 12, "description": "Expected working hours per day; work logged above this accumulates flexibility hours" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Whether the employee currently works at the company" },
+        // Sum of days_count over *approved* vacation requests (days_approved is 0 otherwise)
+        { "name": "vacation_days_used", "type": "integer", "calculated": "rollup(sum,vacation_request,days_approved)", "description": "Vacation days already approved this year" },
+        // Overtime accumulated across all closed work logs (can be negative on short days)
+        { "name": "flex_hours_earned", "type": "decimal", "precision": 7, "scale": 2, "calculated": "rollup(sum,work_log,overtime_hours)", "description": "Flexibility hours accumulated by working above the daily hours" },
+        // Sum of hours over *approved* leave requests of type 'flex'
+        { "name": "flex_hours_used", "type": "decimal", "precision": 7, "scale": 2, "calculated": "rollup(sum,leave_request,flex_hours_approved)", "description": "Flexibility hours already spent through approved flex leave requests" }
       ]
     },
     {
       "name": "vacation_request",
       "plural_name": "vacation_requests",
       "description": "Vacation request filed by an employee and approved by HR (approval_workflow: draft → submitted → approved; HR returns it to draft to reject).",
-      "checks": [
-        "end_date >= start_date"
-      ],
-      "id_presentation": {
-        "fields": ["employee.id_presentation", "start_date"],
-        "separator": " · ",
-        "show": true
-      },
+      "checks": ["end_date >= start_date"],
+      "id_presentation": { "fields": ["employee.id_presentation", "start_date"], "separator": " · ", "show": true },
       "fields": [
-        {
-          // Plain relation (not copy_logged_on_insert) so seed data can file requests
-          // for any employee; owner_write RLS still restricts users to their own profile.
-          "name": "employee",
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "employee",
-          "description": "Employee requesting the vacation"
-        },
-        {
-          "name": "start_date",
-          "type": "date",
-          "required": true,
-          "description": "First vacation day (inclusive)"
-        },
-        {
-          "name": "end_date",
-          "type": "date",
-          "required": true,
-          "description": "Last vacation day (inclusive)"
-        },
-        {
-          "name": "days_count",
-          "type": "integer",
-          "required": true,
-          "min": 1,
-          "description": "Working days requested (excludes weekends and center holidays)"
-        },
-        {
-          "name": "comment",
-          "type": "string",
-          "required": false,
-          "max_length": 300,
-          "size": "m",
-          "description": "Note from the employee to HR"
-        },
-        {
-          "name": "hr_comment",
-          "type": "string",
-          "required": false,
-          "max_length": 300,
-          "size": "m",
-          // rules_level_3 makes hr_* fields read-only for the employee role
-          "description": "HR-only note about the decision"
-        },
-        {
-          "name": "allowance_snapshot",
-          "type": "integer",
-          // Snapshot of the employee's allowance, refreshed on every write; the
-          // balance check rule compares against it at submit/approve time.
-          "calculated": "copy(employee,vacation_days_per_year,on_change)",
-          "description": "Employee's yearly allowance at the time of the last change"
-        },
-        {
-          "name": "days_used_snapshot",
-          "type": "integer",
-          "calculated": "copy(employee,vacation_days_used,on_change)",
-          "description": "Employee's already-approved days at the time of the last change"
-        },
-        {
-          "name": "days_approved",
-          "type": "integer",
-          // Feeds employee.vacation_days_used; only approved requests count.
-          "calculated": "CASE WHEN state = 'approved' THEN days_count ELSE 0 END",
-          "description": "days_count while the request is approved, 0 otherwise"
-        }
+        // Plain relation (not copy_logged_on_insert) so seed data can file requests for any
+        // employee; owner_write RLS still restricts users to their own profile.
+        { "name": "employee", "type": "relation_to_one", "subtype": "part_of", "target": "employee", "description": "Employee requesting the vacation" },
+        { "name": "start_date", "type": "date", "required": true, "description": "First vacation day (inclusive)" },
+        { "name": "end_date", "type": "date", "required": true, "description": "Last vacation day (inclusive)" },
+        { "name": "days_count", "type": "integer", "required": true, "min": 1, "description": "Working days requested (excludes weekends and center holidays)" },
+        { "name": "comment", "type": "string", "max_length": 300, "size": "m", "description": "Note from the employee to HR" },
+        // rules_level_3 makes hr_* fields read-only for the employee role
+        { "name": "hr_comment", "type": "string", "max_length": 300, "size": "m", "description": "HR-only note about the decision" },
+        // Snapshot of the employee's allowance, refreshed on every write; the balance check rule
+        // compares against it at submit/approve time.
+        { "name": "allowance_snapshot", "type": "integer", "calculated": "copy(employee,vacation_days_per_year,on_change)", "description": "Employee's yearly allowance at the time of the last change" },
+        { "name": "days_used_snapshot", "type": "integer", "calculated": "copy(employee,vacation_days_used,on_change)", "description": "Employee's already-approved days at the time of the last change" },
+        // Feeds employee.vacation_days_used; only approved requests count.
+        { "name": "days_approved", "type": "integer", "calculated": "CASE WHEN state = 'approved' THEN days_count ELSE 0 END", "description": "days_count while the request is approved, 0 otherwise" }
       ]
     },
     {
       "name": "leave_request",
       "plural_name": "leave_requests",
       "description": "Short paid-leave request (doctor visit, personal errand) or use of accumulated flexibility hours. Same approval workflow as vacations.",
-      "id_presentation": {
-        "fields": ["employee.id_presentation", "type"],
-        "separator": " · ",
-        "show": true
-      },
+      "id_presentation": { "fields": ["employee.id_presentation", "type"], "separator": " · ", "show": true },
       "fields": [
-        {
-          "name": "employee",
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "employee",
-          "description": "Employee requesting the leave"
-        },
-        {
-          "name": "type",
-          "type": "enum",
-          "required": true,
-          "enum_values": ["medical", "personal", "flex"],
-          "description": "Reason: doctor visit, personal errand, or spending accumulated flexibility hours"
-        },
-        {
-          "name": "start_datetime",
-          "type": "datetime",
-          "required": true,
-          "description": "When the absence starts"
-        },
-        {
-          "name": "hours",
-          "type": "decimal",
-          "required": true,
-          "precision": 4,
-          "scale": 2,
-          "min": 0.5,
-          "max": 24,
-          "description": "Duration of the absence in hours"
-        },
-        {
-          "name": "reason",
-          "type": "string",
-          "required": false,
-          "max_length": 300,
-          "size": "m",
-          "description": "Details for HR"
-        },
-        {
-          "name": "hr_comment",
-          "type": "string",
-          "required": false,
-          "max_length": 300,
-          "size": "m",
-          "description": "HR-only note about the decision"
-        },
-        {
-          "name": "flex_earned_snapshot",
-          "type": "decimal",
-          "precision": 7,
-          "scale": 2,
-          "calculated": "copy(employee,flex_hours_earned,on_change)",
-          "description": "Employee's accumulated flexibility hours at the time of the last change"
-        },
-        {
-          "name": "flex_used_snapshot",
-          "type": "decimal",
-          "precision": 7,
-          "scale": 2,
-          "calculated": "copy(employee,flex_hours_used,on_change)",
-          "description": "Employee's already-spent flexibility hours at the time of the last change"
-        },
-        {
-          "name": "flex_hours_approved",
-          "type": "decimal",
-          "precision": 7,
-          "scale": 2,
-          // Feeds employee.flex_hours_used; only approved flex requests count.
-          "calculated": "CASE WHEN type = 'flex' AND state = 'approved' THEN hours ELSE 0 END",
-          "description": "hours while an approved flex request, 0 otherwise"
-        }
+        { "name": "employee", "type": "relation_to_one", "subtype": "part_of", "target": "employee", "description": "Employee requesting the leave" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["medical", "personal", "flex"], "description": "Reason: doctor visit, personal errand, or spending accumulated flexibility hours" },
+        { "name": "start_datetime", "type": "datetime", "required": true, "description": "When the absence starts" },
+        { "name": "hours", "type": "decimal", "required": true, "precision": 4, "scale": 2, "min": 0.5, "max": 24, "description": "Duration of the absence in hours" },
+        { "name": "reason", "type": "string", "max_length": 300, "size": "m", "description": "Details for HR" },
+        { "name": "hr_comment", "type": "string", "max_length": 300, "size": "m", "description": "HR-only note about the decision" },
+        { "name": "flex_earned_snapshot", "type": "decimal", "precision": 7, "scale": 2, "calculated": "copy(employee,flex_hours_earned,on_change)", "description": "Employee's accumulated flexibility hours at the time of the last change" },
+        { "name": "flex_used_snapshot", "type": "decimal", "precision": 7, "scale": 2, "calculated": "copy(employee,flex_hours_used,on_change)", "description": "Employee's already-spent flexibility hours at the time of the last change" },
+        // Feeds employee.flex_hours_used; only approved flex requests count.
+        { "name": "flex_hours_approved", "type": "decimal", "precision": 7, "scale": 2, "calculated": "CASE WHEN type = 'flex' AND state = 'approved' THEN hours ELSE 0 END", "description": "hours while an approved flex request, 0 otherwise" }
       ]
     },
     {
@@ -373,277 +102,76 @@
       "plural_name": "work_logs",
       "description": "Daily clock-in/clock-out record. A row with no check_out means the employee is currently clocked in. Hours above the employee's daily hours accumulate as flexibility.",
       "data_size": "m",
-      "checks": [
-        "check_out IS NULL OR check_out > check_in"
-      ],
-      "id_presentation": {
-        "fields": ["employee.id_presentation", "work_date"],
-        "separator": " · ",
-        "show": true
-      },
+      "checks": ["check_out IS NULL OR check_out > check_in"],
+      "id_presentation": { "fields": ["employee.id_presentation", "work_date"], "separator": " · ", "show": true },
       "fields": [
-        {
-          "name": "employee",
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "employee",
-          "description": "Employee this log belongs to"
-        },
-        {
-          "name": "work_date",
-          "type": "date",
-          "required": true,
-          "description": "Working day"
-        },
-        {
-          "name": "check_in",
-          "type": "datetime",
-          "required": true,
-          "description": "Clock-in time"
-        },
-        {
-          "name": "check_out",
-          "type": "datetime",
-          "required": false,
-          "description": "Clock-out time; empty while still clocked in"
-        },
-        {
-          "name": "expected_hours",
-          "type": "decimal",
-          "precision": 4,
-          "scale": 2,
-          // Snapshot at clock-in so later changes to the employee's daily hours
-          // don't rewrite historical overtime.
-          "calculated": "copy(employee,daily_hours,on_insert)",
-          "description": "Employee's daily hours at clock-in time"
-        },
-        {
-          "name": "worked_hours",
-          "type": "decimal",
-          "precision": 5,
-          "scale": 2,
-          "calculated": "CASE WHEN check_out IS NULL THEN NULL ELSE ROUND((EXTRACT(EPOCH FROM (check_out - check_in)) / 3600.0)::numeric, 2) END",
-          "description": "Hours between check-in and check-out; empty while clocked in"
-        },
-        {
-          "name": "overtime_hours",
-          "type": "decimal",
-          "precision": 5,
-          "scale": 2,
-          // Cannot reference worked_hours (generated columns cannot reference each
-          // other), so the elapsed-hours expression is repeated here.
-          "calculated": "CASE WHEN check_out IS NULL THEN 0 ELSE ROUND((EXTRACT(EPOCH FROM (check_out - check_in)) / 3600.0)::numeric, 2) - expected_hours END",
-          "description": "Worked hours minus expected hours (negative on short days); feeds the flexibility balance"
-        }
+        { "name": "employee", "type": "relation_to_one", "subtype": "part_of", "target": "employee", "description": "Employee this log belongs to" },
+        { "name": "work_date", "type": "date", "required": true, "description": "Working day" },
+        { "name": "check_in", "type": "datetime", "required": true, "description": "Clock-in time" },
+        { "name": "check_out", "type": "datetime", "description": "Clock-out time; empty while still clocked in" },
+        // Snapshot at clock-in so later changes to the employee's daily hours don't rewrite historical overtime.
+        { "name": "expected_hours", "type": "decimal", "precision": 4, "scale": 2, "calculated": "copy(employee,daily_hours,on_insert)", "description": "Employee's daily hours at clock-in time" },
+        { "name": "worked_hours", "type": "decimal", "precision": 5, "scale": 2, "calculated": "CASE WHEN check_out IS NULL THEN NULL ELSE ROUND((EXTRACT(EPOCH FROM (check_out - check_in)) / 3600.0)::numeric, 2) END", "description": "Hours between check-in and check-out; empty while clocked in" },
+        // Cannot reference worked_hours (generated columns cannot reference each other), so the
+        // elapsed-hours expression is repeated here.
+        { "name": "overtime_hours", "type": "decimal", "precision": 5, "scale": 2, "calculated": "CASE WHEN check_out IS NULL THEN 0 ELSE ROUND((EXTRACT(EPOCH FROM (check_out - check_in)) / 3600.0)::numeric, 2) - expected_hours END", "description": "Worked hours minus expected hours (negative on short days); feeds the flexibility balance" }
       ]
     },
     {
       "name": "sick_leave",
       "plural_name": "sick_leaves",
       "description": "Sick leave recorded and managed by HR. Not visible to regular employees (there is no owner-scoped read access level, and colleagues must not see each other's leaves).",
-      "checks": [
-        "end_date IS NULL OR end_date >= start_date"
-      ],
-      "id_presentation": {
-        "fields": ["employee.id_presentation", "start_date"],
-        "separator": " · ",
-        "show": true
-      },
+      "checks": ["end_date IS NULL OR end_date >= start_date"],
+      "id_presentation": { "fields": ["employee.id_presentation", "start_date"], "separator": " · ", "show": true },
       "fields": [
-        {
-          "name": "employee",
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "employee",
-          "description": "Employee on sick leave"
-        },
-        {
-          "name": "start_date",
-          "type": "date",
-          "required": true,
-          "description": "First day of the leave"
-        },
-        {
-          "name": "end_date",
-          "type": "date",
-          "required": false,
-          "description": "Last day of the leave; empty while the leave is open"
-        },
-        {
-          "name": "type",
-          "type": "enum",
-          "required": true,
-          "enum_values": ["common_illness", "work_accident", "other"],
-          "default": "common_illness",
-          "description": "Leave classification"
-        },
-        {
-          "name": "notes",
-          "type": "string",
-          "required": false,
-          "max_length": 500,
-          "size": "m",
-          "description": "HR notes (medical certificates, follow-up, etc.)"
-        }
+        { "name": "employee", "type": "relation_to_one", "subtype": "part_of", "target": "employee", "description": "Employee on sick leave" },
+        { "name": "start_date", "type": "date", "required": true, "description": "First day of the leave" },
+        { "name": "end_date", "type": "date", "description": "Last day of the leave; empty while the leave is open" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["common_illness", "work_accident", "other"], "default": "common_illness", "description": "Leave classification" },
+        { "name": "notes", "type": "string", "max_length": 500, "size": "m", "description": "HR notes (medical certificates, follow-up, etc.)" }
       ]
     },
     {
       "name": "ticket",
       "plural_name": "tickets",
       "description": "Service request to HR or IT (ticket_workflow: open → in_progress → resolved)",
-      "id_presentation": {
-        "fields": ["subject"]
-      },
+      "id_presentation": { "fields": ["subject"] },
       "fields": [
-        {
-          "name": "requester",
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "employee",
-          "description": "Employee who opened the ticket"
-        },
-        {
-          "name": "team",
-          "type": "enum",
-          "required": true,
-          "enum_values": ["hr", "it"],
-          "description": "Team the request is addressed to"
-        },
-        {
-          "name": "subject",
-          "type": "string",
-          "required": true,
-          "min_length": 3,
-          "max_length": 150,
-          "size": "m",
-          "description": "Short summary of the request"
-        },
-        {
-          "name": "description",
-          "type": "markdown",
-          "required": true,
-          "description": "Full description of the request"
-        },
-        {
-          "name": "priority",
-          "type": "enum",
-          "required": true,
-          "enum_values": ["low", "normal", "high"],
-          "default": "normal",
-          "description": "How urgent the request is"
-        },
-        {
-          "name": "resolution",
-          "type": "string",
-          "required": false,
-          "max_length": 500,
-          "size": "m",
-          // rules_level_3 makes this read-only for the employee role
-          "description": "How the ticket was resolved (filled by the handling team)"
-        }
+        { "name": "requester", "type": "relation_to_one", "subtype": "part_of", "target": "employee", "description": "Employee who opened the ticket" },
+        { "name": "team", "type": "enum", "required": true, "enum_values": ["hr", "it"], "description": "Team the request is addressed to" },
+        { "name": "subject", "type": "string", "required": true, "min_length": 3, "max_length": 150, "size": "m", "description": "Short summary of the request" },
+        { "name": "description", "type": "markdown", "required": true, "description": "Full description of the request" },
+        { "name": "priority", "type": "enum", "required": true, "enum_values": ["low", "normal", "high"], "default": "normal", "description": "How urgent the request is" },
+        // rules_level_3 makes this read-only for the employee role
+        { "name": "resolution", "type": "string", "max_length": 500, "size": "m", "description": "How the ticket was resolved (filled by the handling team)" }
       ]
     },
     {
       "name": "category",
       "plural_name": "categories",
       "description": "Content categories used to group and filter intranet articles",
-      "id_presentation": {
-        "fields": ["name"]
-      },
+      "id_presentation": { "fields": ["name"] },
       "fields": [
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "unique": true,
-          "min_length": 2,
-          "max_length": 80,
-          "description": "Category display name"
-        },
-        {
-          "name": "description",
-          "type": "string",
-          "required": false,
-          "max_length": 300,
-          "size": "m",
-          "description": "What kind of content belongs here"
-        }
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 80, "description": "Category display name" },
+        { "name": "description", "type": "string", "max_length": 300, "size": "m", "description": "What kind of content belongs here" }
       ]
     },
     {
       "name": "article",
       "plural_name": "articles",
       "description": "Internal news or announcement: title, summary, markdown body and photos. Private to signed-in employees (no anonymous access).",
-      "id_presentation": {
-        "fields": ["title"]
-      },
-      "documents": {
-        "enabled": true,
-        "tags": ["img_s", "img_m", "img_l"]
-      },
+      "id_presentation": { "fields": ["title"] },
+      "documents": { "enabled": true, "tags": ["img_s", "img_m", "img_l"] },
       "fields": [
-        {
-          "name": "title",
-          "type": "string",
-          "required": true,
-          "min_length": 2,
-          "max_length": 200,
-          "size": "m",
-          "description": "Headline"
-        },
-        {
-          "name": "category",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "category",
-          "required": true,
-          "description": "Category this article belongs to"
-        },
-        {
-          "name": "author",
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "employee",
-          "required": false,
-          // Auto-linked to the logged-in employee's profile on INSERT; read-only
-          "calculated": "copy_logged_on_insert(author)",
-          "description": "Employee who wrote the article"
-        },
-        {
-          "name": "summary",
-          "type": "string",
-          "required": false,
-          "max_length": 300,
-          "size": "l",
-          "description": "One-paragraph teaser shown in listings"
-        },
-        {
-          "name": "body",
-          "type": "markdown",
-          "required": true,
-          "description": "Article content in markdown"
-        },
-        {
-          "name": "published_date",
-          "type": "date",
-          "required": false,
-          "description": "Publication date; articles are listed newest first"
-        },
-        {
-          "name": "status",
-          "type": "enum",
-          "required": true,
-          "enum_values": ["draft", "published", "archived"],
-          "default": "draft",
-          "description": "Publication status; only 'published' articles appear in the portal"
-        },
-        {
-          "name": "is_featured",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "Pinned/highlighted on the portal home"
-        }
+        { "name": "title", "type": "string", "required": true, "min_length": 2, "max_length": 200, "size": "m", "description": "Headline" },
+        { "name": "category", "type": "relation_to_one", "subtype": "related_to", "target": "category", "required": true, "description": "Category this article belongs to" },
+        // Auto-linked to the logged-in employee's profile on INSERT; read-only
+        { "name": "author", "type": "relation_to_one", "subtype": "related_to", "target": "employee", "calculated": "copy_logged_on_insert(author)", "description": "Employee who wrote the article" },
+        { "name": "summary", "type": "string", "max_length": 300, "size": "l", "description": "One-paragraph teaser shown in listings" },
+        { "name": "body", "type": "markdown", "required": true, "description": "Article content in markdown" },
+        { "name": "published_date", "type": "date", "description": "Publication date; articles are listed newest first" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["draft", "published", "archived"], "default": "draft", "description": "Publication status; only 'published' articles appear in the portal" },
+        { "name": "is_featured", "type": "boolean", "default": false, "description": "Pinned/highlighted on the portal home" }
       ]
     }
   ]

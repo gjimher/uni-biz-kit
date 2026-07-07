@@ -8,30 +8,13 @@
       // States define the valid lifecycle steps. Transitions are always sequential
       // (each state can only move to the next one in the list).
       "states": [
-        {
-          "name": "initial",
-          "description": "Order just created, pending confirmation by the customer.",
-          // owners: roles that may act on records in this state (e.g. submit the order).
-          // Both user and admin can submit from initial → ordered.
-          "owners": ["user", "admin"]
-        },
-        {
-          "name": "ordered",
-          // Only admins can advance the order once the customer has submitted it
-          "owners": ["admin"]
-        },
-        {
-          "name": "accepted",
-          "owners": ["admin"]
-        },
-        {
-          "name": "sent",
-          "owners": ["admin"]
-        },
-        {
-          "name": "delivered",
-          "owners": ["admin"]
-        }
+        // owners: roles that may act on records in this state; both user and admin can submit initial → ordered
+        { "name": "initial", "description": "Order just created, pending confirmation by the customer.", "owners": ["user", "admin"] },
+        // Only admins can advance the order once the customer has submitted it
+        { "name": "ordered", "owners": ["admin"] },
+        { "name": "accepted", "owners": ["admin"] },
+        { "name": "sent", "owners": ["admin"] },
+        { "name": "delivered", "owners": ["admin"] }
       ]
     }
   ]

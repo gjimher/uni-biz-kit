@@ -8,144 +8,39 @@
       "name": "product",
       "plural_name": "products",
       "description": "A product available for sale in the e-commerce platform",
-      "id_presentation": {
-        "fields": ["name"]
-      },
+      "id_presentation": { "fields": ["name"] },
       // documents.versioned: keeps historical versions per tag instead of replacing them
-      "documents": {
-        "enabled": true,
-        "versioned": true,
-        "tags": ["img_s", "img_m", "datasheet"]
-      },
+      "documents": { "enabled": true, "versioned": true, "tags": ["img_s", "img_m", "datasheet"] },
       "fields": [
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "unique": false,
-          "min_length": 2,
-          "max_length": 100,
-          "size": "s",
-          "description": "The name of the product"
-        },
-        {
-          "name": "description",
-          "type": "string",
-          "required": false,
-          "max_length": 1000,
-          "size": "l",
-          "description": "Detailed description of the product"
-        },
-        {
-          // markdown: TEXT column, edited with a markdown editor (source + live preview)
-          "name": "details",
-          "type": "markdown",
-          "required": false,
-          "description": "Long-form product details in markdown"
-        },
-        {
-          "name": "price",
-          "type": "decimal",
-          // subtype money: renders as currency in the UI and maps to NUMERIC in SQL
-          "subtype": "money",
-          "required": true,
-          "precision": 10,
-          "scale": 2,
-          "min": 0.01,
-          "description": "Price of the product"
-        },
-        {
-          "name": "stock_quantity",
-          "type": "integer",
-          "required": true,
-          "min": 0,
-          "default": 0,
-          "description": "Available stock quantity"
-        },
-        {
-          "name": "sku",
-          "type": "string",
-          "required": true,
-          "unique": true,
-          "min_length": 3,
-          "max_length": 50,
-          "description": "Stock Keeping Unit - unique identifier"
-        },
-        {
-          "name": "status",
-          "type": "enum",
-          "required": true,
-          "enum_values": ["draft", "published", "archived"],
-          "default": "draft",
-          "description": "Current status of the product"
-        },
-        {
-          "name": "is_featured",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "description": "Whether the product is featured"
-        },
-        {
-          "name": "categories",
-          // relation_to_many: generates a join table (product_category) in SQL
-          "type": "relation_to_many",
-          "target": "category",
-          "description": "Categories this product belongs to"
-        }
+        { "name": "name", "type": "string", "required": true, "min_length": 2, "max_length": 100, "description": "The name of the product" },
+        { "name": "description", "type": "string", "max_length": 1000, "size": "l", "description": "Detailed description of the product" },
+        // markdown: TEXT column, edited with a markdown editor (source + live preview)
+        { "name": "details", "type": "markdown", "description": "Long-form product details in markdown" },
+        // subtype money: renders as currency in the UI and maps to NUMERIC in SQL
+        { "name": "price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0.01, "description": "Price of the product" },
+        { "name": "stock_quantity", "type": "integer", "required": true, "min": 0, "default": 0, "description": "Available stock quantity" },
+        { "name": "sku", "type": "string", "required": true, "unique": true, "min_length": 3, "max_length": 50, "description": "Stock Keeping Unit - unique identifier" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["draft", "published", "archived"], "default": "draft", "description": "Current status of the product" },
+        { "name": "is_featured", "type": "boolean", "default": false, "description": "Whether the product is featured" },
+        // relation_to_many: generates a join table (product_category) in SQL
+        { "name": "categories", "type": "relation_to_many", "target": "category", "description": "Categories this product belongs to" }
       ]
     },
     {
       "name": "category",
       "plural_name": "categories",
       "description": "Product categories",
-      "id_presentation": {
-        // Nested traversal: resolves parent's own id_presentation recursively.
-        // Result example: "Electronics / Keyboards"
-        "fields": ["parent.id_presentation", "name"],
-        "separator": "/",
-        // show: true renders the label as a visible column in list views
-        "show": true
-      },
-      "documents": {
-        "enabled": true,
-        "tags": ["img_s", "img_m"]
-      },
+      // id_presentation resolves parent.id_presentation recursively (e.g. "Electronics / Keyboards");
+      // show:true renders the label as a visible list column.
+      "id_presentation": { "fields": ["parent.id_presentation", "name"], "separator": "/", "show": true },
+      "documents": { "enabled": true, "tags": ["img_s", "img_m"] },
       "fields": [
-        {
-          "name": "parent",
-          // part_of: child-of relationship; deleting the parent cascades to children
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          // Self-reference makes this a tree structure
-          "target": "category",
-          "description": "Parent category"
-        },
-        {
-          "name": "name",
-          "type": "string",
-          "required": true,
-          "unique": true,
-          "min_length": 2,
-          "max_length": 50,
-          "description": "Name of the category"
-        },
-        {
-          "name": "description",
-          "type": "string",
-          "required": false,
-          "max_length": 500,
-          "description": "Description of the category"
-        },
-        {
-          "name": "slug",
-          "type": "string",
-          "required": true,
-          "unique": true,
-          "min_length": 2,
-          "max_length": 50,
-          "description": "URL-friendly slug for the category"
-        }
+        // part_of: child-of relationship; deleting the parent cascades to children.
+        // Self-reference (target=category) makes this a tree.
+        { "name": "parent", "type": "relation_to_one", "subtype": "part_of", "target": "category", "description": "Parent category" },
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 50, "description": "Name of the category" },
+        { "name": "description", "type": "string", "max_length": 500, "description": "Description of the category" },
+        { "name": "slug", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 50, "description": "URL-friendly slug for the category" }
       ]
     },
     {
@@ -154,284 +49,79 @@
       "description": "Customers who purchase products",
       // data_size m: hint that this table will have tens of thousands of rows (affects pagination defaults)
       "data_size": "m",
-      "id_presentation": {
-        "fields": ["first_name", "last_name"],
-        "separator": ", "
-      },
+      "id_presentation": { "fields": ["first_name", "last_name"], "separator": ", " },
       "fields": [
-        {
-          "name": "first_name",
-          "type": "string",
-          "required": true,
-          // Default matches security.jsonc registration flow: new users see "Pending Profile" until they fill in their details
-          "default": "Pending",
-          "min_length": 1,
-          "max_length": 50,
-          "description": "Customer's first name"
-        },
-        {
-          "name": "last_name",
-          "type": "string",
-          "required": true,
-          "default": "Profile",
-          "min_length": 1,
-          "max_length": 50,
-          "description": "Customer's last name"
-        },
-        {
-          "name": "email",
-          "type": "string",
-          // calculated with a quoted string: the literal "_user_email" is an internal variable
-          // that resolves to the authenticated user's email at runtime
-          "calculated": "\"_user_email\"",
-          "required": false,
-          // Not unique: profile records survive user deletion with _user_email still set
-          // (Security.md: no FK to auth.users, deactivation only fires at JWT issuance).
-          // An orphaned profile retains this email, so two profiles can legitimately share
-          // it. The _user unique index already ensures one active profile per user.
-          "unique": false,
-          "min_length": 5,
-          "max_length": 100,
-          "description": "Customer's email address"
-        },
-        {
-          "name": "phone",
-          "type": "string",
-          "required": false,
-          "min_length": 10,
-          "max_length": 20,
-          "description": "Customer's phone number"
-        },
-        {
-          "name": "admin_field",
-          "type": "string",
-          "required": false,
-          "size": "s",
-          // Name starts with admin_ so security rules_level_3 restricts users to read-only on this field
-          "description": "A field only admins can edit"
-        }
+        // default "Pending"/"Profile": new self-registered users show "Pending Profile" until they fill their details (see security.jsonc)
+        { "name": "first_name", "type": "string", "required": true, "default": "Pending", "min_length": 1, "max_length": 50, "description": "Customer's first name" },
+        { "name": "last_name", "type": "string", "required": true, "default": "Profile", "min_length": 1, "max_length": 50, "description": "Customer's last name" },
+        // calculated "_user_email": the quoted literal is an internal variable resolving to the authenticated user's email at runtime.
+        // Intentionally NOT unique: an orphaned profile keeps _user_email after user deletion, so two profiles may share it
+        // (no FK to auth.users — see Security.md). The _user unique index still guarantees one active profile per user.
+        { "name": "email", "type": "string", "calculated": "\"_user_email\"", "min_length": 5, "max_length": 100, "description": "Customer's email address" },
+        { "name": "phone", "type": "string", "min_length": 10, "max_length": 20, "description": "Customer's phone number" },
+        // Name starts with admin_ so security rules_level_3 restricts users to read-only on this field
+        { "name": "admin_field", "type": "string", "description": "A field only admins can edit" }
       ]
     },
     {
       "name": "address",
       "plural_name": "addresses",
       "description": "Saved addresses belonging to a customer",
-      "id_presentation": {
-        "fields": ["label"],
-        "show": true
-      },
+      "id_presentation": { "fields": ["label"], "show": true },
       "fields": [
-        {
-          "name": "customer",
-          // part_of: address is owned by the customer; deleting a customer removes their addresses
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "customer",
-          "description": "The customer this address belongs to"
-        },
-        {
-          "name": "label",
-          "type": "string",
-          "required": true,
-          "max_length": 100,
-          "description": "Address name (e.g. Home, Office)"
-        },
-        {
-          "name": "street",
-          "type": "string",
-          "required": true,
-          "max_length": 200,
-          "size": "m",
-          "description": "Street and number"
-        },
-        {
-          // country/province/city are validated together via validations/address.csv
-          "name": "city",
-          "type": "string",
-          "required": true,
-          "max_length": 100,
-          "description": "City"
-        },
-        {
-          "name": "province",
-          "type": "string",
-          "required": true,
-          "max_length": 100,
-          "description": "Province"
-        },
-        {
-          "name": "country",
-          "type": "string",
-          "required": true,
-          "max_length": 100,
-          "description": "Country"
-        }
+        // part_of: address is owned by the customer; deleting a customer removes their addresses
+        { "name": "customer", "type": "relation_to_one", "subtype": "part_of", "target": "customer", "description": "The customer this address belongs to" },
+        { "name": "label", "type": "string", "required": true, "max_length": 100, "description": "Address name (e.g. Home, Office)" },
+        { "name": "street", "type": "string", "required": true, "max_length": 200, "size": "m", "description": "Street and number" },
+        // country/province/city are validated together via validations/address.csv
+        { "name": "city", "type": "string", "required": true, "max_length": 100, "description": "City" },
+        { "name": "province", "type": "string", "required": true, "max_length": 100, "description": "Province" },
+        { "name": "country", "type": "string", "required": true, "max_length": 100, "description": "Country" }
       ]
     },
     {
       "name": "order",
       "plural_name": "orders",
       "description": "Customer orders containing products",
-      "id_presentation": {
-        "fields": ["id"]
-      },
-      "documents": {
-        "enabled": true,
-        "tags": ["invoice", "receipt"]
-      },
+      "id_presentation": { "fields": ["id"] },
+      "documents": { "enabled": true, "tags": ["invoice", "receipt"] },
       "fields": [
-        {
-          "name": "customer",
-          // related_to: loose reference; deleting a customer does NOT cascade to orders
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "customer",
-          "required": false,
-          // copy_logged_on_insert: sets this to the logged-in user's customer record at insert time;
-          // the field is then locked (not editable by the user)
-          "calculated": "copy_logged_on_insert(customer)",
-          "description": "Customer who placed the order"
-        },
-        {
-          "name": "order_date",
-          "type": "datetime",
-          "required": true,
-          "description": "When the order was placed"
-        },
-        {
-          "name": "total_amount",
-          "type": "decimal",
-          "subtype": "money",
-          "required": true,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          // rollup: kept in sync automatically whenever an order_item's total_price changes
-          "calculated": "rollup(sum,order_item,total_price)",
-          "description": "Total order amount"
-        },
-        {
-          "name": "shipping_address",
-          // prefill: expands all fields of the matched sub-collection inline on this concept.
-          // The customer's saved addresses are shown as options; the selected one's fields
-          // (street, city, province, country) are copied into the order record.
-          "type": "prefill",
-          "subtype": "customer.addresses",
-          "required": true,
-          "description": "Shipping address fields prefilled from customer saved addresses"
-        },
-        {
-          "name": "shipping_costs",
-          "type": "decimal",
-          "subtype": "money",
-          "required": false,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          // by_rules: value is computed by the "order-shipping-costs" rule in rules.jsonc
-          "calculated": "by_rules",
-          "description": "Shipping cost calculated by business rules"
-        },
-        {
-          "name": "ordered_total_amount",
-          "type": "decimal",
-          "subtype": "money",
-          "required": false,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          // by_rules: snapshotted by "order-save-ordered-total-amount" when state changes to "ordered"
-          "calculated": "by_rules",
-          "description": "Total order amount captured when the order is placed"
-        },
-        {
-          "name": "billing_address",
-          "type": "prefill",
-          "subtype": "customer.addresses",
-          "description": "Billing address fields prefilled from customer saved addresses"
-        },
-        {
-          "name": "payment_status",
-          "type": "string",
-          "required": false,
-          "max_length": 20,
-          // by_rules: written only by the 'payment' edge function (service role);
-          // protected from client writes. NULL means unpaid.
-          "calculated": "by_rules",
-          "description": "Payment status: pending, paid or failed (NULL = unpaid)"
-        },
-        {
-          "name": "payment_reference",
-          "type": "string",
-          "required": false,
-          "max_length": 100,
-          "calculated": "by_rules",
-          "description": "Payment provider reference (payment intent id)"
-        }
+        // related_to: loose reference; deleting a customer does NOT cascade to orders.
+        // calculated copy_logged_on_insert(customer): set to the logged-in user's customer record at insert time, then locked (not user-editable).
+        { "name": "customer", "type": "relation_to_one", "subtype": "related_to", "target": "customer", "calculated": "copy_logged_on_insert(customer)", "description": "Customer who placed the order" },
+        { "name": "order_date", "type": "datetime", "required": true, "description": "When the order was placed" },
+        // calculated rollup(sum,order_item,total_price): kept in sync whenever an order_item's total_price changes
+        { "name": "total_amount", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "calculated": "rollup(sum,order_item,total_price)", "description": "Total order amount" },
+        // prefill: expands the matched sub-collection's fields inline. The customer's saved addresses are the
+        // options; the selected one's fields (street, city, province, country) are copied into the order record.
+        { "name": "shipping_address", "type": "prefill", "subtype": "customer.addresses", "required": true, "description": "Shipping address fields prefilled from customer saved addresses" },
+        // calculated by_rules: computed by the "order-shipping-costs" rule in rules.jsonc
+        { "name": "shipping_costs", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "calculated": "by_rules", "description": "Shipping cost calculated by business rules" },
+        // calculated by_rules: snapshotted by "order-save-ordered-total-amount" when state changes to "ordered"
+        { "name": "ordered_total_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "calculated": "by_rules", "description": "Total order amount captured when the order is placed" },
+        { "name": "billing_address", "type": "prefill", "subtype": "customer.addresses", "description": "Billing address fields prefilled from customer saved addresses" },
+        // calculated by_rules: written only by the 'payment' edge function (service role); protected from client writes. NULL means unpaid.
+        { "name": "payment_status", "type": "string", "max_length": 20, "calculated": "by_rules", "description": "Payment status: pending, paid or failed (NULL = unpaid)" },
+        { "name": "payment_reference", "type": "string", "max_length": 100, "calculated": "by_rules", "description": "Payment provider reference (payment intent id)" }
       ]
     },
     {
       "name": "order_item",
       "plural_name": "order_items",
       "description": "Individual items within an order",
-      "id_presentation": {
-        "fields": ["id"]
-      },
+      "id_presentation": { "fields": ["id"] },
       "fields": [
-        {
-          "name": "order",
-          // part_of: order_item is owned by order; deleting an order removes its items
-          "type": "relation_to_one",
-          "subtype": "part_of",
-          "target": "order"
-        },
-        {
-          "name": "product",
-          // related_to: loose reference; deleting a product does NOT cascade to order items
-          "type": "relation_to_one",
-          "subtype": "related_to",
-          "target": "product",
-          "required": false,
-          "description": "Product ordered"
-        },
-        {
-          "name": "quantity",
-          "type": "integer",
-          "required": true,
-          "min": 1,
-          "description": "Quantity of the product"
-        },
-        {
-          "name": "unit_price",
-          "type": "decimal",
-          "subtype": "money",
-          "required": true,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          // copy: snapshots product.price into this field only while the order is in state "initial".
-          // Once the order moves to "ordered", the price is frozen and no longer follows the product.
-          "calculated": "copy(product,price,on_change_in_state_initial)",
-          "description": "Price per unit at time of purchase"
-        },
-        {
-          "name": "total_price",
-          "type": "decimal",
-          "subtype": "money",
-          "required": true,
-          "precision": 10,
-          "scale": 2,
-          "min": 0,
-          // Inline arithmetic: recalculated automatically on every change to quantity or unit_price
-          "calculated": "quantity*unit_price",
-          "description": "Total price for this order item"
-        },
-        {
-          "name": "internal_note",
-          "type": "string",
-          "required": false,
-          "description": "Internal note not shown to users"
-        }
+        // part_of: order_item is owned by order; deleting an order removes its items
+        { "name": "order", "type": "relation_to_one", "subtype": "part_of", "target": "order" },
+        // related_to: loose reference; deleting a product does NOT cascade to order items
+        { "name": "product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "description": "Product ordered" },
+        { "name": "quantity", "type": "integer", "required": true, "min": 1, "description": "Quantity of the product" },
+        // calculated copy(product,price,on_change_in_state_initial): snapshots product.price only while the
+        // order is in state "initial"; once "ordered", the price is frozen.
+        { "name": "unit_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "calculated": "copy(product,price,on_change_in_state_initial)", "description": "Price per unit at time of purchase" },
+        // calculated quantity*unit_price: inline arithmetic, recalculated on every change to quantity or unit_price
+        { "name": "total_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "calculated": "quantity*unit_price", "description": "Total price for this order item" },
+        { "name": "internal_note", "type": "string", "description": "Internal note not shown to users" }
       ]
     }
   ]

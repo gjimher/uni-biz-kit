@@ -4,17 +4,9 @@
   // in addition to the explicit records defined below.
   // Set to false in production models to load only the mandatory seed records.
   "include_test_data": true,
-  // records: mandatory records inserted at every deploy (idempotent — uses upsert by id).
-  // Use stable string ids so re-runs don't create duplicates.
   "records": {
     "category": [
-      {
-        "id": "accessories",
-        "parent": null,
-        "name": "Seeded Accessories",
-        "description": "Category loaded from seed_data.json",
-        "slug": "seeded-accessories"
-      }
+      { "id": "accessories", "parent": null, "name": "Seeded Accessories", "description": "Category loaded from seed_data.json", "slug": "seeded-accessories" }
     ],
     "product": [
       {
@@ -28,17 +20,10 @@
         "is_featured": true,
         // Reference a seeded category by its string id
         "categories": ["accessories"],
-        // documents: seed files attached to this record at deploy time.
-        // content_base64 is the file content encoded in Base64.
+        // documents: seed files attached to this record at deploy time; content_base64 is the Base64 file content
         "documents": [
-          {
-            "tag": "datasheet",
-            "name": "seeded-keyboard.txt",
-            "content_type": "text/plain",
-            "version": 1,
-            // Decoded: "Initial product datasheet\n"
-            "content_base64": "SW5pdGlhbCBwcm9kdWN0IGRhdGFzaGVldAo="
-          }
+          // Decoded: "Initial product datasheet\n"
+          { "tag": "datasheet", "name": "seeded-keyboard.txt", "content_type": "text/plain", "content_base64": "SW5pdGlhbCBwcm9kdWN0IGRhdGFzaGVldAo=" }
         ]
       }
     ]

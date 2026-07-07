@@ -39,11 +39,7 @@
       // Returns an error object on mismatch, which aborts the transition.
       "feel_expr": "if db.order.total_amount = db.order.ordered_total_amount then true else { error: \"Order total has changed since it was ordered\" }",
       "action": "check",
-      "when": [
-        "on_state_changed_to_accepted",
-        "on_state_changed_to_sent",
-        "on_state_changed_to_delivered"
-      ]
+      "when": ["on_state_changed_to_accepted", "on_state_changed_to_sent", "on_state_changed_to_delivered"]
     },
     {
       // No concept: this is a standalone function available to the frontend.

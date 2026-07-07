@@ -73,11 +73,7 @@
       // a manual edit). Aborts the transition if amounts don't match.
       "feel_expr": "if db.order.grand_total = db.order.confirmed_grand_total then true else { error: \"Order total has changed since it was confirmed\" }",
       "action": "check",
-      "when": [
-        "on_state_changed_to_processing",
-        "on_state_changed_to_shipped",
-        "on_state_changed_to_delivered"
-      ]
+      "when": ["on_state_changed_to_processing", "on_state_changed_to_shipped", "on_state_changed_to_delivered"]
     }
   ]
 }
