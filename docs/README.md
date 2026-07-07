@@ -51,7 +51,7 @@ UniBizKit's long-term vision is to become a **unified open-source stack for ente
 See [Architecture.md](Architecture.md) for the full picture. In short:
 
 * **Code generation engine** — implemented in Python, which is excellent for model processing and integrates well with AI tooling. Generators emit the code directly (no template engine).
-* **Data layer** — [Supabase (PostgreSQL)](Backend.md): standard PostgreSQL with modern authentication and security, partially open-source and widely adopted. Other data platforms may be supported later.
+* **Data layer** — [Supabase (PostgreSQL)](Backend.md): standard PostgreSQL with modern authentication and security, fully open-source (self-hosted) and widely adopted. Other data platforms may be supported later.
 * **Presentation layer** — [React-Admin](Frontend.md): mature and a strong fit for data-driven enterprise interfaces. Custom pages are written in MDX/JSX.
 
 ## Why UniBizKit?

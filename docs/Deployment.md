@@ -145,14 +145,3 @@ switches; `prod-dc-remove.py` deletes them, so the next deploy re-issues them
 (mind Let's Encrypt rate limits). First `prod-dc-up.py` only passes its TLS
 health check once the certificate is issued, which requires the public DNS A
 record → NAT public IP with port 443 forwarded to this host.
-
-## Current limitations
-
-* No SSO/Keycloak in production yet (dev-only; see [SingleSignOn.md](SingleSignOn.md)).
-* App stacks serve **HTTP only** on their own port; put a proxy model (above) in
-  front, or another TLS reverse proxy, for real exposure.
-* If the model's SMTP points at the local dev mail catcher, production GoTrue
-  auto-confirms emails instead of sending them (no signup confirmation or
-  password-recovery mails). Configure a real `smtp` in `system.jsonc` for that.
-* Studio and Postgres are exposed without extra authentication beyond their
-  own credentials — fine for a lab, review before exposing to a real network.

@@ -4,17 +4,22 @@ UniBizKit is intentionally developed in phases. See [docs/README.md](README.md) 
 
 ## Short Term
 
-* Deployment scripts for Docker Compose
 * Database migration deployment scripts
 * Workflow-based task assignment (see [Workflow.md](Workflow.md))
-* Integration with third-party systems
+* Backend integration functions and schema adaptation (importing and mapping external schemas)
+* `on delete` copy-data relationships: snapshot the related record's data instead of cascading or restricting
+* Mandatory profile fields collected when a new user signs up
+* Data versioning and record history
+* Example models for medium-sized applications
 
 ## Mid Term
 
+* Integration via a message-queue system
+* Operational improvements: backups, logging, etc.
+* Cross-model integration: one model using the user database of another (today the workaround is [Single Sign-On](SingleSignOn.md))
 * Deployment scripts for open-source monitoring stacks
 * Kubernetes deployment
-* Cross-model integration: one model using the user database of another (today the workaround is [Single Sign-On](SingleSignOn.md))
-* AI agents as first-class workflow participants
+* Example models for large-scale applications
 
 ## Long Term
 

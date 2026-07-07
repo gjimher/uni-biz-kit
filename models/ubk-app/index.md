@@ -82,5 +82,5 @@ concept.
 
 ![The product concept declared in the model JSON](assets/b2c-model.png)
 
-From this one declaration UniBizKit derives the `product` table and its row-level security
+From such declarations UniBizKit derives the `product` table and its row-level security
 and the React-Admin list and edit views.

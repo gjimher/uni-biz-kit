@@ -1,6 +1,6 @@
 # Architecture
 
-UniBizKit follows a **KISS, layered, opinionated** architecture that makes practical use of existing open-source components (self-hosted Supabase, React-Admin) instead of building its own runtime.
+UniBizKit follows a **simple, layered, opinionated** architecture that makes practical use of existing open-source components (self-hosted Supabase, React-Admin) instead of building its own runtime.
 
 The goal is to keep the implementation under control: independent pieces, decoupled from each other, so that an LLM can implement a complete application without introducing security or functional risks.
 
