@@ -84,3 +84,5 @@ concept.
 
 From such declarations UniBizKit derives the `product` table and its row-level security
 and the React-Admin list and edit views.
+
+[Browse the full B2C model on GitHub →](https://github.com/gjimher/uni-biz-kit/tree/main/models/b2c-app)

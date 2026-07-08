@@ -34,6 +34,14 @@ VITE_SUPABASE_KEY=<anon key>  # public, low-privilege key
 
 For every concept: List, Create, Edit and Show views with field components chosen by type, form validation mirroring the model constraints, relationship handling, document attachments, and the [workflow selector](Workflow.md) on concepts with a workflow.
 
+### Record labels (`id_presentation`)
+
+A concept's `id_presentation` (declared in `concepts.jsonc`) is the human-readable label used wherever a record is shown or referenced — list rows, selectors on related concepts, page titles. It takes:
+
+* `fields` — the fields composing the label, joined by `separator`. A field can traverse a relation, including the target's own `id_presentation`: `category` uses `["parent.id_presentation", "name"]` with separator `/`, so the label is built **recursively** up the tree, producing `Electronics / Keyboards`.
+* `separator` — the string placed between fields (e.g. `" / "`, `", "`).
+* `show` — when `true`, the composed label is also rendered as its own column in list views (referenced as `id_presentation[0]` in the list rules below).
+
 Configuration in `presentation.jsonc`:
 
 * `locale`, `number_locale`, `currency` — UI language and number/currency formatting.

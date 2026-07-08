@@ -42,26 +42,47 @@ Each concept becomes a table plus its CRUD UI. Example (from `models/b2c-app/con
 }
 ```
 
+### Concept properties
+
+* `id_presentation` — how records are labelled and referenced across the UI (see [Frontend.md](Frontend.md#record-labels-id_presentation)).
+* `documents` — enables file/image attachments per record, stored in Supabase Storage buckets. `tags` names the attachment slots; `versioned: true` keeps historical versions per tag instead of replacing them.
+* `checks` — SQL check constraints at concept level.
+* `data_size` — expected volume hint.
+
 ### Field types
 
 `string`, `markdown`, `integer`, `decimal`, `enum`, `boolean`, `date`, `datetime`, `relation_to_one`, `relation_to_many`, `prefill`.
 
-Relations declare their `target` concept; `relation_to_many` generates a join table. `prefill` copies values from a related record (e.g. a saved address into an order). `markdown` is long-form text stored as `TEXT` and edited in the UI with a markdown editor (source + live preview).
+Relations declare their `target` concept. A `relation_to_one` also declares a `subtype`:
+
+* `part_of` — ownership: the child belongs to the parent and deleting the parent **cascades** to the children (e.g. `order_item` part_of `order`, `address` part_of `customer`). A self-referential `part_of` (target = own concept) models a tree.
+* `related_to` — a loose foreign key: deleting the target does **not** cascade (e.g. `order` related_to `customer`).
+
+`relation_to_many` generates a join table. `prefill` copies values from a related sub-collection into the record inline: the user picks one related record (e.g. one of the customer's saved addresses) and its fields are expanded onto this concept (`shipping_address_street`, `shipping_address_city`, …). `markdown` is long-form text stored as `TEXT` and edited in the UI with a markdown editor (source + live preview).
+
+Some types accept a `subtype` refining rendering/storage — e.g. `decimal` with `subtype: "money"` renders as currency in the UI.
 
 ### Field properties
 
-`required`, `unique`, `default`, `min`/`max`, `min_length`/`max_length`, `precision`/`scale` (decimal), `enum_values`, `size` (UI hint: `s`/`m`/`l`), `calculated` (SQL expression or `rollup(...)` aggregate over children) and `description`.
+`required`, `unique`, `default`, `min`/`max`, `min_length`/`max_length`, `precision`/`scale` (decimal), `enum_values`, `size` (UI hint: `s`/`m`/`l`), `calculated` (see [Calculated fields](#calculated-fields)) and `description`.
 
 Constraints are enforced in the database (`NOT NULL`, `UNIQUE`, `CHECK`) and mirrored as form validation in the UI.
 
-### Concept properties
-
-* `id_presentation` — how records are displayed and referenced across the UI.
-* `documents` — enables file/image attachments per record, stored in Supabase Storage buckets.
-* `checks` — SQL check constraints at concept level.
-* `data_size` — expected volume hint.
-
 Field names starting with `_` are reserved for internals (see [Security.md](Security.md#internal-columns)).
+
+### Calculated fields
+
+A `calculated` field is read-only in the UI; its value is produced by one of these strategies instead of being entered:
+
+| Strategy | Produces | Example |
+|----------|----------|---------|
+| SQL expression | A `GENERATED ALWAYS AS (...) STORED` column over the row's own columns | `quantity*unit_price` |
+| `rollup(func, child_concept, child_field)` | An aggregate (`func` = `sum`/`count`/`avg`/`min`/`max`) of `child_field` over the child records `part_of` this concept, kept in sync by triggers | `rollup(sum,order_item,total_price)` |
+| `copy(fk_field, source_field, when)` | A snapshot of `source_field` from the record the relation `fk_field` points to, taken when `when` fires: `on_insert`, `on_change`, or `on_change_in_state_<state>` (copy while in / on reaching that state, then freeze); join several with `+` | `copy(product,price,on_change_in_state_initial)` |
+| `copy_logged_on_insert(fk_field)` | On insert, sets the relation `fk_field` to the logged-in user's linked [profile](Security.md#profile-concepts) record, then locks it | `copy_logged_on_insert(customer)` |
+| `by_rules` | The field is written by the [business rule](#business-rules-rulesjsonc) whose `update` action targets it — a FEEL rule that runs in an edge function, sees the whole record, and computes what SQL cannot | `order.shipping_costs` from the order total |
+
+A SQL expression is any PostgreSQL expression, so it can also reference a column by quoted identifier — including the internal columns injected on [profile concepts](Security.md#profile-concepts). The `customer.email` field uses `"_user_email"` to expose the logged-in user's auth email as a read-only column.
 
 ## Validations (`validations/*.csv`)
 
@@ -73,8 +94,9 @@ Server-side business logic written in **FEEL** (Friendly Enough Expression Langu
 
 * `concept` — the record the rule runs against.
 * `feel_expr` — the expression. Context: `db.<concept>` (current record, related records via paths) and `auth.<concept>` (the logged-in user's [profile](Security.md#profile-concepts)).
-* `action` — `update` writes the result back to the concept's fields; `check` validates and aborts with `{ error: "..." }`.
-* `when` — synchronous events, currently workflow transitions: `on_state_changed_to_<state>`.
+* `action` — `update` writes the result back to the concept's fields; `check` validates and aborts the transition with `{ error: "..." }`; `return` exposes a computed value to the frontend without any DB write (a concept-less rule is a standalone function the frontend can call).
+* `when` — fires **synchronously**, blocking until complete: `on_state_changed_to_<state>` (a workflow transition) or `on_change_in_state_<state>` (any edit while in a state).
+* `when_async` — the same events, but fired **asynchronously** in the background so the user is not blocked (e.g. recomputing totals while a cart is edited).
 
 Example (from `models/b2c-app/rules.jsonc`):
 
