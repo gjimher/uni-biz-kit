@@ -1,23 +1,10 @@
 import json
 from ..context import Context
-from .resources.helpers import find_many_to_many_links
+from .resources.helpers import build_m2m_config
 
 
 def generate(ctx: Context) -> str:
-    m2m_config = {}
-    for concept in ctx.concepts:
-        resource_name = concept["name"]
-        links = find_many_to_many_links(resource_name, ctx.concepts, ctx.concept_map)
-        if links:
-            m2m_config[resource_name] = {}
-            for link in links:
-                field_name = link.get("field_name")
-                m2m_config[resource_name][field_name] = {
-                    'resource': link["join_table"],
-                    'linkField': link["my_fk"],
-                    'targetField': link["other_fk"]
-                }
-
+    m2m_config = build_m2m_config(ctx.concepts, ctx.concept_map)
     m2m_config_json = json.dumps(m2m_config, indent=2)
 
     return f"""import {{ supabaseDataProvider }} from 'ra-supabase';

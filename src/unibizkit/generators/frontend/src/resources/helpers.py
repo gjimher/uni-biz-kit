@@ -19,6 +19,23 @@ def find_owned_children(parent_concept_name: str, concepts: List[Dict[str, Any]]
     return children
 
 
+def build_m2m_config(concepts: List[Dict[str, Any]], concept_map: Dict[str, Any]) -> Dict[str, Any]:
+    m2m_config = {}
+    for concept in concepts:
+        resource_name = concept["name"]
+        links = find_many_to_many_links(resource_name, concepts, concept_map)
+        if links:
+            m2m_config[resource_name] = {}
+            for link in links:
+                m2m_config[resource_name][link["field_name"]] = {
+                    'resource': link["join_table"],
+                    'linkField': link["my_fk"],
+                    'targetField': link["other_fk"],
+                    'target': link["target_concept"]["name"]
+                }
+    return m2m_config
+
+
 def find_many_to_many_links(concept_name: str, concepts: List[Dict[str, Any]], concept_map: Dict[str, Any]) -> List[Dict[str, Any]]:
     links = []
     concept = concept_map.get(concept_name)

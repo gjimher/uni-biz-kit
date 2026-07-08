@@ -71,6 +71,18 @@ class TestAppFrontend:
         assert '"@uiw/react-md-editor"' in package_json, \
             "Markdown editor dependency should be added when the model uses markdown fields"
 
+        # CSV export/import: list views use the custom actions toolbar and the
+        # baked config covers m:n links and document buckets.
+        assert 'actions={<ImportExportActions />}' in product_resource
+        assert (frontend_dir / 'src' / 'components' / 'import_export.jsx').exists()
+        import_export_config = (frontend_dir / 'src' / 'importExportConfig.js').read_text()
+        assert '"category_product"' in import_export_config, \
+            "m:n join table should be baked into the import/export config"
+        assert '"product-documents"' in import_export_config, \
+            "document bucket should be baked into the import/export config"
+        assert '"papaparse"' in package_json, \
+            "CSV parsing dependency should be added for export/import"
+
         # Change to frontend directory
         original_cwd = os.getcwd()
         

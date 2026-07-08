@@ -14,6 +14,7 @@ def generate(ctx) -> str:
     "@mui/material": "^5.16.12",
     "@mui/icons-material": "^5.16.12",
     "@supabase/supabase-js": "^2.89.0",{markdown_dep}
+    "papaparse": "^5.4.1",
     "react": "18.2.0",
     "react-admin": "^5.14.0",
     "react-dom": "18.2.0",

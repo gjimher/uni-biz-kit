@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .context import Context
 from . import eslintrc, index_html, package_json, vite_config
-from .src import supabase_client, index, auth_provider, data_provider, app
+from .src import supabase_client, index, auth_provider, data_provider, app, import_export_config
 from .src.layout import (
     my_app_bar, my_layout, my_login_page, my_menu,
     my_set_password_page, user_profile_dialog, change_password_dialog
@@ -13,7 +13,7 @@ from .src.layout import (
 from .src.components import (
     title, reorderable_datagrid, recursive_parent_selector,
     custom_edit_toolbar, document_tab, workflow_selector, field_help_icon,
-    markdown_input
+    markdown_input, import_export
 )
 from .src.resources import resource
 from .src.presentation import model_js, router, custom_page
@@ -102,6 +102,7 @@ class ReactAdminGenerator:
         _write(ctx.output_dir / "src" / "supabaseClient.js", supabase_client.generate(ctx))
         _write(ctx.output_dir / "src" / "index.jsx", index.generate())
         _write(ctx.output_dir / "src" / "dataProvider.js", data_provider.generate(ctx))
+        _write(ctx.output_dir / "src" / "importExportConfig.js", import_export_config.generate(ctx))
 
         has_auth_provider = False
         if ctx.security_config["authentication_required"]:
@@ -128,6 +129,7 @@ class ReactAdminGenerator:
         _write(ctx.output_dir / "src" / "components" / "custom_edit_toolbar.jsx", custom_edit_toolbar.generate())
         _write(ctx.output_dir / "src" / "components" / "workflow_selector.jsx", workflow_selector.generate())
         _write(ctx.output_dir / "src" / "components" / "field_help_icon.jsx", field_help_icon.generate())
+        _write(ctx.output_dir / "src" / "components" / "import_export.jsx", import_export.generate())
         if any(c.get("documents") and c["documents"]["enabled"] for c in ctx.concepts):
             _write(ctx.output_dir / "src" / "components" / "document_tab.jsx", document_tab.generate())
         if any(f["type"] == "markdown" for c in ctx.concepts for f in c["fields"]):

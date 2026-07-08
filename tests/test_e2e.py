@@ -309,6 +309,160 @@ def test_create_order_and_upload_document_as_user(page: Page, app_server):
     expect(page.get_by_text(unique_name)).to_be_visible(timeout=10000)
 
 
+def _login_admin(page: Page, app_server):
+    with open(os.path.abspath("test-app/security_extended.json")) as f:
+        admin_user = next(u for u in json.load(f)["users"] if "admin" in u["roles"])
+    page.set_default_timeout(10000)
+    page.goto(app_server + "/#/admin")
+    page.wait_for_timeout(2000)
+    page.locator('input[name="email"]').fill(admin_user["email"])
+    page.locator('input[name="password"]').fill(admin_user["password"])
+    page.get_by_role("button", name="Sign in").click()
+    expect(page.get_by_text("Catalog")).to_be_visible()
+
+
+def test_csv_export_import_roundtrip(page: Page, app_server, tmp_path):
+    """
+    CSV export/import round trip on products, browser only:
+    export the product list (including the datasheet document column), assert the
+    CSV carries id_presentation keys, m:n categories and base64 documents; then
+    import a CSV that updates the seeded product and inserts a new one (with an
+    m:n link and a document), confirm the "1 inserts, 1 updates" summary, and
+    verify the result in the list and the database.
+    """
+    import csv
+    import io
+    import uuid
+
+    _login_admin(page, app_server)
+    page.get_by_text("Catalog").click()
+    page.get_by_role("menuitem", name="Products").click()
+    page.wait_for_url("**#/admin/product**")
+
+    # -- Export with the datasheet document column included
+    page.get_by_role("button", name="Export").click()
+    dialog = page.get_by_role("dialog")
+    expect(dialog.get_by_text("Export product to CSV")).to_be_visible()
+    dialog.get_by_role("checkbox", name="datasheet").check()
+    with page.expect_download(timeout=30000) as download_info:
+        dialog.get_by_role("button", name="Export").click()
+    csv_text = open(download_info.value.path(), encoding="utf-8").read()
+
+    rows = list(csv.DictReader(io.StringIO(csv_text)))
+    headers = rows[0].keys()
+    for col in ("id_presentation", "name", "sku", "categories",
+                "doc:datasheet:filename", "doc:datasheet:content"):
+        assert col in headers, f"Missing CSV column {col}. Headers: {list(headers)}"
+    assert "id" not in headers, "The numeric id must never be exported"
+
+    seeded = next(r for r in rows if r["sku"] == "SEED-KBD-001")
+    assert seeded["id_presentation"] == "Seeded Keyboard"
+    assert "Seeded Accessories" in seeded["categories"], \
+        "m:n cells must carry the target id_presentation"
+    # Exact category key as exported (recursive presentations may carry a path prefix)
+    category_key = next(t for t in seeded["categories"].split("\n") if "Seeded Accessories" in t)
+    assert seeded["doc:datasheet:filename"] == "seeded-keyboard.txt"
+    assert "SW5pdGlhbCBwcm9kdWN0IGRhdGFzaGVldAo=" in seeded["doc:datasheet:content"], \
+        "document content must be exported as base64"
+    page.get_by_role("dialog").get_by_role("button", name="Close").click()
+
+    # -- Build an import CSV: update the seeded product + insert a new one
+    unique = uuid.uuid4().hex[:8]
+    new_name = f"_CSV Import Product {unique}"
+    new_description = f"_csv_e2e_updated_{unique}"
+    import_file = tmp_path / "product_import.csv"
+    with open(import_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["id_presentation", "name", "description", "price",
+                         "stock_quantity", "sku", "status", "categories",
+                         "doc:datasheet:filename", "doc:datasheet:content"])
+        writer.writerow(["Seeded Keyboard", "Seeded Keyboard", new_description,
+                         "49.99", "25", "SEED-KBD-001", "published",
+                         category_key, "", ""])
+        # The m:n token is padded with spaces: import must match it against the
+        # target id_presentation both verbatim and trimmed.
+        writer.writerow(["", new_name, "created by CSV import", "10.50", "5",
+                         f"CSV-E2E-{unique}", "draft", f"  {category_key}  ",
+                         "imported-datasheet.txt",
+                         "data:text/plain;base64,SW5pdGlhbCBwcm9kdWN0IGRhdGFzaGVldAo="])
+
+    # -- Import: pick file, confirm the summary, expect success
+    page.get_by_role("button", name="Import").click()
+    dialog = page.get_by_role("dialog")
+    dialog.locator('input[type="file"]').set_input_files(import_file)
+    expect(dialog.get_by_text("1 inserts, 1 updates")).to_be_visible(timeout=15000)
+    dialog.get_by_role("button", name="Confirm").click()
+    expect(dialog.get_by_text("2 of 2 rows imported successfully")).to_be_visible(timeout=30000)
+    dialog.get_by_role("button", name="Close").click()
+
+    # -- The inserted product shows up in the list (sorted by name, "_" sorts first)
+    page.get_by_role("button", name="Name").click()
+    expect(page.get_by_role("cell", name=new_name).first).to_be_visible(timeout=10000)
+
+    # -- DB check: update applied, m:n link and document created for the new product
+    import psycopg2
+    from dotenv import dotenv_values
+    db_url = dotenv_values("test-app/backend/.env").get("DB_URL")
+    assert db_url, "DB_URL not found in test-app/backend/.env"
+    conn = psycopg2.connect(db_url)
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT "description" FROM "product" WHERE "sku" = %s;', ("SEED-KBD-001",))
+            assert cur.fetchone()[0] == new_description, "CSV update was not applied"
+            cur.execute('SELECT "id" FROM "product" WHERE "name" = %s;', (new_name,))
+            new_id = cur.fetchone()[0]
+            cur.execute(
+                'SELECT COUNT(*) FROM "category_product" cp JOIN "category" c '
+                'ON c."id" = cp."category_id" '
+                'WHERE cp."product_id" = %s AND c."name" = %s;',
+                (new_id, "Seeded Accessories"))
+            assert cur.fetchone()[0] == 1, "m:n link was not created on import"
+            cur.execute(
+                'SELECT "storage_path" FROM "product_document" '
+                'WHERE "product_id" = %s AND "tag" = %s AND "is_current";',
+                (new_id, "datasheet"))
+            doc = cur.fetchone()
+            assert doc and doc[0].endswith("imported-datasheet.txt"), \
+                "document was not uploaded on import"
+    finally:
+        conn.close()
+
+
+def test_csv_import_reports_all_errors(page: Page, app_server, tmp_path):
+    """
+    Importing a CSV with an unknown column, an unresolvable m:n value and a
+    non-existent update key must report every problem with its record number
+    and import nothing (there is no Confirm step on errors).
+    """
+    import csv
+
+    _login_admin(page, app_server)
+    page.get_by_text("Catalog").click()
+    page.get_by_role("menuitem", name="Products").click()
+    page.wait_for_url("**#/admin/product**")
+
+    bad_file = tmp_path / "product_bad.csv"
+    with open(bad_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["id_presentation", "name", "price", "stock_quantity",
+                         "sku", "status", "categories", "bogus_column"])
+        writer.writerow(["___no_such_product___", "X", "1", "1", "BAD-1",
+                         "published", "", ""])
+        writer.writerow(["", "_Bad Import", "1", "1", "BAD-2", "published",
+                         "___no_such_category___", ""])
+
+    page.get_by_role("button", name="Import").click()
+    dialog = page.get_by_role("dialog")
+    dialog.locator('input[type="file"]').set_input_files(bad_file)
+
+    expect(dialog.get_by_text("nothing was imported")).to_be_visible(timeout=15000)
+    expect(dialog.get_by_text("unknown column")).to_be_visible()
+    expect(dialog.get_by_text('"___no_such_product___" not found — cannot update')).to_be_visible()
+    expect(dialog.get_by_text('category "___no_such_category___" not found')).to_be_visible()
+    expect(dialog.get_by_role("button", name="Confirm")).not_to_be_visible()
+    dialog.get_by_role("button", name="Close").click()
+
+
 def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):
     """
     Full browser E2E test for the forgot-password flow — no direct API calls.

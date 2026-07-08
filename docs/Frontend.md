@@ -99,6 +99,20 @@ Example from [`models/test-app/presentation.jsonc`](../models/test-app/presentat
 }
 ```
 
+### CSV export and import
+
+Every list view has **Export** and **Import** buttons (Import only for users with `write` access). Export downloads the currently filtered rows as a CSV that can be edited in a spreadsheet and imported back to insert and update records. A dialog lets you pick which columns to include.
+
+The CSV format:
+
+* `id_presentation` is the row key: **empty means insert, non-empty means update** of the matching record. It is recomputed by the database, so updating the fields it is built from changes it. The numeric `id` and calculated/internal fields are never exported or imported.
+* Relation columns (both foreign keys and many-to-many) carry the target record's `id_presentation`. Many-to-many cells hold one value per line (newlines inside a quoted CSV cell).
+* Document columns come in pairs per tag — `doc:<tag>:filename` and `doc:<tag>:content` (base64 data URI). Files over 1 MB are skipped on export with a warning and rejected on import; on versioned concepts import creates the next version.
+
+Import first validates the whole file and reports **all** problems at once with their record number (the header is line 1): unknown columns, type errors, missing required values, unresolvable or ambiguous relation values, and update keys that match no record — or more than one, since `id_presentation` is not necessarily unique. If the file is clean, a summary (`X inserts, Y updates`) asks for confirmation before anything is written; execution then runs in chunks with a progress bar and lists any per-row failures at the end.
+
+Update semantics: only the columns present in the file are written — an absent column leaves the field (or the many-to-many links) untouched, while a present-but-empty cell clears it. Imports run with the logged-in user's permissions, so row-level security applies as in the rest of the UI.
+
 ## Custom Pages (MDX / JSX)
 
 Files under the model's `presentation/pages/` are copied into `src/presentation/pages/` and routed **by file path**:

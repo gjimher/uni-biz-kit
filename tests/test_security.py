@@ -739,11 +739,16 @@ def test_join_tables_use_standard_internal_column_triggers():
         """)
         assert {row[0] for row in cur.fetchall()} == {"_created_at", "_updated_at"}
 
-        with pytest.raises(psycopg2.Error):
+        # The protection trigger skips direct DB access (no JWT claims), so
+        # simulate an authenticated API request; without it the insert would
+        # only fail on the foreign keys.
+        cur.execute("""SELECT set_config('request.jwt.claims', '{"role": "authenticated"}', false);""")
+        with pytest.raises(psycopg2.Error, match="must be null on insert"):
             cur.execute("""
                 INSERT INTO "category_product" ("category_id", "product_id", "_created_at")
                 VALUES (-1, -1, '2020-01-01T00:00:00Z');
             """)
+        cur.execute("SELECT set_config('request.jwt.claims', '', false);")
 
         cur.execute("""
             SELECT c.id, p.id
@@ -805,11 +810,16 @@ def test_document_tables_use_standard_internal_column_triggers():
         """, (product_id,))
         next_version = cur.fetchone()[0]
 
-        with pytest.raises(psycopg2.Error):
+        # The protection trigger skips direct DB access (no JWT claims), so
+        # simulate an authenticated API request; without it the insert only
+        # failed by coincidence, when (product, tag, version 1) already existed.
+        cur.execute("""SELECT set_config('request.jwt.claims', '{"role": "authenticated"}', false);""")
+        with pytest.raises(psycopg2.Error, match="must be null on insert"):
             cur.execute("""
                 INSERT INTO "product_document" ("product_id", "tag", "storage_path", "_updated_at")
                 VALUES (%s, 'datasheet', 'test/forged.pdf', '2020-01-01T00:00:00Z');
             """, (product_id,))
+        cur.execute("SELECT set_config('request.jwt.claims', '', false);")
 
         cur.execute("BEGIN;")
         try:

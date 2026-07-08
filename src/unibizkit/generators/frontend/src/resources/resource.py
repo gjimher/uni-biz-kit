@@ -510,7 +510,8 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
 
     component_imports = [
         f"import {{ Title }} from '../../components/title';",
-        f"import {{ CustomEditToolbar }} from '../../components/custom_edit_toolbar';"
+        f"import {{ CustomEditToolbar }} from '../../components/custom_edit_toolbar';",
+        f"import {{ ImportExportActions }} from '../../components/import_export';"
     ]
     if workflow_import:
         component_imports.append(workflow_import)
@@ -634,7 +635,7 @@ const {resource_name}_filters = [
 export const {resource_name.upper()}_LIST = (props) => {{
   const {{ permissions }} = usePermissions();
   return (
-    <List {{...props}} filters={{{resource_name}_filters}}{list_sort_prop}>
+    <List {{...props}} filters={{{resource_name}_filters}}{list_sort_prop} actions={{<ImportExportActions />}}>
       <Datagrid rowClick="edit">
         {field_components["list_fields"]}
       </Datagrid>
