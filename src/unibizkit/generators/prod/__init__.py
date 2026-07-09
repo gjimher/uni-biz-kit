@@ -30,10 +30,37 @@ class ProdContext:
         self.db_port = self.base_port + DB_OFFSET
         self.studio_port = self.base_port + STUDIO_OFFSET
         self.allow_registration = security_config["registration"]["allow"]
-        smtp_host = system_config.get("smtp", {}).get("host", "127.0.0.1")
-        # A loopback SMTP host points at the dev mail catcher, which does not exist
-        # in prod: auto-confirm emails instead of sending them.
-        self.smtp = None if smtp_host in ("127.0.0.1", "localhost") else system_config["smtp"]
+        self.smtp = self._resolve_smtp(deployment_config, system_config)
+        self.smtp_uses_host_gateway = (
+            self.smtp is not None and self.smtp["host"] in ("127.0.0.1", "localhost")
+        )
+
+    def _resolve_smtp(self, deployment_config: Dict[str, Any],
+                      system_config: Dict[str, Any]) -> Dict[str, Any] | None:
+        prod_smtp_keys = ("prod_smtp_server", "prod_smtp_port", "prod_smtp_from")
+        has_prod_smtp_override = any(deployment_config.get(key) is not None for key in prod_smtp_keys)
+
+        smtp = {
+            "host": "127.0.0.1",
+            "port": 25,
+            "from_email": "noreply@localhost",
+            "user": None,
+            "password": None,
+        }
+        smtp.update(system_config.get("smtp", {}))
+
+        if has_prod_smtp_override:
+            if deployment_config.get("prod_smtp_server") is not None:
+                smtp["host"] = deployment_config["prod_smtp_server"]
+            if deployment_config.get("prod_smtp_port") is not None:
+                smtp["port"] = deployment_config["prod_smtp_port"]
+            if deployment_config.get("prod_smtp_from") is not None:
+                smtp["from_email"] = deployment_config["prod_smtp_from"]
+            return smtp
+
+        # A loopback SMTP host in system.jsonc points at the dev mail catcher,
+        # which does not exist in prod: auto-confirm emails instead of sending them.
+        return None if smtp["host"] in ("127.0.0.1", "localhost") else smtp
 
 
 def generate(output_dir: Path, app_id: str, deployment_config: Dict[str, Any],

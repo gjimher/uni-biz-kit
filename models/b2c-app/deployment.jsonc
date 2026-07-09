@@ -3,5 +3,8 @@
   "base_uri": "/b2c",
   "prod_origin": "https://www.unibizkit.dev",
   "prod_base_port": 3050,
+  "prod_smtp_server": "127.0.0.1",
+  "prod_smtp_port": 25,
+  "prod_smtp_from": "noreply-b2c@unibizkit.dev",
   "prod_version": "dev"
 }

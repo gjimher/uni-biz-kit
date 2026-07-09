@@ -14,19 +14,27 @@ def generate(ctx) -> str:
     if ctx.prod_origin:
         site_url = f"{ctx.prod_origin}{ctx.base_uri}"
         api_external_url = f"{ctx.prod_origin}{ctx.base_prefix}/api"
+        mailer_external_hosts = ctx.prod_origin.removeprefix("https://").removeprefix("http://")
     else:
         site_url = f"http://${{PUBLIC_HOST}}:{ctx.frontend_port}{ctx.base_uri}"
         api_external_url = f"http://${{PUBLIC_HOST}}:{ctx.frontend_port}{ctx.base_prefix}/api"
+        mailer_external_hosts = f"${{PUBLIC_HOST}}:{ctx.frontend_port}"
     disable_signup = "false" if ctx.allow_registration else "true"
+    mailer_verify_path = f"{ctx.base_prefix}/api/auth/v1/verify"
+    if not mailer_verify_path.startswith("/"):
+        mailer_verify_path = "/" + mailer_verify_path
     if ctx.smtp:
+        smtp_host = "host.docker.internal" if ctx.smtp_uses_host_gateway else ctx.smtp["host"]
+        smtp_user = ctx.smtp.get("user") or ""
+        smtp_password = ctx.smtp.get("password") or ""
         mailer = f"""\
       GOTRUE_MAILER_AUTOCONFIRM: "false"
-      GOTRUE_SMTP_HOST: {ctx.smtp['host']}
+      GOTRUE_SMTP_HOST: {smtp_host}
       GOTRUE_SMTP_PORT: {ctx.smtp.get('port', 25)}
-      GOTRUE_SMTP_USER: {ctx.smtp.get('user', '')}
-      GOTRUE_SMTP_PASS: {ctx.smtp.get('password', '')}
+      GOTRUE_SMTP_USER: {smtp_user}
+      GOTRUE_SMTP_PASS: {smtp_password}
       GOTRUE_SMTP_ADMIN_EMAIL: {ctx.smtp.get('from_email', 'noreply@localhost')}
-      GOTRUE_SMTP_SENDER_NAME: App"""
+      GOTRUE_SMTP_SENDER_NAME: """
     else:
         mailer = '      GOTRUE_MAILER_AUTOCONFIRM: "true"'
 
@@ -75,6 +83,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+{_extra_hosts(ctx)}
     environment:
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: "9999"
@@ -91,6 +100,11 @@ services:
       GOTRUE_JWT_SECRET: ${{JWT_SECRET}}
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
 {mailer}
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: {mailer_verify_path}
+      GOTRUE_MAILER_URLPATHS_INVITE: {mailer_verify_path}
+      GOTRUE_MAILER_URLPATHS_RECOVERY: {mailer_verify_path}
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: {mailer_verify_path}
+      GOTRUE_MAILER_EXTERNAL_HOSTS: {mailer_external_hosts}
       GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_ENABLED: "true"
       GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_URI: pg-functions://postgres/public/custom_access_token_hook
     healthcheck:
@@ -257,4 +271,13 @@ services:
 volumes:
   db-data:
   storage-data:
+"""
+
+
+def _extra_hosts(ctx) -> str:
+    if not ctx.smtp_uses_host_gateway:
+        return ""
+    return """\
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 """

@@ -37,6 +37,20 @@
       "description": "Optional public production origin, including scheme and host but no path (e.g. 'https://www.example.com'). When set, production auth redirects and public API URLs use this origin plus base_uri instead of the direct host:port URL.",
       "pattern": "^https?://[^/]+$"
     },
+    "prod_smtp_server": {
+      "type": "string",
+      "description": "Optional production SMTP host override. When set, it replaces system.smtp.host for production docker-compose generation. Use 127.0.0.1 or localhost to reach a mailer on the Docker host via host-gateway."
+    },
+    "prod_smtp_port": {
+      "type": "integer",
+      "description": "Optional production SMTP port override. When set, it replaces system.smtp.port for production docker-compose generation.",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "prod_smtp_from": {
+      "type": "string",
+      "description": "Optional production SMTP sender address override. When set, it replaces system.smtp.from_email for production docker-compose generation."
+    },
     "proxy": {
       "type": "object",
       "description": "Marks this model as a 'proxy' kind: instead of an app (concepts/security/...), it deploys a Caddy container that terminates HTTPS for 'domain', serves a static landing page (index.md) and reverse-proxies the listed app models by their base_uri. A model with a 'proxy' section must not contain concepts.jsonc or any other app source file.",
