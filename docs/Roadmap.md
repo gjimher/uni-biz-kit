@@ -4,7 +4,6 @@ UniBizKit is intentionally developed in phases. See [docs/README.md](README.md) 
 
 ## Short Term
 
-* Inline quick-edit of records directly in list views (editable table)
 * Database migration deployment scripts, with schema-compatibility checks against the deployed database
 * Workflow-based task assignment (see [Workflow.md](Workflow.md))
 * Backend integration functions and schema adaptation (importing and mapping external schemas)

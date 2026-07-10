@@ -14,6 +14,12 @@
         { "label": "Orders", "concept": "order" },
         { "label": "Customers", "concept": "customer" }
       ]
+    },
+    {
+      "label": "Test",
+      "children": [
+        { "label": "Field checkers", "concept": "field_checker" }
+      ]
     }
   ],
   "list_field_rules_level_2": {

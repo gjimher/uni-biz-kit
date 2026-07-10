@@ -83,6 +83,22 @@ class TestAppFrontend:
         assert '"papaparse"' in package_json, \
             "CSV parsing dependency should be added for export/import"
 
+        # Inline quick-edit: list views use configurable columns (defaults kept
+        # through `omit`) and the quick-edit dialog is driven by its own config.
+        assert '<DatagridConfigurable rowClick="edit" omit={' in product_resource
+        assert (frontend_dir / 'src' / 'components' / 'quick_edit.jsx').exists()
+        quick_edit_config = (frontend_dir / 'src' / 'quickEditConfig.js').read_text()
+        assert '"targetSize"' in quick_edit_config, \
+            "FK editors should carry the target concept data_size"
+        assert '"editor": "validation"' in quick_edit_config, \
+            "CSV-validated string fields should use the validation cell editor"
+        assert '"requiredForCreate": true' in quick_edit_config
+        assert '"editor": "readonly"' in quick_edit_config, \
+            "calculated/prefill/state fields should be read-only cells"
+        import_export_jsx = (frontend_dir / 'src' / 'components' / 'import_export.jsx').read_text()
+        assert 'QuickEditButton' in import_export_jsx
+        assert 'SelectColumnsButton' in import_export_jsx
+
         # Change to frontend directory
         original_cwd = os.getcwd()
         

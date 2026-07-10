@@ -40,7 +40,7 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
     sso_redirect_import = ""
     sso_redirect_helpers = ""
     sso_redirect_element = ""
-    ra_extra_imports = "AdminContext, AdminUI, Resource"
+    ra_extra_imports = "AdminContext, AdminUI, Resource, localStorageStore"
     if has_auth_provider:
         sso_enabled = ctx.security_config["sso"]["enabled"]
         login_prop_name = "MyLoginPage"
@@ -124,6 +124,9 @@ const SsoRedirectHandler = () => {
     if has_auth_provider:
         auth_prop = "\n      authProvider={authProvider}"
 
+    # Same per-app namespace as the Supabase auth storage (see supabase_client.py).
+    store_prefix = ctx.deployment_config.get("base_uri", "/").strip("/") or "root"
+
     return f"""import * as React from 'react';
 import {{ {ra_extra_imports} }} from 'react-admin';
 import {{ reactRouterProvider }} from 'ra-core';
@@ -180,6 +183,11 @@ const adminRouterProvider = {{
   useNavigate: useAdminNavigate,
   RouterWrapper: ({{ children }}) => <>{{children}}</>,
 }};
+
+// AdminContext defaults to an in-memory store; persist user preferences (like
+// the Datagrid column selection) in localStorage instead, namespaced per app
+// so models served from the same origin do not share them.
+const store = localStorageStore(undefined, '{store_prefix}');
 {sso_redirect_helpers}
 
 const App = () => (
@@ -188,6 +196,7 @@ const App = () => (
       dataProvider={{dataProvider}}{auth_prop}{i18n_prop}
       basename="/admin"
       routerProvider={{adminRouterProvider}}
+      store={{store}}
     >
       <Routes>
 {auth_routes_block}

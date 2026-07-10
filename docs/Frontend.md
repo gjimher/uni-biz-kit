@@ -32,7 +32,7 @@ VITE_SUPABASE_KEY=<anon key>  # public, low-privilege key
 
 ## Generated Admin UI
 
-For every concept: List, Create, Edit and Show views with field components chosen by type, form validation mirroring the model constraints, relationship handling, document attachments, and the [workflow selector](Workflow.md) on concepts with a workflow.
+For every concept: List, Create, Edit and Show views with field components chosen by type, form validation mirroring the model constraints, relationship handling, document attachments, and the [workflow selector](Workflow.md) on concepts with a workflow. List views additionally offer [configurable columns](#configurable-list-columns), [inline quick edit](#inline-quick-edit) and [CSV export/import](#csv-export-and-import).
 
 ### Record labels (`id_presentation`)
 
@@ -98,6 +98,19 @@ Example from [`models/test-app/presentation.jsonc`](../models/test-app/presentat
   "order": "order_date DESC"
 }
 ```
+
+### Configurable list columns
+
+List views open with the default columns computed by the field rules above, but the user can adjust them: the **Columns** button opens a panel to show or hide any non-internal field, and **Reset columns** returns to the defaults. The selection persists per concept in the browser's local storage (namespaced per app), so it survives reloads without affecting other users. The **Add filter** menu covers the same full field set, so any column a user adds can also be filtered on.
+
+### Inline quick edit
+
+The **Quick edit** button (shown to users with `write` access) opens the rows currently loaded in the list — same page, filters and sort — as an editable table in a fullscreen dialog, for spreadsheet-style editing of many records at once. The list does the navigating: filter and page there, quick-edit one page, save, move on.
+
+* Each cell gets an editor for its field type: text (multiline for `size: l`), number, checkbox, date/datetime, enum select. Foreign keys use a preloaded select when the target concept's `data_size` is `s`, or a server-searched autocomplete for larger targets. Fields in a [CSV validation](Backend.md#validations-validationscsv) group use the same coherent autocomplete as the forms — picking `Bilbao` auto-fills `Bizkaia` and `Spain`. Calculated, prefill and workflow-state fields are shown read-only; markdown fields are edited in the forms only.
+* Columns mirror the list view, including any the user added. Per-row buttons **duplicate** a row as a new record and **mark it for deletion** (undoable until saved). **Add row** creates records inline; required-for-create columns are added automatically if hidden. Concepts with required fields that cannot be filled inline (e.g. prefill addresses) do not offer row creation.
+* **Copy/paste with a spreadsheet**, as headerless TSV so a column can be pasted over a different one: **Copy** puts the table on the clipboard as displayed (FKs as their `id_presentation`; the Id column — shown only when `id_presentation` is among the selected list columns — goes first); **Select** narrows Copy/Paste to chosen rows and columns; **Paste** fills the visible (or selected) cells positionally and **Paste insert** appends the clipboard as new rows. The clipboard shape must match the target (a grid one column wider drops its first column, assumed to be the Id). Pasted FK labels are resolved by `id_presentation`; unresolvable, ambiguous or unparsable cells are flagged in place and block only their own row.
+* Changes are saved in one batch — updates (only the touched fields), inserts and deletes. Client-side validation (required fields and the validation groups actually touched) flags invalid rows without sending them; server rejections — row-level security, workflow-state triggers, unique/FK/check constraints — are reported per row with a readable message while the remaining rows still save. Rows whose workflow state is not owned by the user's roles are locked with the reason shown, and per-field permissions disable individual cells.
 
 ### CSV export and import
 

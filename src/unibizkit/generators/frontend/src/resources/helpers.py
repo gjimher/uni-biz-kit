@@ -1,3 +1,4 @@
+import json
 from typing import Any, Dict, List
 
 # Generated components that live in src/components/ and therefore must not be
@@ -211,7 +212,7 @@ def get_optimized_react_admin_imports(
 ) -> str:
     needed_components = {
         'List', 'Create', 'Edit', 'Show',
-        'SimpleShowLayout', 'SimpleForm', 'Datagrid',
+        'SimpleShowLayout', 'SimpleForm', 'Datagrid', 'DatagridConfigurable',
         'TextField', 'TextInput', 'required', 'useRecordContext', 'usePermissions',
         'useGetIdentity'
     }
@@ -612,10 +613,19 @@ def generate_field_components(
     result_names = presentation_config.get("_list_fields", {}).get(concept_name, all_names)
 
     html_map = {name: html for name, html in list_fields}
-    final_list_fields = [html_map[name] for name in result_names if name in html_map]
+    # Emit the default columns first (their order defines the default view),
+    # then every remaining column; the extras are hidden through the
+    # DatagridConfigurable `omit` prop until the user selects them.
+    extra_names = [name for name in all_names if name not in result_names]
+    final_list_fields = [html_map[name] for name in result_names if name in html_map] \
+                      + [html_map[name] for name in extra_names]
 
+    # Filters follow the full column set, so a user-added column can be filtered
+    # too. The id_presentation search keeps alwaysOn only when it is a default
+    # column; as an extra it stays available behind the Add-filter button.
     filter_html_map = {name: html for name, html in filter_fields}
-    final_filter_fields = [filter_html_map[name] for name in result_names if name in filter_html_map]
+    final_filter_fields = [filter_html_map[name] for name in result_names if name in filter_html_map] \
+                        + [filter_html_map[name].replace(' alwaysOn', '') for name in extra_names if name in filter_html_map]
 
     return {
         'imports': '\n'.join(imports),
@@ -625,5 +635,6 @@ def generate_field_components(
         'm2m_edit_fields': '\n'.join(m2m_edit_fields),
         'show_fields': '\n'.join(show_fields),
         'child_tabs': '\n'.join(child_tabs),
-        'filter_fields': ',\n'.join(final_filter_fields)
+        'filter_fields': ',\n'.join(final_filter_fields),
+        'list_omit_json': json.dumps(extra_names),
     }

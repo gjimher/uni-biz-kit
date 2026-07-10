@@ -123,6 +123,30 @@
         { "name": "total_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "calculated": "quantity*unit_price", "description": "Total price for this order item" },
         { "name": "internal_note", "type": "string", "description": "Internal note not shown to users" }
       ]
+    },
+    {
+      // Test-only concept: one field of each type, to exercise every generated
+      // editor (forms, filters, quick-edit cells). Not part of the e-commerce domain.
+      "name": "field_checker",
+      "plural_name": "field_checkers",
+      "description": "One field of each type, for exercising the generated UI",
+      "id_presentation": { "fields": ["a_string"] },
+      "fields": [
+        { "name": "a_string", "type": "string", "required": true, "max_length": 100, "description": "Plain short string" },
+        { "name": "a_long_string", "type": "string", "size": "l", "max_length": 1000, "description": "size l: multiline editor" },
+        { "name": "a_markdown", "type": "markdown", "description": "Markdown editor (forms only, not quick-editable)" },
+        { "name": "an_integer", "type": "integer", "min": 0, "max": 100, "description": "Integer between 0 and 100" },
+        { "name": "a_decimal", "type": "decimal", "precision": 10, "scale": 2, "description": "Plain decimal" },
+        { "name": "a_money", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "description": "Money: rendered as currency" },
+        { "name": "an_enum", "type": "enum", "enum_values": ["alpha", "beta", "gamma"], "default": "alpha", "description": "Enum select" },
+        { "name": "a_boolean", "type": "boolean", "default": false, "description": "Boolean checkbox" },
+        { "name": "a_date", "type": "date", "description": "Date picker" },
+        { "name": "a_datetime", "type": "datetime", "description": "Datetime picker" },
+        // related_to a data_size m concept: selectors search server-side as you type
+        { "name": "a_customer", "type": "relation_to_one", "subtype": "related_to", "target": "customer", "description": "FK to a data_size m concept" },
+        // related_to a data_size s concept: selectors preload the full option list
+        { "name": "a_product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "description": "FK to a data_size s concept" }
+      ]
     }
   ]
 }

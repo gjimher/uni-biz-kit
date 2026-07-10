@@ -24,14 +24,19 @@ import {
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { useFormContext } from 'react-hook-form';
 
-export const useWorkflowCanEdit = (workflow, record, identity, identityLoading) => {
-    if (identityLoading || !record) return true;
-    if (!workflow) return true;
+// Pure per-record check, also used by the quick-edit table (one call per row).
+export const workflowCanEditRecord = (workflow, record, identity) => {
+    if (!workflow || !record) return true;
     const states = workflow.states;
     const currentStateName = record.state || states[0].name;
     const currentState = states.find(s => s.name === currentStateName);
     const userRoles = identity?.roles || [];
     return currentState?.owners.some(role => userRoles.includes(role)) ?? true;
+};
+
+export const useWorkflowCanEdit = (workflow, record, identity, identityLoading) => {
+    if (identityLoading || !record) return true;
+    return workflowCanEditRecord(workflow, record, identity);
 };
 
 export const WorkflowSelector = ({ workflow, resource, canEdit }) => {

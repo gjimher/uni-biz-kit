@@ -378,20 +378,19 @@ const {comp_name} = ({{ source }}) => {{
       freeSolo
       options={{options}}
       value={{currentValue}}
-      onChange={{(_event, value, reason) => {{
-        if (reason === 'clear') {{
-          clearValidationGroup();
-          return;
-        }}
-        setFieldValue(value ?? '');
-      }}}}
+      inputValue={{currentValue}}
+      onChange={{(_event, value) => setFieldValue(value ?? '')}}
       onInputChange={{(_event, value, reason) => {{
-        if (reason === 'clear') {{
-          clearValidationGroup();
-          return;
-        }}
-        if (reason === 'reset') return;
-        setFieldValue(value ?? '');
+        if (reason === 'input') setFieldValue(value ?? '');
+      }}}}
+      componentsProps={{{{
+        clearIndicator: {{
+          onClick: (event) => {{
+            event.preventDefault();
+            event.stopPropagation();
+            clearValidationGroup();
+          }},
+        }},
       }}}}
       renderInput={{params => (
         <MuiValidationTextField
@@ -636,9 +635,9 @@ export const {resource_name.upper()}_LIST = (props) => {{
   const {{ permissions }} = usePermissions();
   return (
     <List {{...props}} filters={{{resource_name}_filters}}{list_sort_prop} actions={{<ImportExportActions />}}>
-      <Datagrid rowClick="edit">
+      <DatagridConfigurable rowClick="edit" omit={{{field_components["list_omit_json"]}}}>
         {field_components["list_fields"]}
-      </Datagrid>
+      </DatagridConfigurable>
     </List>
   );
 }};

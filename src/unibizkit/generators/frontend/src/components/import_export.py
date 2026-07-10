@@ -1,10 +1,11 @@
 def generate() -> str:
     return """import * as React from 'react';
 import {
-  CreateButton, FilterButton, TopToolbar, downloadCSV,
+  CreateButton, FilterButton, SelectColumnsButton, TopToolbar, downloadCSV,
   useDataProvider, useListContext, useNotify, usePermissions,
   useRefresh, useResourceDefinition
 } from 'react-admin';
+import { QuickEditButton, RESET_COLUMNS_BUTTON } from './quick_edit';
 import Papa from 'papaparse';
 import {
   Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent,
@@ -35,7 +36,7 @@ const chunked = (items, size) => {
   return chunks;
 };
 
-const mapWithConcurrency = async (items, limit, fn) => {
+export const mapWithConcurrency = async (items, limit, fn) => {
   let next = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (next < items.length) await fn(items[next++]);
@@ -759,7 +760,10 @@ export const ImportExportActions = () => {
   return (
     <TopToolbar>
       <FilterButton />
+      <SelectColumnsButton />
+      <RESET_COLUMNS_BUTTON />
       {hasCreate && <CreateButton />}
+      {canWrite && <QuickEditButton />}
       {config && (
         <ExportDialogButton resource={resource} config={config}
           filterValues={filterValues} sort={sort} canReadDocs={canReadDocs} />
