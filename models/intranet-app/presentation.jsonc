@@ -29,6 +29,13 @@
       ]
     },
     {
+      "label": "Tasks",
+      "children": [
+        { "label": "Assignable tasks", "workflow": "assignable_tasks" },
+        { "label": "My tasks", "workflow": "my_tasks" }
+      ]
+    },
+    {
       "label": "Content",
       "children": [
         { "label": "Articles",   "concept": "article" },

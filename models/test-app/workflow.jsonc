@@ -9,12 +9,13 @@
       // (each state can only move to the next one in the list).
       "states": [
         // owners: roles that may act on records in this state; both user and admin can submit initial → ordered
-        { "name": "initial", "description": "Order just created, pending confirmation by the customer.", "owners": ["user", "admin"] },
+        // assigners: roles that may change the task owner (state_task_owner) in this state
+        { "name": "initial", "owners": ["user", "admin"], "assigners": [], "description": "Order just created, pending confirmation by the customer." },
         // Only admins can advance the order once the customer has submitted it
-        { "name": "ordered", "owners": ["admin"] },
-        { "name": "accepted", "owners": ["admin"] },
-        { "name": "sent", "owners": ["admin"] },
-        { "name": "delivered", "owners": ["admin"] }
+        { "name": "ordered", "owners": ["admin"], "assigners": ["admin"] },
+        { "name": "accepted", "owners": ["admin"], "assigners": ["admin"] },
+        { "name": "sent", "owners": ["admin"], "assigners": ["admin"] },
+        { "name": "delivered", "owners": ["admin"], "assigners": ["admin"] }
       ]
     }
   ]

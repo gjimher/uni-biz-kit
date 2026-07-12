@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 from py_mini_racer import MiniRacer
 
+from .. import dev_ports
 from .context import Context
 
 
@@ -99,11 +100,16 @@ def generate_supabase_rules(ctx: Context) -> Dict[str, Dict[str, str]]:
         }
         for rule in rules
     }
-    if any(rule.when for rule in rules):
+    if ctx.workflow_config["_concept_workflow"]:
         generated["workflow-transition"] = {
             "index.ts": _generate_workflow_transition_ts(ctx, rules),
             "deno.json": _generate_deno_json(),
         }
+        if ctx.security_config["authentication_required"]:
+            generated["task-assigned-email"] = {
+                "index.ts": _generate_task_assigned_email_ts(ctx),
+                "deno.json": _generate_deno_json(),
+            }
     return generated
 
 
@@ -547,9 +553,16 @@ Deno.serve(async (req) => {{
       changed_at: new Date().toISOString(),
     }},
   }};
+  // Task assignment belongs to the state: entering a state clears the task
+  // owner back to the assignable pool unless the state retains it.
+  const toStateConfig = WORKFLOWS[concept].states.find((state: {{ name: string }}) => state.name === toState);
+  const update: Record<string, unknown> = {{ state: toState, state_info: stateInfo }};
+  if (!toStateConfig?.retain_task_owner) {{
+    update.state_task_owner = null;
+  }}
   const {{ data: updatedRows, error: updateError }} = await serviceClient
     .from(concept)
-    .update({{ state: toState, state_info: stateInfo }})
+    .update(update)
     .eq("id", id)
     .select("*")
     .limit(2);
@@ -623,6 +636,180 @@ function compatibleRows(validation: any, values: Record<string, any>) {{
     }}
   }});
   return rows;
+}}
+
+function requiredEnv(name: string): string {{
+  const value = Deno.env.get(name);
+  if (!value) {{
+    throw new Error(`Missing environment variable ${{name}}`);
+  }}
+  return value;
+}}
+
+function jsonResponse(body: unknown, status = 200): Response {{
+  return new Response(JSON.stringify(body), {{
+    status,
+    headers: {{ "Content-Type": "application/json" }},
+  }});
+}}
+"""
+
+
+def _generate_task_assigned_email_ts(ctx: Context) -> str:
+    """Edge function that emails the new task owner of a workflow record.
+
+    Invoked by the 02_notify_task_assignment DB trigger (pg_net) with the
+    assigner's Authorization header. SMTP and app URL come from environment
+    variables when set (production docker-compose) and fall back to the
+    generated development values (SMTP mock, dev frontend URL).
+    """
+    smtp = ctx.system_config.get("smtp", {})
+    smtp_host = smtp.get("host", "127.0.0.1")
+    if smtp_host in ("127.0.0.1", "localhost"):
+        # Reach the host's dev SMTP mock from the edge runtime container.
+        smtp_host = "172.17.0.1"
+        smtp_port = dev_ports.SMTP
+    else:
+        smtp_port = smtp.get("port", 25)
+    smtp_from = smtp.get("from_email", "noreply@localhost")
+    smtp_user = smtp.get("user") or ""
+    smtp_pass = smtp.get("password") or ""
+    base_uri = ctx.deployment_config.get("base_uri", "/")
+    dev_app_base_url = f"http://localhost:{dev_ports.FRONTEND}{base_uri}"
+
+    workflow_concepts_json = json.dumps(sorted(ctx.workflow_config["_concept_workflow"].keys()))
+    return f"""import {{ createClient }} from "@supabase/supabase-js";
+
+const WORKFLOW_CONCEPTS = new Set({workflow_concepts_json});
+const SMTP_HOST = Deno.env.get("SMTP_HOST") || {json.dumps(smtp_host)};
+const SMTP_PORT = Number(Deno.env.get("SMTP_PORT") || {json.dumps(str(smtp_port))});
+const SMTP_USER = Deno.env.get("SMTP_USER") ?? {json.dumps(smtp_user)};
+const SMTP_PASS = Deno.env.get("SMTP_PASS") ?? {json.dumps(smtp_pass)};
+const SMTP_FROM = Deno.env.get("SMTP_FROM") || {json.dumps(smtp_from)};
+const SMTP_TLS = (Deno.env.get("SMTP_TLS") || "false") === "true";
+const APP_BASE_URL = Deno.env.get("APP_BASE_URL") || {json.dumps(dev_app_base_url)};
+
+Deno.serve(async (req) => {{
+  if (req.method !== "POST") {{
+    return jsonResponse({{ error: "Method not allowed" }}, 405);
+  }}
+
+  const authorization = req.headers.get("Authorization") ?? "";
+  if (!authorization.startsWith("Bearer ")) {{
+    return jsonResponse({{ error: "Missing bearer token" }}, 401);
+  }}
+
+  const {{ concept, id }} = await req.json().catch(() => ({{}}));
+  if (!concept || id === undefined || id === null) {{
+    return jsonResponse({{ error: "Missing concept or id" }}, 400);
+  }}
+  if (!WORKFLOW_CONCEPTS.has(concept)) {{
+    return jsonResponse({{ error: `Concept ${{concept}} has no workflow` }}, 400);
+  }}
+
+  const supabaseUrl = requiredEnv("SUPABASE_URL");
+  const anonKey = requiredEnv("SUPABASE_ANON_KEY");
+  const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+
+  const userClient = createClient(supabaseUrl, anonKey, {{
+    global: {{ headers: {{ Authorization: authorization }} }},
+  }});
+  const {{ data: authData, error: authError }} = await userClient.auth.getUser();
+  if (authError || !authData.user) {{
+    return jsonResponse({{ error: authError?.message ?? "Missing authenticated user" }}, 401);
+  }}
+  const actorEmail = (authData.user.email ?? "").toLowerCase();
+
+  // Re-read the record: the notification always goes to the *current* task
+  // owner, so a forged body cannot direct mail to arbitrary addresses.
+  const serviceClient = createClient(supabaseUrl, serviceRoleKey);
+  const {{ data: record, error: selectError }} = await serviceClient
+    .from(concept)
+    .select("id, state, state_task_owner")
+    .eq("id", id)
+    .maybeSingle();
+  if (selectError) {{
+    return jsonResponse({{ error: selectError.message }}, 400);
+  }}
+  const ownerEmail = (record?.state_task_owner ?? "").toLowerCase();
+  if (!ownerEmail || ownerEmail === actorEmail) {{
+    return jsonResponse({{ ok: true, skipped: true }});
+  }}
+
+  const editUrl = `${{APP_BASE_URL}}#/admin/${{concept}}/${{id}}`;
+  await sendSmtpMail({{
+    to: ownerEmail,
+    subject: `Task assigned to you: ${{concept}} #${{id}}`,
+    body: [
+      `${{actorEmail}} assigned you a workflow task.`,
+      ``,
+      `Record: ${{concept}} #${{id}} (state: ${{record.state}})`,
+      `Edit it at: ${{editUrl}}`,
+    ].join("\\r\\n"),
+  }});
+
+  return jsonResponse({{ ok: true, to: ownerEmail }});
+}});
+
+// Minimal SMTP client (EHLO / AUTH LOGIN / MAIL / RCPT / DATA) over a raw
+// socket: the edge runtime cannot load remote deno.land modules and the needs
+// here (plain text mail to one recipient) do not justify a dependency.
+// TLS is connection-level (SMTP_TLS); STARTTLS is not supported.
+async function sendSmtpMail({{ to, subject, body }}: {{ to: string; subject: string; body: string }}) {{
+  const conn = SMTP_TLS
+    ? await Deno.connectTls({{ hostname: SMTP_HOST, port: SMTP_PORT }})
+    : await Deno.connect({{ hostname: SMTP_HOST, port: SMTP_PORT }});
+  const reader = conn.readable.getReader();
+  const writer = conn.writable.getWriter();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  // Reads one SMTP reply (multiline replies end with "NNN " on the last line).
+  async function readReply(): Promise<string> {{
+    let data = "";
+    while (true) {{
+      const {{ value, done }} = await reader.read();
+      if (done) return data;
+      data += decoder.decode(value);
+      const lines = data.split("\\r\\n").filter((line) => line.length > 0);
+      if (lines.length && /^\\d{{3}} /.test(lines[lines.length - 1])) return data;
+    }}
+  }}
+
+  async function command(line: string | null, expectedCode: string): Promise<void> {{
+    if (line !== null) await writer.write(encoder.encode(line + "\\r\\n"));
+    const reply = await readReply();
+    if (!reply.startsWith(expectedCode)) {{
+      throw new Error(`SMTP error (expected ${{expectedCode}}): ${{reply.trim()}}`);
+    }}
+  }}
+
+  try {{
+    await command(null, "220");
+    await command("EHLO localhost", "250");
+    if (SMTP_USER) {{
+      await command("AUTH LOGIN", "334");
+      await command(btoa(SMTP_USER), "334");
+      await command(btoa(SMTP_PASS), "235");
+    }}
+    await command(`MAIL FROM:<${{SMTP_FROM}}>`, "250");
+    await command(`RCPT TO:<${{to}}>`, "250");
+    await command("DATA", "354");
+    const message = [
+      `From: ${{SMTP_FROM}}`,
+      `To: ${{to}}`,
+      `Subject: ${{subject}}`,
+      `Date: ${{new Date().toUTCString()}}`,
+      `MIME-Version: 1.0`,
+      `Content-Type: text/plain; charset=utf-8`,
+      ``,
+      body,
+    ].join("\\r\\n").replace(/\\r\\n\\./g, "\\r\\n.."); // dot-stuffing
+    await command(message + "\\r\\n.", "250");
+    await writer.write(encoder.encode("QUIT\\r\\n"));
+  }} finally {{
+    try {{ conn.close(); }} catch {{ /* already closed */ }}
+  }}
 }}
 
 function requiredEnv(name: string): string {{

@@ -19,6 +19,10 @@ def generate(ctx: Context) -> str:
         visit(concept["name"])
 
     sql_parts = []
+    user_directory_seed = _generate_user_directory_seed(ctx)
+    if user_directory_seed:
+        sql_parts.append(user_directory_seed)
+
     seed_data = _generate_seed_data(ctx)
     if seed_data:
         sql_parts.append(seed_data)
@@ -34,6 +38,34 @@ def generate(ctx: Context) -> str:
                 sql_parts.append(sample_data)
 
     return '\n\n'.join(sql_parts)
+
+
+def _generate_user_directory_seed(ctx: Context) -> str:
+    """Seed the user_directory discovery cache with the model-defined users.
+
+    Runs before auth users exist, so _user stays NULL until each user's first
+    login (the access token hook upserts the row with the real auth uuid).
+    """
+    if not ctx.workflow_config["_concept_workflow"]:
+        return ""
+    if not ctx.security_config["authentication_required"]:
+        return ""
+
+    rows = []
+    for user in ctx.security_config["users"]:
+        email = user["email"].lower()
+        roles_json = ",".join(f'"{role}"' for role in user["roles"])
+        rows.append(
+            f"({_sql_literal(email)}, '[{roles_json}]'::jsonb, 'seed')"
+        )
+    if not rows:
+        return ""
+    return (
+        "-- user_directory discovery cache: model-defined users\n"
+        'INSERT INTO "user_directory" ("email", "roles", "source") VALUES\n'
+        + ",\n".join(rows)
+        + '\nON CONFLICT ("email") DO NOTHING;'
+    )
 
 
 def _profile_role_for_concept(concept_name: str, ctx: Context) -> str:
@@ -88,7 +120,7 @@ def _generate_sample_data_for_concept(concept: Dict[str, Any], ctx: Context) -> 
             if 'calculated' in field or field["_be_sql_type"] == "SERIAL":
                 continue
 
-            if field["name"] == "state_info":
+            if field["name"] in ("state_info", "state_task_owner"):
                 continue
 
             if field_type == "string":

@@ -7,13 +7,14 @@
       "concepts": "order",
       // States are strictly sequential; each can only advance to the next.
       // The 'initial' state doubles as the shopping cart.
+      // assigners: roles that may change the task owner (state_task_owner) in each state
       "states": [
-        { "name": "initial", "description": "Shopping cart — items, coupon and shipping method can be freely changed.", "owners": ["buyer", "admin"] },
-        { "name": "checkout", "description": "Customer is reviewing the cart summary and filling in the shipping/billing addresses before confirming.", "owners": ["buyer", "admin"] },
-        { "name": "confirmed", "description": "Order placed by the customer. Grand total is locked; admin takes over.", "owners": ["admin"] },
-        { "name": "processing", "description": "Admin is preparing the shipment.", "owners": ["admin"] },
-        { "name": "shipped", "description": "Package handed to the carrier.", "owners": ["admin"] },
-        { "name": "delivered", "description": "Package received by the customer. Terminal state.", "owners": ["admin"] }
+        { "name": "initial", "owners": ["buyer", "admin"], "assigners": [], "description": "Shopping cart — items, coupon and shipping method can be freely changed." },
+        { "name": "checkout", "owners": ["buyer", "admin"], "assigners": ["admin"], "description": "Customer is reviewing the cart summary and filling in the shipping/billing addresses before confirming." },
+        { "name": "confirmed", "owners": ["admin"], "assigners": ["admin"], "description": "Order placed by the customer. Grand total is locked; admin takes over." },
+        { "name": "processing", "owners": ["admin"], "assigners": ["admin"], "description": "Admin is preparing the shipment." },
+        { "name": "shipped", "owners": ["admin"], "assigners": ["admin"], "description": "Package handed to the carrier." },
+        { "name": "delivered", "owners": ["admin"], "assigners": ["admin"], "description": "Package received by the customer. Terminal state." }
       ]
     }
   ]

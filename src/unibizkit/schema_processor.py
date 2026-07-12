@@ -393,6 +393,19 @@ class SchemaProcessor:
                         "size": "l"
                     })
 
+                # Task owner: email of the user responsible for moving the workflow
+                # in the current state. Kept as a plain email (no FK to auth.users)
+                # so the user database can be external/federated.
+                if not any(f["name"] == "state_task_owner" for f in concept["fields"]):
+                    concept["fields"].append({
+                        "name": "state_task_owner",
+                        "type": "string",
+                        "description": "Email of the user assigned to the workflow task",
+                        "required": False,
+                        "unique": False,
+                        "size": "s"
+                    })
+
     def _enrich_presentation(self):
         """Inject default values for presentation settings if missing."""
         if "list_field_rules_level_1" not in self.presentation_extended:
@@ -1029,6 +1042,10 @@ class SchemaProcessor:
             return 'internal'
             
         if field["name"] == "state_info":
+            return 'internal'
+
+        if field["name"] == "state_task_owner":
+            # Rendered by the WorkflowSelector assignment controls, not as a plain input
             return 'internal'
 
         if field["name"].startswith("_"):

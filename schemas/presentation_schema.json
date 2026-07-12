@@ -93,6 +93,11 @@
           "type": "string",
           "description": "Name of the concept (resource) to link to. Required for leaf nodes."
         },
+        "workflow": {
+          "type": "string",
+          "enum": ["assignable_tasks", "my_tasks"],
+          "description": "Link to a built-in workflow task page: 'assignable_tasks' (unassigned records the user can claim or assign) or 'my_tasks' (records assigned to the user)."
+        },
         "children": {
           "type": "array",
           "description": "Sub-menu items",
@@ -104,6 +109,7 @@
       "required": ["label"],
       "oneOf": [
         { "required": ["concept"] },
+        { "required": ["workflow"] },
         { "required": ["children"] }
       ],
       "additionalProperties": false

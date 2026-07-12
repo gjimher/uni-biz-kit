@@ -3,10 +3,12 @@ def generate() -> str:
 import {
     useRecordContext,
     useNotify,
-    useRefresh
+    useRefresh,
+    useGetIdentity
 } from 'react-admin';
 import { supabaseClient } from '../supabaseClient';
 import {
+    Autocomplete,
     Box,
     Button,
     Dialog,
@@ -22,7 +24,7 @@ import {
     Tooltip
 } from '@mui/material';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import { useFormContext } from 'react-hook-form';
+import { useFormContext, useController } from 'react-hook-form';
 
 // Pure per-record check, also used by the quick-edit table (one call per row).
 export const workflowCanEditRecord = (workflow, record, identity) => {
@@ -39,7 +41,96 @@ export const useWorkflowCanEdit = (workflow, record, identity, identityLoading) 
     return workflowCanEditRecord(workflow, record, identity);
 };
 
-export const WorkflowSelector = ({ workflow, resource, canEdit }) => {
+// Whether the user can change the task owner in the record's current state.
+export const workflowCanAssignRecord = (workflow, record, identity) => {
+    if (!workflow || !record) return false;
+    const states = workflow.states;
+    const currentStateName = record.state || states[0].name;
+    const currentState = states.find(s => s.name === currentStateName);
+    const userRoles = identity?.roles || [];
+    return currentState?.assigners?.some(role => userRoles.includes(role)) ?? false;
+};
+
+export const useWorkflowCanAssign = (workflow, record, identity, identityLoading) => {
+    if (identityLoading || !record) return false;
+    return workflowCanAssignRecord(workflow, record, identity);
+};
+
+// Form-bound task owner controls: freeSolo email autocomplete (suggestions come
+// from the user_directory discovery cache, limited to users whose roles own the
+// current state) plus an "Assign to me" shortcut.
+const TaskOwnerControl = ({ workflow, canAssign }) => {
+    const record = useRecordContext();
+    const { data: identity } = useGetIdentity();
+    const { field } = useController({
+        name: 'state_task_owner',
+        defaultValue: record?.state_task_owner ?? null,
+    });
+    const [options, setOptions] = React.useState([]);
+
+    const states = workflow.states;
+    const currentStateName = record?.state || states[0].name;
+    const currentState = states.find(s => s.name === currentStateName);
+    const ownerRoles = React.useMemo(() => currentState?.owners || [], [currentStateName]);
+
+    React.useEffect(() => {
+        if (!canAssign) return;
+        let cancelled = false;
+        supabaseClient
+            .from('user_directory')
+            .select('email, roles')
+            .then(({ data }) => {
+                if (cancelled || !data) return;
+                setOptions(
+                    data
+                        .filter(user => (user.roles || []).some(role => ownerRoles.includes(role)))
+                        .map(user => user.email)
+                );
+            });
+        return () => { cancelled = true; };
+    }, [canAssign, ownerRoles]);
+
+    const myEmail = (identity?.email || '').toLowerCase();
+
+    if (!canAssign) {
+        if (!field.value) return null;
+        return (
+            <Typography variant="body2" sx={{ mt: 1 }}>
+                Task owner: <strong>{field.value}</strong>
+            </Typography>
+        );
+    }
+
+    return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+            <Autocomplete
+                freeSolo
+                size="small"
+                options={options}
+                value={field.value || null}
+                onChange={(event, value) => field.onChange(value ? value.toLowerCase() : null)}
+                onInputChange={(event, value, reason) => {
+                    if (reason === 'input' || reason === 'clear') {
+                        field.onChange(value ? value.toLowerCase() : null);
+                    }
+                }}
+                sx={{ minWidth: 300 }}
+                renderInput={(params) => (
+                    <TextField {...params} label="Task owner" placeholder="user email" />
+                )}
+            />
+            <Button
+                size="small"
+                disabled={!myEmail || field.value === myEmail}
+                onClick={() => field.onChange(myEmail)}
+            >
+                Assign to me
+            </Button>
+        </Box>
+    );
+};
+
+export const WorkflowSelector = ({ workflow, resource, canEdit, canAssign = false }) => {
     const record = useRecordContext();
     const notify = useNotify();
     const refresh = useRefresh();
@@ -164,6 +255,7 @@ ${t.text}` : '';
                     You do not have permission to edit in this state.
                 </Typography>
             )}
+            {record && formContext && <TaskOwnerControl workflow={workflow} canAssign={canAssign} />}
 
             <Dialog open={!!pendingState} onClose={handleCancel} maxWidth="sm" fullWidth>
                 <DialogTitle>{`Change state to "${pendingState}"?`}</DialogTitle>

@@ -5,8 +5,8 @@ UniBizKit is intentionally developed in phases. See [docs/README.md](README.md) 
 ## Short Term
 
 * Database migration deployment scripts, with schema-compatibility checks against the deployed database
-* Workflow-based task assignment (see [Workflow.md](Workflow.md))
 * Backend integration functions and schema adaptation (importing and mapping external schemas)
+* External user directory synchronization (LDAP/IdC/CDC) feeding the workflow `user_directory` cache (see [Workflow.md](Workflow.md))
 * `on delete` copy-data relationships: snapshot the related record's data instead of cascading or restricting
 * Mandatory profile fields collected when a new user signs up
 * Data versioning and record history

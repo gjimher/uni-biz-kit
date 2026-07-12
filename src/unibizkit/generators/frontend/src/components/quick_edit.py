@@ -1118,8 +1118,9 @@ export const QuickEditButton = () => {
   );
 };
 
-// Clears the persisted DatagridConfigurable column selection for this resource.
-export const RESET_COLUMNS_BUTTON = () => {
+// Clears the persisted DatagridConfigurable column selection for this resource
+// (or for an explicit preferenceKey when the datagrid uses a custom one).
+export const RESET_COLUMNS_BUTTON = ({ preferenceKey }) => {
   const { resource } = useListContext();
   const removeItems = useRemoveItemsFromStore();
   const notify = useNotify();
@@ -1129,7 +1130,7 @@ export const RESET_COLUMNS_BUTTON = () => {
         size="small"
         startIcon={<ResetColumnsIcon />}
         onClick={() => {
-          removeItems(`preferences.${resource}.datagrid`);
+          removeItems(`preferences.${preferenceKey ?? `${resource}.datagrid`}`);
           notify('Columns reset to default', { type: 'info' });
         }}
       >

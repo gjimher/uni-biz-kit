@@ -33,6 +33,13 @@
       "children": [
         { "label": "Shipping Methods", "concept": "shipping_method" }
       ]
+    },
+    {
+      "label": "Tasks",
+      "children": [
+        { "label": "Assignable tasks", "workflow": "assignable_tasks" },
+        { "label": "My tasks", "workflow": "my_tasks" }
+      ]
     }
   ],
   "list_field_rules_level_2": {

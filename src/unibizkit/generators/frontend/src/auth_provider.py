@@ -93,7 +93,7 @@ export const authProvider = {{
         const {{ data, error }} = await supabaseClient.auth.getUser();
         if (error) throw error;
         if (!data.user) throw new Error('No authenticated user');
-        return {{ id: data.user.id, fullName: data.user.email, roles: extractRoles(data.user) }};
+        return {{ id: data.user.id, fullName: data.user.email, email: data.user.email, roles: extractRoles(data.user) }};
     }},
 
     getPermissions: async () => {{

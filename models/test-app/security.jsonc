@@ -34,6 +34,8 @@
   // Seed users created at deploy time (development only — use strong passwords in production)
   "users": [
     { "email": "admin@test.com", "password": "adminadmin", "roles": ["admin"] },
+    // Second admin so workflow task assignment between assigners can be exercised
+    { "email": "admin2@test.com", "password": "adminadmin", "roles": ["admin"] },
     { "email": "user1@test.com", "password": "useruser", "roles": ["user"] },
     { "email": "user2@test.com", "password": "useruser", "roles": ["user"] }
   ],

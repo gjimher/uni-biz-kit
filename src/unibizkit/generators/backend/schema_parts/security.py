@@ -263,7 +263,7 @@ REVOKE EXECUTE ON FUNCTION public.sync_role_profiles(uuid, text, jsonb, jsonb) F
 """
 
 
-def _generate_access_token_hook(security_config: Dict[str, Any]) -> str:
+def _generate_access_token_hook(security_config: Dict[str, Any], workflow_config: Dict[str, Any]) -> str:
     sso_config = security_config["sso"]
     role_claim = sso_config.get('role_claim', 'roles')
     default_role = sso_config.get('default_role', 'user')
@@ -274,6 +274,21 @@ def _generate_access_token_hook(security_config: Dict[str, Any]) -> str:
         sync_profiles_sql = """
   PERFORM public.sync_role_profiles(current_user_id, current_email, effective_roles,
     coalesce(claims -> 'user_metadata', '{}'::jsonb));
+"""
+
+    user_directory_sql = ""
+    if workflow_config["_concept_workflow"]:
+        user_directory_sql = """
+  -- Refresh the user_directory discovery cache (workflow task assignment).
+  IF current_email IS NOT NULL THEN
+    INSERT INTO public.user_directory ("email", "_user", "roles", "source", "last_seen_at")
+    VALUES (lower(current_email), current_user_id, effective_roles, 'login', now())
+    ON CONFLICT ("email") DO UPDATE
+    SET "_user" = EXCLUDED."_user",
+        "roles" = EXCLUDED."roles",
+        "source" = 'login',
+        "last_seen_at" = now();
+  END IF;
 """
 
     return f"""
@@ -330,7 +345,7 @@ BEGIN
   END IF;
 
   current_email := claims ->> 'email';
-{sync_profiles_sql}
+{user_directory_sql}{sync_profiles_sql}
   RETURN jsonb_set(event, '{{claims}}', claims);
 END;
 $$;
@@ -376,7 +391,7 @@ def generate_security_policies(
     if security_config["_profile_concepts"]:
         policies.append(_generate_profile_sync_function(concept_map, security_config))
 
-    policies.append(_generate_access_token_hook(security_config))
+    policies.append(_generate_access_token_hook(security_config, workflow_config))
 
     registration = security_config["registration"]
     if registration["allow"]:
@@ -477,8 +492,17 @@ WITH CHECK (true);
                     state_name = state["name"]
                     owners = state["owners"]
                     roles_json_array = ", ".join(f"'{r}'" for r in owners)
+                    # Owners guard business edits; a change limited to
+                    # state_task_owner is governed by the assigners check below,
+                    # so it is carved out of the owners comparison.
                     trigger_checks.append(f"""
-    IF (TG_OP IN ('UPDATE', 'DELETE') AND OLD."state" = '{state_name}') THEN
+    IF (TG_OP = 'DELETE' AND OLD."state" = '{state_name}')
+       OR (
+           TG_OP = 'UPDATE' AND OLD."state" = '{state_name}'
+           -- _updated_at is already bumped by the 01_set_system_timestamps trigger
+           AND (to_jsonb(NEW) - 'state_task_owner' - '_updated_at') IS DISTINCT FROM (to_jsonb(OLD) - 'state_task_owner' - '_updated_at')
+       )
+    THEN
         IF NOT (user_roles ?| array[{roles_json_array}]) THEN
             RAISE EXCEPTION 'Insufficient privilege for state {state_name}' USING ERRCODE = 'insufficient_privilege';
         END IF;
@@ -488,6 +512,22 @@ WITH CHECK (true);
         IF NOT (user_roles ?| array[{roles_json_array}]) THEN
             RAISE EXCEPTION 'Insufficient privilege for state {state_name}' USING ERRCODE = 'insufficient_privilege';
         END IF;
+    END IF;""")
+
+                    assigners = state["assigners"]
+                    if assigners:
+                        assigners_json_array = ", ".join(f"'{r}'" for r in assigners)
+                        assigners_guard = f"""
+        IF NOT (user_roles ?| array[{assigners_json_array}]) THEN
+            RAISE EXCEPTION 'Insufficient privilege to assign task in state {state_name}' USING ERRCODE = 'insufficient_privilege';
+        END IF;"""
+                    else:
+                        assigners_guard = f"""
+        RAISE EXCEPTION 'Task assignment is not allowed in state {state_name}' USING ERRCODE = 'insufficient_privilege';"""
+                    trigger_checks.append(f"""
+    IF (TG_OP = 'UPDATE' AND OLD."state" = '{state_name}' AND NEW."state_task_owner" IS DISTINCT FROM OLD."state_task_owner")
+       OR (TG_OP = 'INSERT' AND NEW."state" = '{state_name}' AND NEW."state_task_owner" IS NOT NULL)
+    THEN{assigners_guard}
     END IF;""")
 
             for field in concept["fields"]:

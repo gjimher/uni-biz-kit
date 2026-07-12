@@ -13,6 +13,11 @@ it contains, so confirmation URLs can be opened straight from the terminal.
 
 Listens on 0.0.0.0 at this app's SMTP port (the one configured for Supabase
 in the generated config). Stop with Ctrl+C.
+
+Accepts a non-standard SHUTDOWN command from loopback connections only: the
+integration tests use it to free the port for their own in-process SMTP mock
+(so a forgotten running mock never breaks a pytest run). Relaunch this script
+after the tests if you want to keep watching emails.
 """
 
 import argparse
@@ -39,9 +44,10 @@ def extract_links(body: str) -> list:
 
 
 class SMTPSession:
-    def __init__(self, reader, writer):
+    def __init__(self, reader, writer, shutdown_event):
         self.reader = reader
         self.writer = writer
+        self.shutdown_event = shutdown_event
         self.mail_from = ""
         self.rcpt_to = []
         self.data_lines = []
@@ -93,6 +99,14 @@ class SMTPSession:
                     await self.send("235 Authentication successful")
                 elif cmd == "NOOP":
                     await self.send("250 OK")
+                elif cmd == "SHUTDOWN":
+                    # Non-standard: lets the integration tests free the port.
+                    peer = (self.writer.get_extra_info("peername") or ("",))[0]
+                    if peer in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
+                        await self.send("221 Shutting down")
+                        self.shutdown_event.set()
+                        break
+                    await self.send("550 SHUTDOWN is only allowed from loopback")
                 else:
                     await self.send("500 Command not recognized")
         except (asyncio.TimeoutError, ConnectionResetError):
@@ -112,15 +126,21 @@ class SMTPSession:
         print(output, flush=True)
 
 
-async def handle_client(reader, writer):
-    await SMTPSession(reader, writer).handle()
-
-
 async def serve(port):
+    shutdown_event = asyncio.Event()
+
+    async def handle_client(reader, writer):
+        await SMTPSession(reader, writer, shutdown_event).handle()
+
     server = await asyncio.start_server(handle_client, "0.0.0.0", port)
     print(f"\n{'=' * 60}\n  Dev SMTP Mock — listening on port {port}\n{'=' * 60}\n", flush=True)
     async with server:
-        await server.serve_forever()
+        await shutdown_event.wait()
+    print(
+        "\nSMTP mock stopped: port released on SHUTDOWN request "
+        "(the integration tests do this; relaunch this script when they finish).",
+        flush=True,
+    )
 
 
 def main():

@@ -5,6 +5,11 @@ from .schema_parts.documents import generate_document_tables
 from .schema_parts.internal_columns import generate_internal_column_protection, generate_system_timestamp_triggers
 from .schema_parts.triggers import generate_presentation_triggers, generate_rollup_triggers, generate_copy_triggers
 from .schema_parts.security import generate_security_policies
+from .schema_parts.workflow_tasks import (
+    generate_user_directory,
+    generate_task_assignment_email_triggers,
+    generate_workflow_tasks_view,
+)
 from . import rules
 
 
@@ -57,6 +62,9 @@ def generate(ctx: Context) -> str:
     sql_parts.extend(generate_copy_triggers(ctx.concepts, ctx.concept_map, ctx.security_config))
     sql_parts.extend(generate_presentation_triggers(ctx.concepts))
     sql_parts.extend(rules.generate_async_rule_execution_sql(ctx))
+    sql_parts.extend(generate_user_directory(ctx.workflow_config, ctx.security_config))
+    sql_parts.extend(generate_workflow_tasks_view(ctx.workflow_config, ctx.security_config))
+    sql_parts.extend(generate_task_assignment_email_triggers(ctx.workflow_config, ctx.security_config))
 
     if ctx.security_config["authentication_required"]:
         sql_parts.extend(generate_security_policies(

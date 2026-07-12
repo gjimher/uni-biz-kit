@@ -504,7 +504,7 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     create_workflow_ui = ""
     if concept_workflow:
         wf_json_early = json.dumps(concept_workflow)
-        workflow_import = "import { WorkflowSelector, useWorkflowCanEdit } from '../../components/workflow_selector';"
+        workflow_import = "import { WorkflowSelector, useWorkflowCanEdit, useWorkflowCanAssign } from '../../components/workflow_selector';"
         create_workflow_ui = f'<WorkflowSelector workflow={{{wf_json_early}}} resource="{resource_name}" canEdit={{false}} />'
 
     component_imports = [
@@ -512,6 +512,10 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         f"import {{ CustomEditToolbar }} from '../../components/custom_edit_toolbar';",
         f"import {{ ImportExportActions }} from '../../components/import_export';"
     ]
+    if not workflow_import and "WorkflowSelector" in child_dialog_components:
+        # Child dialogs render the selector when the child concept has a
+        # workflow, even if this (parent) concept does not.
+        workflow_import = "import { WorkflowSelector } from '../../components/workflow_selector';"
     if workflow_import:
         component_imports.append(workflow_import)
 
@@ -559,9 +563,9 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         wf_json = json.dumps(concept_workflow)
         inner_comp_name = f"{resource_name.upper()}_EDIT_FORM"
         if owned_children or many_to_many_links or has_documents:
-            form_content = f"""<TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} />}}{validate_prop}>
+            form_content = f"""<TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} workflowCanAssign={{canAssign}} />}}{validate_prop}>
       <FormTab label="Summary">
-        <WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" canEdit={{canEdit}} />
+        <WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" canEdit={{canEdit}} canAssign={{canAssign}} />
         <Box sx={{{{ pointerEvents: canEdit ? 'auto' : 'none', opacity: canEdit ? 1 : 0.6 }}}}>
           <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
             {field_components["edit_fields"]}
@@ -573,8 +577,8 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
       {relations_tab}
     </TabbedForm>"""
         else:
-            form_content = f"""<SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} />}}{validate_prop}>
-      <WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" canEdit={{canEdit}} />
+            form_content = f"""<SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} workflowCanAssign={{canAssign}} />}}{validate_prop}>
+      <WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" canEdit={{canEdit}} canAssign={{canAssign}} />
       <Box sx={{{{ pointerEvents: canEdit ? 'auto' : 'none', opacity: canEdit ? 1 : 0.6 }}}}>
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
           {field_components["edit_fields"]}
@@ -587,6 +591,7 @@ const {inner_comp_name} = () => {{
     const {{ permissions }} = usePermissions();
     const {{ data: identity, isLoading: identityLoading }} = useGetIdentity();
     const canEdit = useWorkflowCanEdit({wf_json}, record, identity, identityLoading);
+    const canAssign = useWorkflowCanAssign({wf_json}, record, identity, identityLoading);
     return (
         {form_content}
     );

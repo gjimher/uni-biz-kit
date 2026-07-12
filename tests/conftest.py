@@ -83,17 +83,71 @@ def pytest_addoption(parser):
     )
 
 
+def ensure_smtp_port_free(port=SMTP_PORT):
+    """Free the SMTP port for tests that bind their own in-process mock.
+
+    A running bin/dev-smtp-mock.py (often left open in a terminal) would make
+    the bind fail. Identify it by its SMTP greeting and ask it to exit through
+    its loopback-only SHUTDOWN command; never touch an unknown process.
+    """
+    import socket
+    import time
+
+    def bindable():
+        with socket.socket() as probe:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                probe.bind(("0.0.0.0", port))
+                return True
+            except OSError:
+                return False
+
+    if bindable():
+        return
+
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as conn:
+            conn.settimeout(5)
+            stream = conn.makefile("rwb")
+            greeting = stream.readline().decode(errors="replace")
+            if "SMTP Mock" not in greeting:
+                pytest.fail(
+                    f"Port {port} is in use by an unknown process "
+                    f"(greeting: {greeting.strip()!r}); free it before running the tests"
+                )
+            stream.write(b"SHUTDOWN\r\n")
+            stream.flush()
+            reply = stream.readline().decode(errors="replace")
+            if not reply.startswith("221"):
+                pytest.fail(
+                    f"The dev-smtp-mock on port {port} did not accept SHUTDOWN "
+                    f"({reply.strip()!r}); it predates the SHUTDOWN command — "
+                    "stop it manually and regenerate the app"
+                )
+    except OSError as error:
+        pytest.fail(f"Port {port} is busy but not connectable: {error}")
+
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        if bindable():
+            print(f"Stopped a running dev-smtp-mock to free port {port} for the tests")
+            return
+        time.sleep(0.1)
+    pytest.fail(f"Port {port} is still busy after asking the dev-smtp-mock to shut down")
+
+
 @pytest.fixture(scope="module")
 def smtp_server():
     """Start an in-process SMTP mock on port 3010 for the duration of the module."""
     try:
         from aiosmtpd.controller import Controller
-        controller = Controller(MockSMTPHandler(), hostname="0.0.0.0", port=SMTP_PORT)
-        controller.start()
-        yield controller
-        controller.stop()
     except ImportError:
         pytest.skip("aiosmtpd not installed — run: pip install aiosmtpd")
+    ensure_smtp_port_free()
+    controller = Controller(MockSMTPHandler(), hostname="0.0.0.0", port=SMTP_PORT)
+    controller.start()
+    yield controller
+    controller.stop()
 
 def pytest_collection_modifyitems(config, items):
     """Enforce test file execution order:

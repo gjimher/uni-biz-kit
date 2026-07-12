@@ -19,7 +19,14 @@ import {{
     VerifiedUser as RoleIcon,
     HelpOutline as HelpOutlineIcon,
     Home as HomeIcon,
+    AssignmentInd as AssignableTasksIcon,
+    AssignmentTurnedIn as MyTasksIcon,
 }} from '@mui/icons-material';
+
+const WORKFLOW_PAGE_ROUTES = {{
+    assignable_tasks: '/workflow/assignable',
+    my_tasks: '/workflow/mine',
+}};
 
 const menuItems = {menu_items_json};
 const conceptDescriptions = {concept_descriptions_json};
@@ -73,6 +80,16 @@ const RenderMenu = ({{ items, state, handleToggle }}) => {{
              >
                 <RenderMenu items={{item.children}} state={{state}} handleToggle={{handleToggle}} />
              </SubMenu>
+         );
+     }} else if (item.workflow) {{
+         const Icon = item.workflow === 'assignable_tasks' ? <AssignableTasksIcon /> : <MyTasksIcon />;
+         return (
+             <Menu.Item
+                key={{item.workflow}}
+                to={{WORKFLOW_PAGE_ROUTES[item.workflow]}}
+                primaryText={{item.label}}
+                leftIcon={{Icon}}
+             />
          );
      }} else {{
          let Icon = null;

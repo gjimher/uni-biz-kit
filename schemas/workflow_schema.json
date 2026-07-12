@@ -33,9 +33,19 @@
                 "owners": {
                   "type": "array",
                   "items": { "type": "string" }
+                },
+                "assigners": {
+                  "type": "array",
+                  "description": "Roles that can change the task owner (state_task_owner) while the record is in this state",
+                  "items": { "type": "string" }
+                },
+                "retain_task_owner": {
+                  "type": "boolean",
+                  "description": "When entering this state, keep the previous task owner instead of clearing it back to the assignable pool",
+                  "default": false
                 }
               },
-              "required": ["name", "owners"],
+              "required": ["name", "owners", "assigners"],
               "additionalProperties": false
             }
           }
