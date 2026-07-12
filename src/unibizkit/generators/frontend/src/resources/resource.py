@@ -538,6 +538,14 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         field_components["list_fields"], field_components["show_fields"],
         field_components["child_tabs"], child_dialog_components,
     ])
+    snapshot_imports = [
+        name for name in ("DeletedSnapshotReference", "DeletedSnapshotReferenceInput")
+        if name in markdown_scan
+    ]
+    if snapshot_imports:
+        component_imports.append(
+            f"import {{ {', '.join(snapshot_imports)} }} from '../../components/deleted_snapshot_reference';"
+        )
     markdown_imports = [name for name in ("MarkdownInput", "MarkdownField") if name in markdown_scan]
     if markdown_imports:
         component_imports.append(f"import {{ {', '.join(markdown_imports)} }} from '../../components/markdown_input';")

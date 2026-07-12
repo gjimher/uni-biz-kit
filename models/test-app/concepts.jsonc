@@ -113,8 +113,8 @@
       "fields": [
         // part_of: order_item is owned by order; deleting an order removes its items
         { "name": "order", "type": "relation_to_one", "subtype": "part_of", "target": "order" },
-        // related_to: loose reference; deleting a product does NOT cascade to order items
-        { "name": "product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "description": "Product ordered" },
+        // snapshot_data: deleting a product clears the FK and preserves the deleted product as JSON
+        { "name": "product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "on_delete": "snapshot_data", "description": "Product ordered" },
         { "name": "quantity", "type": "integer", "required": true, "min": 1, "description": "Quantity of the product" },
         // calculated copy(product,price,on_change_in_state_initial): snapshots product.price only while the
         // order is in state "initial"; once "ordered", the price is frozen.

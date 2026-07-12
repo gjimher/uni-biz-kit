@@ -16,7 +16,7 @@ from .src.layout import (
 from .src.components import (
     title, reorderable_datagrid, recursive_parent_selector,
     custom_edit_toolbar, document_tab, workflow_selector, field_help_icon,
-    markdown_input, import_export, quick_edit, workflow_tasks
+    markdown_input, import_export, quick_edit, workflow_tasks, deleted_snapshot_reference
 )
 from .src.resources import resource
 from .src.presentation import model_js, router, custom_page
@@ -135,6 +135,8 @@ class ReactAdminGenerator:
         _write(ctx.output_dir / "src" / "components" / "field_help_icon.jsx", field_help_icon.generate())
         _write(ctx.output_dir / "src" / "components" / "import_export.jsx", import_export.generate())
         _write(ctx.output_dir / "src" / "components" / "quick_edit.jsx", quick_edit.generate())
+        if any(f.get("on_delete") == "snapshot_data" for c in ctx.concepts for f in c["fields"]):
+            _write(ctx.output_dir / "src" / "components" / "deleted_snapshot_reference.jsx", deleted_snapshot_reference.generate())
         if ctx.workflow_config["_concept_workflow"]:
             _write(ctx.output_dir / "src" / "workflowConfig.js", workflow_config.generate(ctx))
             _write(ctx.output_dir / "src" / "components" / "workflow_tasks.jsx", workflow_tasks.generate())

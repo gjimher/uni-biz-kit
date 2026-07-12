@@ -132,6 +132,11 @@
                   "type": "string",
                   "description": "Target concept name for relations"
                 },
+                "on_delete": {
+                  "type": "string",
+                  "description": "Deletion behavior for a relation_to_one. Defaults to 'cascade' when required is true and to 'set_null' when required is false. 'cascade' deletes referencing records; 'set_null' clears the foreign key and requires an optional relation; 'snapshot_data' first stores the referenced row as JSON in an internal _<field>_deleted_snapshot column and then clears the foreign key, so it also requires an optional relation.",
+                  "enum": ["cascade", "set_null", "snapshot_data"]
+                },
                 "required": {
                   "type": "boolean",
                   "description": "Whether the field is required. Defaults to false, except for relation_to_one with subtype 'part_of' where it defaults to true.",

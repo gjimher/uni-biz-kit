@@ -115,10 +115,46 @@ def test_special_required_default():
             assert field['name'] == 'order'
             assert 'required' in field, "required should be populated"
             assert field['required'] is True, "required should default to True for part_of relations"
+            assert field['on_delete'] == 'cascade'
 
         finally:
             # TemporaryDirectory handles cleanup
             pass
+
+
+def test_optional_relation_defaults_to_set_null():
+    schema_content = {
+        "version": "1.0.0",
+        "name": "Test App",
+        "concepts": [
+            {
+                "name": "item",
+                "fields": [
+                    {
+                        "name": "category",
+                        "type": "relation_to_one",
+                        "subtype": "related_to",
+                        "target": "category",
+                    }
+                ],
+                "id_presentation": {"fields": ["category"]},
+            }
+        ],
+    }
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "concepts.jsonc"
+        temp_path.write_text(json.dumps(schema_content))
+        (Path(temp_dir) / "presentation.jsonc").write_text("{}")
+        (Path(temp_dir) / "security.jsonc").write_text(
+            json.dumps({"authentication_required": False})
+        )
+        _write_deployment(temp_dir)
+
+        loaded_schema = SchemaLoader().load_and_validate(str(temp_path))
+        relation = loaded_schema["concepts"][0]["fields"][0]
+        assert relation["required"] is False
+        assert relation["on_delete"] == "set_null"
 
 
 _MINIMAL_CONCEPTS = {

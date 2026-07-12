@@ -342,7 +342,11 @@ def generate_field_components(
 
                 if field["type"] == "relation_to_one":
                     target = field["target"]
-                    child_raw_columns.append((fname, f'<ReferenceField source="{fname}" reference="{target}" link={{false}}{fcol_label}><TextField source="id_presentation" /></ReferenceField>'))
+                    if field.get("on_delete") == "snapshot_data":
+                        snapshot_source = f"_{fname}_deleted_snapshot"
+                        child_raw_columns.append((fname, f'<DeletedSnapshotReference source="{fname}" reference="{target}" snapshotSource="{snapshot_source}"{fcol_label} />'))
+                    else:
+                        child_raw_columns.append((fname, f'<ReferenceField source="{fname}" reference="{target}" link={{false}}{fcol_label}><TextField source="id_presentation" /></ReferenceField>'))
                 elif field["type"] == "decimal" and field.get("subtype") == "money":
                     currency = presentation_config["currency"]
                     number_locale = presentation_config["number_locale"]
@@ -464,7 +468,11 @@ def generate_field_components(
                 else:
                     input_inner = f'<SelectInput optionText="id_presentation"{full_width}{validation}{margin}{disabled_prop}{label_prop} />'
 
-                input_html = f'          <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{input_inner}</ReferenceInput>'
+                if field.get("on_delete") == "snapshot_data":
+                    snapshot_source = f"_{field_name}_deleted_snapshot"
+                    input_html = f'          <DeletedSnapshotReferenceInput source="{field_name}" reference="{target}" snapshotSource="{snapshot_source}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{input_inner}</DeletedSnapshotReferenceInput>'
+                else:
+                    input_html = f'          <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{input_inner}</ReferenceInput>'
 
                 filter_inner = input_inner.replace(f'{validation}{margin}{disabled_prop}{label_prop}', '')
                 filter_fields.append((field_name, f'  <ReferenceInput source="{field_name}" reference="{target}" sort={{{{ field: "id_presentation", order: "ASC" }}}}>{filter_inner}</ReferenceInput>'))
@@ -509,8 +517,13 @@ def generate_field_components(
         show_html = ""
         if field["type"] == "relation_to_one":
             target = field["target"]
-            list_html = f'      <ReferenceField source="{field_name}" reference="{target}" link={{false}}{col_label_prop}><TextField source="id_presentation" /></ReferenceField>'
-            show_html = f'      <ReferenceField source="{field_name}" reference="{target}"{col_label_prop}><TextField source="id_presentation" /></ReferenceField>'
+            if field.get("on_delete") == "snapshot_data":
+                snapshot_source = f"_{field_name}_deleted_snapshot"
+                list_html = f'      <DeletedSnapshotReference source="{field_name}" reference="{target}" snapshotSource="{snapshot_source}"{col_label_prop} />'
+                show_html = list_html
+            else:
+                list_html = f'      <ReferenceField source="{field_name}" reference="{target}" link={{false}}{col_label_prop}><TextField source="id_presentation" /></ReferenceField>'
+                show_html = f'      <ReferenceField source="{field_name}" reference="{target}"{col_label_prop}><TextField source="id_presentation" /></ReferenceField>'
         elif field["type"] == "relation_to_many":
             pass
         elif field["type"] == "decimal":

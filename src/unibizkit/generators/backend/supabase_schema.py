@@ -1,6 +1,6 @@
 from .context import Context
 from .schema_parts.tables import generate_table_sql
-from .schema_parts.joins import generate_join_tables, generate_foreign_key_constraints, get_join_table_names
+from .schema_parts.joins import generate_join_tables, generate_foreign_key_constraints, generate_deleted_snapshot_triggers, get_join_table_names
 from .schema_parts.documents import generate_document_tables
 from .schema_parts.internal_columns import generate_internal_column_protection, generate_system_timestamp_triggers
 from .schema_parts.triggers import generate_presentation_triggers, generate_rollup_triggers, generate_copy_triggers
@@ -57,6 +57,8 @@ def generate(ctx: Context) -> str:
 
     sql_parts.extend(generate_internal_column_protection(generated_table_names, trigger_protected_cols))
     sql_parts.extend(generate_system_timestamp_triggers(generated_table_names))
+
+    sql_parts.extend(generate_deleted_snapshot_triggers(ctx.concepts))
 
     sql_parts.extend(generate_rollup_triggers(ctx.concepts, ctx.concept_map))
     sql_parts.extend(generate_copy_triggers(ctx.concepts, ctx.concept_map, ctx.security_config))

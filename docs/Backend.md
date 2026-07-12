@@ -58,6 +58,12 @@ Relations declare their `target` concept. A `relation_to_one` also declares a `s
 * `part_of` — ownership: the child belongs to the parent and deleting the parent **cascades** to the children (e.g. `order_item` part_of `order`, `address` part_of `customer`). A self-referential `part_of` (target = own concept) models a tree.
 * `related_to` — a loose foreign key: deleting the target does **not** cascade (e.g. `order` related_to `customer`).
 
+An optional `relation_to_one` can set `on_delete` to `snapshot_data`. Before the
+referenced row is deleted, its complete JSON representation is stored in the
+internal `_<field>_deleted_snapshot` column. PostgreSQL then applies `ON DELETE
+SET NULL` to the foreign key. The generated UI continues linking to a live
+record and, after deletion, opens the stored snapshot in a dialog instead.
+
 `relation_to_many` generates a join table. `prefill` copies values from a related sub-collection into the record inline: the user picks one related record (e.g. one of the customer's saved addresses) and its fields are expanded onto this concept (`shipping_address_street`, `shipping_address_city`, …). `markdown` is long-form text stored as `TEXT` and edited in the UI with a markdown editor (source + live preview).
 
 Some types accept a `subtype` refining rendering/storage — e.g. `decimal` with `subtype: "money"` renders as currency in the UI.

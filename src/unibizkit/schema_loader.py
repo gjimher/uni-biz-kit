@@ -355,6 +355,9 @@ class SchemaLoader:
                         if field["target"] != concept["name"]:
                             field["required"] = True
 
+                if field["type"] == "relation_to_one" and "on_delete" not in field:
+                    field["on_delete"] = "cascade" if field.get("required", False) else "set_null"
+
     def _validate_seed_data_against_business_schema(self, business_schema: Dict[str, Any]):
         """
         Validate seed data references against concepts, fields and document tags.

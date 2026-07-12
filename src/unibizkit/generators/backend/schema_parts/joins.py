@@ -65,7 +65,11 @@ def generate_foreign_key_constraints(
                 target_table = field["target"]
                 field_name = field["name"]
                 constraint_name = f"fk_{table_name}_{field_name}"
-                on_delete = "CASCADE" if field["required"] else "SET NULL"
+                on_delete = {
+                    "cascade": "CASCADE",
+                    "set_null": "SET NULL",
+                    "snapshot_data": "SET NULL",
+                }[field["on_delete"]]
                 is_part_of = field.get("subtype") == "part_of"
                 if on_delete == "CASCADE" and target_table in profile_concepts and not is_part_of:
                     raise ValueError(
@@ -81,3 +85,36 @@ ALTER TABLE "{table_name}"
                 fk_constraints.append(fk_sql)
 
     return fk_constraints
+
+
+def generate_deleted_snapshot_triggers(concepts: List[Dict[str, Any]]) -> List[str]:
+    """Snapshot referenced rows before ON DELETE SET NULL clears their foreign keys."""
+    sql_parts = []
+    for concept in concepts:
+        referencing_table = concept["name"]
+        for field in concept["fields"]:
+            if field.get("on_delete") != "snapshot_data":
+                continue
+            field_name = field["name"]
+            target_table = field["target"]
+            snapshot_field = f"_{field_name}_deleted_snapshot"
+            function_name = f"snapshot_{referencing_table}_{field_name}_before_delete"
+            trigger_name = f"snapshot_{referencing_table}_{field_name}_before_delete_trigger"
+            sql_parts.append(f'''
+CREATE OR REPLACE FUNCTION "{function_name}"()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE "{referencing_table}"
+  SET "{snapshot_field}" = to_jsonb(OLD)
+  WHERE "{field_name}" = OLD."id";
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS "{trigger_name}" ON "{target_table}";
+CREATE TRIGGER "{trigger_name}"
+BEFORE DELETE ON "{target_table}"
+FOR EACH ROW
+EXECUTE FUNCTION "{function_name}"();
+''')
+    return sql_parts

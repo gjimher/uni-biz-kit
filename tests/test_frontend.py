@@ -99,6 +99,19 @@ class TestAppFrontend:
         assert 'QuickEditButton' in import_export_jsx
         assert 'SelectColumnsButton' in import_export_jsx
 
+        order_item_resource = (frontend_dir / 'src' / 'resources' / 'order_item' / 'order_item.jsx').read_text()
+        assert "from '../../components/deleted_snapshot_reference'" in order_item_resource
+        assert '<DeletedSnapshotReference source="product" reference="product" snapshotSource="_product_deleted_snapshot"' in order_item_resource
+        assert '<DeletedSnapshotReferenceInput source="product" reference="product" snapshotSource="_product_deleted_snapshot"' in order_item_resource
+        assert (frontend_dir / 'src' / 'components' / 'deleted_snapshot_reference.jsx').exists()
+        deleted_snapshot_component = (frontend_dir / 'src' / 'components' / 'deleted_snapshot_reference.jsx').read_text()
+        assert 'Deleted: ${displayValue}' in deleted_snapshot_component
+        assert 'color="error"' in deleted_snapshot_component
+
+        order_resource = (frontend_dir / 'src' / 'resources' / 'order' / 'order.jsx').read_text()
+        assert '<DeletedSnapshotReference source="product" reference="product" snapshotSource="_product_deleted_snapshot"' in order_resource
+        assert '<DeletedSnapshotReferenceInput source="product" reference="product" snapshotSource="_product_deleted_snapshot"' in order_resource
+
         # Change to frontend directory
         original_cwd = os.getcwd()
         

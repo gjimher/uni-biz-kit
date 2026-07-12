@@ -159,12 +159,12 @@
         // Not required at cart creation (initial state); filled in at checkout.
         { "name": "shipping_address", "type": "prefill", "subtype": "customer.addresses", "description": "Delivery address (prefilled from saved addresses)" },
         { "name": "billing_address", "type": "prefill", "subtype": "customer.addresses", "description": "Billing address (prefilled from saved addresses)" },
-        { "name": "coupon", "type": "relation_to_one", "subtype": "related_to", "target": "coupon", "description": "Applied coupon code (if any)" },
+        { "name": "coupon", "type": "relation_to_one", "subtype": "related_to", "target": "coupon", "on_delete": "snapshot_data", "description": "Applied coupon code (if any)" },
         // Copied from coupon.discount_type when the coupon FK changes; decouples the order
         // total from later coupon edits or deletion.
         { "name": "coupon_snapshot_type", "type": "string", "max_length": 20, "calculated": "copy(coupon,discount_type,on_change)", "description": "Coupon discount type at the time of application" },
         { "name": "coupon_snapshot_value", "type": "decimal", "precision": 10, "scale": 2, "calculated": "copy(coupon,discount_value,on_change)", "description": "Coupon discount value at the time of application" },
-        { "name": "shipping_method", "type": "relation_to_one", "subtype": "related_to", "target": "shipping_method", "description": "Chosen shipping method" },
+        { "name": "shipping_method", "type": "relation_to_one", "subtype": "related_to", "target": "shipping_method", "on_delete": "snapshot_data", "description": "Chosen shipping method" },
         // Copied from shipping_method.base_cost when the method changes
         { "name": "shipping_costs", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "calculated": "copy(shipping_method,base_cost,on_change)", "description": "Shipping cost snapshotted from the chosen method" },
         // Kept in sync by trigger whenever an order_item.total_price changes
@@ -193,7 +193,7 @@
       "id_presentation": { "fields": ["id"] },
       "fields": [
         { "name": "order", "type": "relation_to_one", "subtype": "part_of", "target": "order", "description": "Parent order" },
-        { "name": "variant", "type": "relation_to_one", "subtype": "related_to", "target": "product_variant", "description": "Product variant ordered" },
+        { "name": "variant", "type": "relation_to_one", "subtype": "related_to", "target": "product_variant", "on_delete": "snapshot_data", "description": "Product variant ordered" },
         // Snapshot of the variant name while the parent order is in 'initial'; preserves the
         // label even if the variant is later renamed or deleted.
         { "name": "product_name", "type": "string", "max_length": 300, "calculated": "copy(variant,name,on_change_in_state_initial)", "description": "Variant name captured at cart time" },

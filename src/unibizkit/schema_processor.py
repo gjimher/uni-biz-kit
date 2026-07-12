@@ -844,6 +844,43 @@ class SchemaProcessor:
         Returns a new dictionary with _type inserted early.
         """
         name = concept["name"]
+
+        snapshot_fields = []
+        existing_field_names = {field["name"] for field in concept["fields"]}
+        for field in concept["fields"]:
+            if "on_delete" not in field:
+                if field["type"] == "relation_to_one":
+                    field["on_delete"] = "cascade" if field["required"] else "set_null"
+                else:
+                    continue
+            if field["type"] != "relation_to_one":
+                raise ValueError(
+                    f"Field '{field['name']}' in concept '{name}' uses on_delete "
+                    "but is not a relation_to_one."
+                )
+            if field["on_delete"] in ("set_null", "snapshot_data") and field["required"]:
+                raise ValueError(
+                    f"Field '{field['name']}' in concept '{name}' uses "
+                    f"on_delete '{field['on_delete']}' and must be optional so its foreign key can be set to null."
+                )
+            if field["on_delete"] != "snapshot_data":
+                continue
+            snapshot_name = f"_{field['name']}_deleted_snapshot"
+            if snapshot_name in existing_field_names:
+                raise ValueError(
+                    f"Concept '{name}' cannot generate internal snapshot field "
+                    f"'{snapshot_name}' because a field with that name already exists."
+                )
+            snapshot_fields.append({
+                "name": snapshot_name,
+                "type": "string",
+                "size": "l",
+                "description": f"Snapshot of the deleted record formerly referenced by {field['name']}",
+                "required": False,
+                "unique": False,
+            })
+            existing_field_names.add(snapshot_name)
+        concept["fields"].extend(snapshot_fields)
         
         # Validate uniqueness of part_of
         part_of_fields = [f for f in concept["fields"] 
@@ -991,7 +1028,7 @@ class SchemaProcessor:
         if field_name == "part_of_order":
             return "SERIAL"
             
-        if field_name == "state_info":
+        if field_name == "state_info" or field_name.endswith("_deleted_snapshot"):
             return "JSONB"
 
         if field_name in ("_user", "_user_prev"):

@@ -528,6 +528,57 @@ class TestAppBackend:
 
     @pytest.mark.integration
     @pytest.mark.timeout(60)
+    def test_relation_snapshots_deleted_record_before_fk_is_set_null(self):
+        load_dotenv(Path('test-app/backend/.env'))
+        db_url = os.getenv("DB_URL")
+        assert db_url, "DB_URL must be present in test-app/backend/.env"
+
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute('SELECT "id" FROM "customer" LIMIT 1;')
+                customer_id = cur.fetchone()[0]
+                cur.execute(
+                    '''INSERT INTO "product" ("name", "sku", "price")
+                       VALUES ('Snapshot product', 'SNAPSHOT-DELETE-001', 12.50)
+                       RETURNING id, id_presentation, name, sku;'''
+                )
+                product_id, id_presentation, product_name, sku = cur.fetchone()
+                cur.execute(
+                    '''INSERT INTO "order" (
+                           "customer", "order_date", "shipping_address_street",
+                           "shipping_address_city", "shipping_address_province",
+                           "shipping_address_country", "state"
+                       ) VALUES (%s, NOW(), 'Test Street 1', 'Bilbao', 'Bizkaia', 'Spain', 'initial')
+                       RETURNING id;''',
+                    (customer_id,),
+                )
+                order_id = cur.fetchone()[0]
+                cur.execute(
+                    'INSERT INTO "order_item" ("order", "product", "quantity") VALUES (%s, %s, 1) RETURNING id;',
+                    (order_id, product_id),
+                )
+                item_id = cur.fetchone()[0]
+
+                cur.execute('DELETE FROM "product" WHERE "id" = %s;', (product_id,))
+                cur.execute(
+                    'SELECT "product", "_product_deleted_snapshot" FROM "order_item" WHERE "id" = %s;',
+                    (item_id,),
+                )
+                fk_value, snapshot = cur.fetchone()
+
+                assert fk_value is None
+                assert snapshot["id"] == product_id
+                assert snapshot["id_presentation"] == id_presentation
+                assert snapshot["name"] == product_name
+                assert snapshot["sku"] == sku
+
+            conn.rollback()
+        finally:
+            conn.close()
+
+    @pytest.mark.integration
+    @pytest.mark.timeout(60)
     def test_copy_unit_price_on_change_in_state_initial(self):
         """copy(product,price,on_change_in_state_initial) on order_item.unit_price.
 
