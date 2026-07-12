@@ -700,7 +700,7 @@ def test_seeded_users_login_and_rls():
         pytest.fail(f"Admin failed to update customer.admin_field: {e.code} {e.read().decode()}")
 
 
-def test_signup_metadata_fills_customer_profile():
+def test_signup_metadata_fills_customer_profile(smtp_server):
     """
     Registration metadata (signUp options.data, e.g. first_name/last_name) must be
     copied into the customer profile row created on first login. Fields the user's
@@ -750,6 +750,134 @@ def test_signup_metadata_fills_customer_profile():
                 'DELETE FROM customer WHERE "_user_email" = %s OR "_user_email_prev" = %s',
                 (email, email),
             )
+        conn.close()
+
+
+def test_profile_without_metadata_leaves_ask_after_login_null_and_blocks_clearing(smtp_server):
+    """
+    Signup without metadata must still auto-create the profile at first login,
+    leaving the required "ask_after_login" fields (first_name/last_name) NULL so
+    the app can ask for them. Once the user fills such a field, the security
+    trigger must reject an UPDATE that clears it back to null.
+    """
+    api_url, anon_key = _load_env()
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    db_url = os.getenv("DB_URL")
+    if not service_key or not db_url:
+        pytest.skip("SUPABASE_SERVICE_ROLE_KEY and DB_URL are required")
+
+    email = f"ask_after_login_{int(time.time())}@test.local"
+    password = "AskAfterLogin123!"
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    try:
+        _supabase_signup(api_url, anon_key, email, password)
+        user_id = _supabase_get_user_id_by_email(api_url, service_key, email)
+        assert user_id, "Signup should create the auth user"
+        _supabase_admin_confirm_email(api_url, service_key, user_id)
+
+        ok, token = _supabase_login(api_url, anon_key, email, password)
+        assert ok, f"Login failed after confirmation: {token}"
+
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "id", "first_name", "last_name" FROM customer WHERE "_user" = %s',
+                (user_id,),
+            )
+            row = cur.fetchone()
+            assert row is not None, "First login should create a customer profile"
+            customer_id, first_name, last_name = row
+            assert first_name is None, f"first_name should be NULL without metadata, got {first_name!r}"
+            assert last_name is None, f"last_name should be NULL without metadata, got {last_name!r}"
+
+        auth_headers = {
+            "apikey": anon_key,
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+        }
+        patch_url = f"{api_url}/rest/v1/customer?id=eq.{customer_id}"
+
+        # The user fills the mandatory fields (what the profile dialog does).
+        with urllib.request.urlopen(
+            urllib.request.Request(
+                patch_url,
+                data=json.dumps({"first_name": "Ane", "last_name": "Etxeberria"}).encode("utf-8"),
+                headers=auth_headers,
+                method="PATCH",
+            )
+        ):
+            print("  ask_after_login fields filled by the user")
+
+        # Clearing a filled ask_after_login field must be rejected by the trigger.
+        try:
+            with urllib.request.urlopen(
+                urllib.request.Request(
+                    patch_url,
+                    data=json.dumps({"first_name": None}).encode("utf-8"),
+                    headers=auth_headers,
+                    method="PATCH",
+                )
+            ):
+                pytest.fail("Clearing first_name back to null should be rejected")
+        except urllib.error.HTTPError as e:
+            print(f"  Clearing first_name correctly blocked: {e.code}")
+
+        with conn.cursor() as cur:
+            cur.execute('SELECT "first_name" FROM customer WHERE "id" = %s', (customer_id,))
+            assert cur.fetchone()[0] == "Ane", "first_name must keep its value after the blocked update"
+    finally:
+        _supabase_delete_user_by_email(api_url, service_key, email)
+        with conn.cursor() as cur:
+            cur.execute(
+                'DELETE FROM customer WHERE "_user_email" = %s OR "_user_email_prev" = %s',
+                (email, email),
+            )
+        conn.close()
+
+
+def test_sso_custom_claims_metadata_fills_customer_profile():
+    """
+    GoTrue nests non-standard OIDC claims (Keycloak's given_name/family_name)
+    under user_metadata.custom_claims. from_metadata keys must also be resolved
+    there so SSO logins fill the profile names. Exercises sync_role_profiles
+    directly with an SSO-shaped metadata payload (the real flow needs a live
+    Keycloak — covered by test_e2e_sso_headed.py).
+    """
+    _load_env()  # loads backend/.env into the environment
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("DB_URL is required")
+
+    import uuid
+    fake_user_id = str(uuid.uuid4())
+    email = f"sso_claims_{int(time.time())}@test.local"
+    metadata = json.dumps({
+        "full_name": "User1 Dev",
+        "custom_claims": {"given_name": "Amets", "family_name": "Zubizarreta"},
+    })
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT public.sync_role_profiles(%s::uuid, %s, %s::jsonb, %s::jsonb)",
+                (fake_user_id, email, '["user"]', metadata),
+            )
+            cur.execute(
+                'SELECT "first_name", "last_name" FROM customer WHERE "_user" = %s',
+                (fake_user_id,),
+            )
+            row = cur.fetchone()
+            assert row is not None, "sync_role_profiles should create the profile"
+            assert row == ("Amets", "Zubizarreta"), (
+                f"Names should be filled from custom_claims, got {row!r}"
+            )
+    finally:
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM customer WHERE "_user_email" = %s', (email,))
         conn.close()
 
 

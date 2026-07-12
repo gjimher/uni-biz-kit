@@ -409,7 +409,7 @@ def generate_field_components(
         list_comp = field["_fe_list_component"]
         width_units = field["_fe_grid_width"]
         visibility = field["_fe_visibility"]
-        is_required = field["_be_not_null"]
+        is_required = field["_be_not_null"] or field["required"] == "ask_after_login"
 
         if field_name in exclude_fields:
             continue

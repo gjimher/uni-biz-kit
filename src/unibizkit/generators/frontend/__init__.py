@@ -11,7 +11,8 @@ from .src import (
 )
 from .src.layout import (
     my_app_bar, my_layout, my_login_page, my_menu,
-    my_set_password_page, user_profile_dialog, change_password_dialog
+    my_set_password_page, user_profile_dialog, change_password_dialog,
+    profile_completion_dialog
 )
 from .src.components import (
     title, reorderable_datagrid, recursive_parent_selector,
@@ -116,6 +117,9 @@ class ReactAdminGenerator:
             _write(ctx.output_dir / "src" / "layout" / "UserProfileDialog.jsx", user_profile_dialog.generate())
             _write(ctx.output_dir / "src" / "layout" / "ChangePasswordDialog.jsx", change_password_dialog.generate())
             _write(ctx.output_dir / "src" / "layout" / "MyLoginPage.jsx", my_login_page.generate(ctx))
+            if profile_completion_dialog.gates(ctx):
+                _write(ctx.output_dir / "src" / "layout" / "ProfileCompletionDialog.jsx",
+                       profile_completion_dialog.generate(ctx))
             has_auth_provider = True
 
         has_custom_menu = False

@@ -6,7 +6,7 @@ UniBizKit is intentionally developed in phases. See [docs/README.md](README.md) 
 
 * Backend integration functions and schema adaptation (importing and mapping external schemas)
 * External user directory synchronization (LDAP/IdC/CDC) feeding the workflow `user_directory` cache (see [Workflow.md](Workflow.md))
-* Mandatory profile fields collected when a new user signs up
+* Presentation-lib helpers so custom UIs can build their own profile-completion, password and auth flows easily
 * Data versioning and record history
 * Cross-model integration: one model using the user database of another (today the workaround is [Single Sign-On](SingleSignOn.md))
 * Example models for medium-sized applications

@@ -573,12 +573,11 @@ function CheckoutOverlay({ cart, subtotal, onClose, onPlaced }) {
   const [intent, setIntent] = useState(null);  // { reference, amount, currency, status }
 
   // Prefill the shipping name from the customer profile (saved at registration).
-  // The auto-created placeholder ("Pending Profile") is not worth prefilling.
+  // The names may still be empty when the profile was auto-created without metadata.
   useEffect(() => {
     getProfile().then((profile) => {
       if (!profile) return;
       const { first_name: firstName, last_name: lastName } = profile.record;
-      if (firstName === 'Pending' && lastName === 'Profile') return;
       setForm((f) => ({
         ...f,
         first_name: f.first_name || firstName || '',

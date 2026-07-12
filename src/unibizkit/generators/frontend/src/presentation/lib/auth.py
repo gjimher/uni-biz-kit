@@ -56,7 +56,7 @@ export async function signIn(email, password) {{
 
 // Register a new account. `metadata` (e.g. {{ first_name, last_name }}) is stored
 // as standard Supabase user metadata; when the user's role profile row is created
-// server-side, matching profile columns are filled from it.
+// server-side, profile fields with a from_metadata(...) default are filled from it.
 export async function signUp(email, password, metadata = {{}}) {{
   const {{ data, error }} = await supabaseClient.auth.signUp({{
     email,

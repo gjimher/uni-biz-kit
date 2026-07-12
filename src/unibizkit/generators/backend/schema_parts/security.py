@@ -59,58 +59,40 @@ CREATE TRIGGER on_auth_user_roles_sync
 
 
 def _profile_insert_columns(concept: Dict[str, Any]) -> List[str]:
+    # Any other column is covered by its SQL DEFAULT, a from_metadata default
+    # (see _profile_metadata_column_values), or stays NULL — the SchemaProcessor
+    # rejects profile concepts with required fields that have no default.
     columns = ["_user", "_user_email"]
     if any(f["name"] == "_security_owner_id" for f in concept["fields"]):
         columns.append("_security_owner_id")
-    for field in concept["fields"]:
-        if field["name"] in (
-            "_user", "_user_email", "_user_pending_link", "_security_owner_id",
-            "_user_prev", "_user_email_prev",
-        ):
-            continue
-        if field["type"] == "relation_to_many":
-            continue
-        if "calculated" in field or field["_be_sql_type"] == "SERIAL":
-            continue
-        if field["required"] and "default" in field:
-            continue
-        if field["required"]:
-            raise ValueError(
-                f"Profile concept '{concept['name']}' cannot be auto-created because "
-                f"required field '{field['name']}' has no default"
-            )
     return columns
 
 
-def _profile_metadata_column_values(
-    concept: Dict[str, Any],
-    role_name: str,
-    security_config: Dict[str, Any],
-) -> List[tuple]:
-    """Columns of a fresh profile filled from auth.users.raw_user_meta_data.
+def _profile_metadata_column_values(concept: Dict[str, Any]) -> List[tuple]:
+    """Columns of a fresh profile filled from the token's user_metadata.
 
-    Covers plain string fields the profile's role may write (signUp options.data
-    keys matching a column, e.g. first_name/last_name). The metadata comes from
-    the token claims (target_metadata parameter) — sync_role_profiles must not
-    read auth.users. Empty/missing metadata falls back to the field default so
-    NOT NULL columns stay valid.
+    Covers fields whose default is from_metadata(key[, key...]): the first
+    non-empty key wins, so one field can accept both the signUp options.data key
+    and the SSO claim (e.g. 'from_metadata(first_name, given_name)'). When every
+    key is empty the column is left NULL. The metadata comes from the token
+    claims (target_metadata parameter) — sync_role_profiles must not read
+    auth.users.
     """
-    concept_acl = security_config.get("_acl", {}).get(concept["name"])
     values = []
     for field in concept["fields"]:
-        name = field["name"]
-        if name.startswith("_") or field["type"] != "string" or "calculated" in field:
+        default = field.get("default")
+        if not (isinstance(default, str) and default.startswith("from_metadata(")):
             continue
-        if concept_acl:
-            access = concept_acl["_fields"].get(name, {}).get(
-                role_name, concept_acl["_main"].get(role_name, "none")
-            )
-            if access not in ("write", "owner_write"):
-                continue
-        expr = f"nullif(target_metadata->>{_sql_literal(name)}, '')"
-        if "default" in field:
-            expr = f"coalesce({expr}, {_sql_literal(str(field['default']))})"
-        values.append((name, expr))
+        keys = [k.strip() for k in default[len("from_metadata("):].rstrip(")").split(",")]
+        parts = []
+        for key in keys:
+            key_sql = _sql_literal(key)
+            parts.append(f"nullif(target_metadata->>{key_sql}, '')")
+            # GoTrue nests non-standard OIDC claims (e.g. Keycloak's given_name)
+            # under custom_claims, same as the roles lookup in sync_auth_user_roles.
+            parts.append(f"nullif(target_metadata->'custom_claims'->>{key_sql}, '')")
+        expr = f"coalesce({', '.join(parts)})"
+        values.append((field["name"], expr))
     return values
 
 
@@ -156,7 +138,7 @@ def _generate_profile_sync_function(
         role_sql = _sql_literal(role_name)
         has_security_owner_id = any(f["name"] == "_security_owner_id" for f in concept["fields"])
         insert_columns = _profile_insert_columns(concept)
-        metadata_values = _profile_metadata_column_values(concept, role_name, security_config)
+        metadata_values = _profile_metadata_column_values(concept)
         insert_columns_sql = ", ".join(
             _quote_ident(column)
             for column in insert_columns + [name for name, _ in metadata_values]
@@ -477,6 +459,16 @@ WITH CHECK (true);
         main_rules = concept_acl["_main"]
         if concept:
             trigger_checks = []
+
+            for field in concept["fields"]:
+                if field["required"] != "ask_after_login":
+                    continue
+                field_name = field["name"]
+                trigger_checks.append(f"""
+    -- '{field_name}' is required "ask_after_login": once filled it cannot be cleared.
+    IF TG_OP = 'UPDATE' AND OLD."{field_name}" IS NOT NULL AND NEW."{field_name}" IS NULL THEN
+        RAISE EXCEPTION 'Field {field_name} is required and cannot be cleared' USING ERRCODE = 'check_violation';
+    END IF;""")
 
             if workflow:
                 trigger_checks.append("""

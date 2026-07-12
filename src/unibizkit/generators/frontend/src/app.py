@@ -1,6 +1,7 @@
 import json
 
 from ..context import Context
+from .layout import profile_completion_dialog
 
 
 def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: bool = False) -> str:
@@ -59,6 +60,7 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
                   <Route path="/workflow/assignable" element={<WORKFLOW_ASSIGNABLE_TASKS />} />
                   <Route path="/workflow/mine" element={<WORKFLOW_MY_TASKS />} />
                 </CustomRoutes>"""
+    profile_gate_element = ""
     if has_auth_provider:
         sso_enabled = ctx.security_config["sso"]["enabled"]
         login_prop_name = "MyLoginPage"
@@ -68,6 +70,9 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
             "import { MySetPasswordPage } from './layout/MySetPasswordPage';\n"
             "import { ForgotPasswordPage, defaultI18nProvider } from 'ra-supabase';"
         )
+        if profile_completion_dialog.gates(ctx):
+            auth_import += "\nimport { ProfileCompletionDialog } from './layout/ProfileCompletionDialog';"
+            profile_gate_element = "\n          <ProfileCompletionDialog />"
         if sso_enabled:
             sso_redirect_import = "\nimport { supabaseClient } from './supabaseClient';"
             sso_redirect_helpers = """
@@ -219,7 +224,7 @@ const App = () => (
     >
       <Routes>
 {auth_routes_block}
-        <Route path="/admin/*" element={{
+        <Route path="/admin/*" element={{<>{profile_gate_element}
           <AdminUI{layout_prop}{login_prop}>
             {{permissions => (
               <>
@@ -228,7 +233,7 @@ const App = () => (
               </>
             )}}
           </AdminUI>
-        }} />
+        </>}} />
         <Route path="/*" element={{<PresentationRouter hasAuthProvider={{{str(has_auth_provider).lower()}}} />}} />
       </Routes>
     </AdminContext>

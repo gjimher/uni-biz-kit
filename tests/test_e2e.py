@@ -252,6 +252,67 @@ def test_create_product_as_user(page: Page, app_server):
     expect(page.get_by_role("combobox", name="Categories")).to_be_visible()
 
 
+def test_profile_completion_dialog_asks_for_missing_fields(page: Page, app_server):
+    """
+    E2E test of the post-login profile gate: customer.first_name/last_name are
+    required "ask_after_login", so a user whose profile misses them gets a
+    blocking dialog right after login. Filling it saves the values and unblocks
+    the admin UI; the dialog must not reappear on reload.
+
+    Runs before the other user1 tests so they always find a completed profile.
+    """
+    import psycopg2
+    from dotenv import dotenv_values
+
+    with open(os.path.abspath("test-app/security_extended.json")) as f:
+        users = json.load(f)["users"]
+    user1 = next(u for u in users if "user" in u["roles"])
+
+    # Clear the names directly in the DB so the gate state is deterministic
+    # (a system connection bypasses the security trigger's no-clearing guard).
+    db_url = dotenv_values("test-app/backend/.env").get("DB_URL")
+    assert db_url, "DB_URL not found in test-app/backend/.env"
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE customer SET "first_name" = NULL, "last_name" = NULL '
+                'WHERE "_user_email" = %s',
+                (user1["email"],),
+            )
+
+        page.set_default_timeout(10000)
+        page.goto(app_server + "/#/admin")
+        page.wait_for_timeout(2000)
+
+        page.locator('input[name="email"]').fill(user1["email"])
+        page.locator('input[name="password"]').fill(user1["password"])
+        page.get_by_role("button", name="Sign in").click()
+
+        # The gate blocks the admin UI until the mandatory fields are filled.
+        expect(page.get_by_text("Complete your profile")).to_be_visible()
+        page.get_by_label("First name").fill("Gate")
+        page.get_by_label("Last name").fill("Tested")
+        page.get_by_role("button", name="Save").click()
+        expect(page.get_by_text("Complete your profile")).not_to_be_visible()
+
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "first_name", "last_name" FROM customer WHERE "_user_email" = %s',
+                (user1["email"],),
+            )
+            assert cur.fetchone() == ("Gate", "Tested"), "Dialog must save the profile fields"
+
+        # A completed profile must not trigger the dialog again.
+        page.reload()
+        page.wait_for_timeout(2000)
+        expect(page.get_by_text("Sales")).to_be_visible()
+        expect(page.get_by_text("Complete your profile")).not_to_be_visible()
+    finally:
+        conn.close()
+
+
 def test_create_order_and_upload_document_as_user(page: Page, app_server):
     """
     E2E test as user1: create an order in 'initial' state and upload a document.

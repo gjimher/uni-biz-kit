@@ -65,7 +65,11 @@ def generate_field_sql(field: Dict[str, Any], concept: Dict[str, Any]) -> str:
     if 'default' in field:
         default_value = field["default"]
         if isinstance(default_value, str):
-            if default_value in ("auth.uid()", "auth.uid()::text"):
+            if default_value.startswith("from_metadata("):
+                # Resolved from the auth token when the profile row is created
+                # at login (see sync_role_profiles); no SQL DEFAULT exists.
+                pass
+            elif default_value in ("auth.uid()", "auth.uid()::text"):
                 field_parts.append(f"DEFAULT {default_value}")
             else:
                 field_parts.append(f"DEFAULT '{default_value}'")

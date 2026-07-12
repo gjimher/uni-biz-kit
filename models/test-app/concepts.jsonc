@@ -51,9 +51,12 @@
       "data_size": "m",
       "id_presentation": { "fields": ["first_name", "last_name"], "separator": ", " },
       "fields": [
-        // default "Pending"/"Profile": new self-registered users show "Pending Profile" until they fill their details (see security.jsonc)
-        { "name": "first_name", "type": "string", "required": true, "default": "Pending", "min_length": 1, "max_length": 50, "description": "Customer's first name" },
-        { "name": "last_name", "type": "string", "required": true, "default": "Profile", "min_length": 1, "max_length": 50, "description": "Customer's last name" },
+        // required "ask_after_login": mandatory for the user but nullable in the DB so the profile can be
+        // auto-created at login; the app asks for the missing values right after login.
+        // default from_metadata: filled at profile creation from signUp options.data (first_name/last_name)
+        // or the SSO OIDC claims (given_name/family_name), first non-empty key wins.
+        { "name": "first_name", "type": "string", "required": "ask_after_login", "default": "from_metadata(first_name, given_name)", "min_length": 1, "max_length": 50, "description": "Customer's first name" },
+        { "name": "last_name", "type": "string", "required": "ask_after_login", "default": "from_metadata(last_name, family_name)", "min_length": 1, "max_length": 50, "description": "Customer's last name" },
         // calculated "_user_email": the quoted literal is an internal variable resolving to the authenticated user's email at runtime.
         // Intentionally NOT unique: an orphaned profile keeps _user_email after user deletion, so two profiles may share it
         // (no FK to auth.users — see Security.md). The _user unique index still guarantees one active profile per user.

@@ -74,6 +74,8 @@ Some types accept a `subtype` refining rendering/storage — e.g. `decimal` with
 
 Constraints are enforced in the database (`NOT NULL`, `UNIQUE`, `CHECK`) and mirrored as form validation in the UI.
 
+Profile concepts support two extra forms (see [Security.md](Security.md#mandatory-profile-fields) and the property descriptions in `schemas/concepts_schema.json`): `"required": "ask_after_login"` keeps the column nullable but makes the UI collect the value right after login, and `"default": "from_metadata(key, ...)"` fills the field from the auth token's user metadata when the profile row is created.
+
 Field names starting with `_` are reserved for internals (see [Security.md](Security.md#internal-columns)).
 
 ### Calculated fields

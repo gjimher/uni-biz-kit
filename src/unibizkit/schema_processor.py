@@ -451,6 +451,7 @@ class SchemaProcessor:
             for level in ["rules_level_1", "rules_level_2", "rules_level_3"]:
                 if level not in self.security_extended:
                     self.security_extended[level] = []
+            self._validate_profile_field_options()
             return
 
         # Handle defaults for rules_level_1, 2, 3
@@ -607,8 +608,70 @@ class SchemaProcessor:
 
             if concept_acl["_main"] or concept_acl["_fields"]:
                 _acl[concept_name] = concept_acl
-                
+
         self.security_extended["_acl"] = _acl
+
+        self._validate_profile_field_options()
+
+    def _validate_profile_field_options(self):
+        """Check placement and ACL of required 'ask_after_login' and from_metadata defaults.
+
+        Both options only work on plain fields of a profile concept: they are resolved
+        when the profile row is auto-created at login (from_metadata) or collected by
+        the post-login profile dialog (ask_after_login), which saves through the
+        profile role's own permissions.
+        """
+        _acl = self.security_extended["_acl"]
+        for concept in self.concepts:
+            profile_roles = concept.get("_profile_for_roles", [])
+            concept_acl = _acl.get(concept["name"])
+            for field in concept["fields"]:
+                field_name = field["name"]
+                ask_after_login = field["required"] == "ask_after_login"
+                from_metadata = isinstance(field.get("default"), str) and \
+                    field["default"].startswith("from_metadata(")
+                if not ask_after_login and not from_metadata:
+                    continue
+
+                option = 'required "ask_after_login"' if ask_after_login else \
+                    f"default '{field['default']}'"
+                where = f"Field '{field_name}' in concept '{concept['name']}'"
+                if not profile_roles:
+                    raise ValueError(
+                        f"{where} uses {option}, which is only allowed on profile "
+                        f"concepts (see security roles[].profile_concept)."
+                    )
+                if "calculated" in field or field["type"] in ("relation_to_one", "relation_to_many"):
+                    raise ValueError(
+                        f"{where} uses {option}, which is not allowed on calculated or "
+                        f"relation fields."
+                    )
+                if from_metadata:
+                    if field["type"] != "string":
+                        raise ValueError(
+                            f"{where} uses {option}, which is only allowed on string fields."
+                        )
+                    if field["required"] is True:
+                        raise ValueError(
+                            f"{where} uses {option} and is required. The token metadata may "
+                            f"be empty, so the field must be optional or \"ask_after_login\"."
+                        )
+                    keys = [k.strip() for k in field["default"][len("from_metadata("):].rstrip(")").split(",")]
+                    if not field["default"].endswith(")") or not all(re.fullmatch(r"\w+", k) for k in keys):
+                        raise ValueError(
+                            f"{where} has a malformed default '{field['default']}'. "
+                            f"Expected from_metadata(key[, key...])."
+                        )
+                if concept_acl:
+                    for role_name in profile_roles:
+                        access = concept_acl["_fields"].get(field_name, {}).get(
+                            role_name, concept_acl["_main"].get(role_name, "none")
+                        )
+                        if access not in ("write", "owner_write"):
+                            raise ValueError(
+                                f"{where} uses {option} but is not writable by profile "
+                                f"role '{role_name}' (access is '{access}')."
+                            )
 
     def _enrich_profile_concepts(self):
         """Resolve roles[].profile_concept and inject generated profile link fields."""
@@ -697,13 +760,14 @@ class SchemaProcessor:
                 continue
             if "calculated" in field:
                 continue
-            if not field["required"]:
+            if field["required"] is not True:
                 continue
             if "default" in field:
                 continue
             raise ValueError(
                 f"Profile concept '{concept['name']}' for role '{role_name}' cannot be "
-                f"auto-created because required field '{field_name}' has no default"
+                f"auto-created because required field '{field_name}' has no default. "
+                f"Use required \"ask_after_login\" to collect the value after login instead."
             )
 
     def _expand_prefill_fields(self):
@@ -791,7 +855,9 @@ class SchemaProcessor:
 
                     new_field = dict(sf)
                     new_field["name"] = f"{prefix}_{sf_name}"
-                    new_field["required"] = sf["required"] if pfield["required"] and sf_name != pres_field else False
+                    # "ask_after_login" only makes sense on the profile concept itself,
+                    # so prefill copies degrade it to a plain optional field.
+                    new_field["required"] = sf["required"] is True if pfield["required"] and sf_name != pres_field else False
                     new_field["unique"] = False
                     new_field["_prefill_group"] = prefix
                     new_field["_prefill_source_field"] = sf_name
@@ -1009,7 +1075,9 @@ class SchemaProcessor:
 
         # 1. Backend Processing
         field["_be_sql_type"] = self._determine_sql_type(field)
-        field["_be_not_null"] = field["required"]
+        # required "ask_after_login" keeps the column nullable: the profile row is
+        # auto-created at login before the user had a chance to fill the field.
+        field["_be_not_null"] = field["required"] is True
         
         # 2. Frontend Processing
         field["_fe_visibility"] = self._determine_visibility(field)

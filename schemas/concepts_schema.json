@@ -138,8 +138,8 @@
                   "enum": ["cascade", "set_null", "snapshot_data"]
                 },
                 "required": {
-                  "type": "boolean",
-                  "description": "Whether the field is required. Defaults to false, except for relation_to_one with subtype 'part_of' where it defaults to true.",
+                  "enum": [true, false, "ask_after_login"],
+                  "description": "Whether the field is required. Defaults to false, except for relation_to_one with subtype 'part_of' where it defaults to true.\n\n  'ask_after_login' is only allowed on plain (non-relation, non-calculated) fields of a profile concept (a concept referenced by security roles[].profile_concept). The column stays nullable in the database so the profile can be auto-created at login, but the UI treats the field as mandatory: forms validate it as required, and after login the application asks the user to fill any of these fields that are still empty. Once a value is set, a trigger prevents updating it back to null. The field must be writable by the profile's role.",
                   "default": false
                 },
                 "unique": {
@@ -149,7 +149,7 @@
                 },
                 "default": {
                   "type": ["string", "number", "boolean", "null"],
-                  "description": "Default value for the field"
+                  "description": "Default value for the field. Supported forms:\n\n  Literal — the value is emitted as the SQL column DEFAULT.\n\n  from_metadata(key[, key...]) — only on string fields of a profile concept (a concept referenced by security roles[].profile_concept). When the profile row is auto-created at login, the field is filled with the first non-empty value among the given keys of the auth token's user_metadata; each key is looked up at the top level and inside the custom_claims object, where Supabase nests non-standard OIDC claims. Keys therefore cover both self-registration (signUp options.data, e.g. 'first_name') and SSO providers (e.g. Keycloak's 'given_name'). No SQL DEFAULT is emitted; when every key is empty the field is left null. E.g. 'from_metadata(first_name, given_name)'. The field must be writable by the profile's role and cannot be required (use 'ask_after_login' to collect missing values after login)."
                 },
                 "min_length": {
                   "type": "integer",

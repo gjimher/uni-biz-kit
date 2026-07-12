@@ -327,7 +327,8 @@ def _generate_related_validation_component(ctx: Context, concept: Dict[str, Any]
     required_fields = [
         field["name"]
         for field in concept["fields"]
-        if field["_be_not_null"] and field["_fe_visibility"] == "editable"
+        if (field["_be_not_null"] or field["required"] == "ask_after_login")
+        and field["_fe_visibility"] == "editable"
     ]
     required_fields_json = json.dumps(required_fields)
     cname = concept["name"]

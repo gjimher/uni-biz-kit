@@ -173,7 +173,16 @@ if no profile with _user = target_user_id exists:
         create a new profile record:
             _user  = target_user_id
             _user_email = target_email
+            fields with default from_metadata(key, ...) = first non-empty
+                key of the token's user_metadata (signUp options.data or
+                SSO claims), null when every key is empty
 ```
+
+### Mandatory profile fields
+
+A profile field can declare `"required": "ask_after_login"` in `concepts.json`. The column stays nullable so the profile can be auto-created at login, but the UI treats it as mandatory: forms validate it as required, and the generated admin app shows a blocking "Complete your profile" dialog after login while any of these fields is still empty. A trigger rejects updates that clear a filled value back to null.
+
+Combined with `"default": "from_metadata(...)"`, the value is usually collected at registration (the register page passes it as signUp metadata) or arrives in the SSO claims, and the dialog only appears when neither source provided it. See the property descriptions in [`schemas/concepts_schema.json`](../schemas/concepts_schema.json) for the exact rules.
 
 ### Same-Email, New-UUID Login
 

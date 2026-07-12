@@ -80,8 +80,10 @@
       "data_size": "m",
       "id_presentation": { "fields": ["first_name", "last_name"] },
       "fields": [
-        { "name": "first_name", "type": "string", "required": true, "default": "Pending", "min_length": 1, "max_length": 50, "description": "First name" },
-        { "name": "last_name", "type": "string", "required": true, "default": "Profile", "min_length": 1, "max_length": 50, "description": "Last name" },
+        // required "ask_after_login": mandatory but nullable in the DB so the profile can be auto-created
+        // at login. default from_metadata: filled at creation from the register page's signUp metadata.
+        { "name": "first_name", "type": "string", "required": "ask_after_login", "default": "from_metadata(first_name, given_name)", "min_length": 1, "max_length": 50, "description": "First name" },
+        { "name": "last_name", "type": "string", "required": "ask_after_login", "default": "from_metadata(last_name, family_name)", "min_length": 1, "max_length": 50, "description": "Last name" },
         { "name": "email", "type": "string", "calculated": "\"_user_email\"", "min_length": 5, "max_length": 100, "description": "Email — auto-set from the authenticated user at INSERT; read-only" },
         { "name": "phone", "type": "string", "min_length": 7, "max_length": 20, "description": "Contact phone number" },
         { "name": "accepts_marketing", "type": "boolean", "default": false, "description": "Consent to receive promotional emails" }

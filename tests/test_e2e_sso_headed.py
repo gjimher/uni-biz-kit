@@ -90,6 +90,30 @@ def _find_real_page(browser):
     pytest.fail(f"No Chrome tab found after 10s. Pages: {all_urls}")
 
 
+def _complete_profile_dialog_if_shown(page):
+    """Fill the post-login profile gate when it pops up.
+
+    A profile that predates the SSO claims (e.g. auto-created by a seeded
+    password login without metadata) misses its mandatory names, so the
+    "Complete your profile" dialog legitimately appears and blocks the UI.
+    Fill it like a real user. Marker values, not the Keycloak names: a fresh
+    SSO profile must be created with the claim values and never show the
+    dialog, so if _assert_profile_names_from_sso later sees these markers it
+    means the gate wrongly appeared for a fresh profile.
+    """
+    dialog_title = page.get_by_text("Complete your profile")
+    try:
+        dialog_title.wait_for(state="visible", timeout=3000)
+    except PlaywrightTimeoutError:
+        return
+    print("[sso] Profile completion dialog shown — filling mandatory fields")
+    page.get_by_label("First name").fill("Manual")
+    page.get_by_label("Last name").fill("Fill")
+    page.get_by_role("button", name="Save").click()
+    dialog_title.wait_for(state="hidden", timeout=10000)
+    print("[sso] Profile completion dialog saved and closed")
+
+
 def _sso_login_and_verify_role(browser, email, expected_role, print_reminder=False):
     """Verify KC SSO, log in to app, assert role in profile dialog."""
     page = _find_real_page(browser)
@@ -115,6 +139,7 @@ def _sso_login_and_verify_role(browser, email, expected_role, print_reminder=Fal
         user_label.wait_for(state="visible", timeout=30000)
         print(f"[sso] Logged in via SSO. {email} visible in header.")
 
+    _complete_profile_dialog_if_shown(page)
     user_label.click()
     page.get_by_role("menuitem", name="Profile").click()
     expect(page.get_by_role("dialog").get_by_text(expected_role, exact=True)).to_be_visible(timeout=5000)
@@ -169,6 +194,36 @@ def _get_profile_state(email, profile_concept="customer"):
     return {"user_id": user_id, "profile_id": profile_id, "profile_user": profile_user}
 
 
+def _assert_profile_names_from_sso(email, profile_concept):
+    """The auto-created profile must carry the names Keycloak sends in the OIDC claims.
+
+    dev-sso-start.py provisions users with firstName=<username capitalized> and
+    lastName="Dev"; they reach Supabase as given_name/family_name user_metadata and
+    fill the profile fields with default from_metadata(..., given_name/family_name).
+    """
+    username = email.split("@")[0]
+    load_dotenv(os.path.abspath("test-app/backend/.env"))
+    conn = psycopg2.connect(os.getenv("DB_URL"))
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        cur.execute(
+            f'SELECT p."first_name", p."last_name", u.raw_user_meta_data '
+            f'FROM {psycopg2.extensions.quote_ident(profile_concept, cur)} p '
+            f'JOIN auth.users u ON u.id = p."_user" WHERE u.email = %s',
+            (email,),
+        )
+        row = cur.fetchone()
+    conn.close()
+    assert row, f"No linked {profile_concept} profile found for {email}"
+    first_name, last_name, metadata = row
+    assert first_name == username.capitalize() and last_name == "Dev", (
+        f"Profile names should come from the SSO token (expected "
+        f"{username.capitalize()!r}/'Dev', got {first_name!r}/{last_name!r}). "
+        f"user_metadata keys: {sorted((metadata or {}).keys())}"
+    )
+    print(f"[sso] Profile names filled from SSO claims: {first_name} {last_name} ✓")
+
+
 def _assert_keycloak_only(email):
     user = _find_supabase_user(email)
     assert user, f"User {email} not found in Supabase"
@@ -208,6 +263,10 @@ def _full_sso_cycle(playwright, email, expected_role, user_arg=None, print_remin
     browser2 = playwright.chromium.connect_over_cdp(f"http://localhost:{CDP_PORT}")
     _sso_login_and_verify_role(browser2, email, expected_role)
     _assert_keycloak_only(email)
+    if profile_concept:
+        # Round 2 is guaranteed a fresh auth user + fresh profile, so the names
+        # must have been filled from the Keycloak claims at creation.
+        _assert_profile_names_from_sso(email, profile_concept)
 
     if before and before["profile_id"] is not None:
         after = _get_profile_state(email, profile_concept)
