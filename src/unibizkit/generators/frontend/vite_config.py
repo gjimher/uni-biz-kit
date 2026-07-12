@@ -6,7 +6,7 @@ import mdx from '@mdx-js/rollup';
 import remarkFrontmatter from 'remark-frontmatter';
 import remarkMdxFrontmatter from 'remark-mdx-frontmatter';
 
-export default defineConfig(() => {
+export default defineConfig(({ command }) => {
   return {
     base: '__BASE_URI__',
     plugins: [
@@ -15,6 +15,13 @@ export default defineConfig(() => {
         ...mdx({
           remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter],
           providerImportSource: '@mdx-js/react',
+          // MDX picks the jsx runtime from Vite's *mode*, but React resolves
+          // react/jsx-dev-runtime from process.env.NODE_ENV, which `vite build`
+          // keeps as "production" even with `--mode development`. That bundles
+          // the production stub (jsxDEV = undefined) under MDX's jsxDEV calls
+          // and every MDX page crashes at render. Follow the command instead:
+          // only the dev server may use the dev runtime.
+          development: command === 'serve',
         }),
       },
       react(),
