@@ -72,6 +72,8 @@ pytest
 ## Design Principles
 
 *   **Simplicity over Architecture:** We prefer simple, maintainable code over complex architectural patterns.
+*   **Operational Commands:** Commands that manage services, generated environments, deployments, or other external state should be idempotent whenever reasonably possible. They must provide detailed, current operational documentation through `-h`, including their effects, important ordering, destructive behavior, prerequisites, and retry semantics.
+*   **Source-of-Truth Documentation:** Detailed technical documentation should normally live next to the source of truth: JSON Schema descriptions for model fields, command help and docstrings in the implementing code, and focused comments beside non-obvious behavior. Higher-level documents should explain workflows and link concepts together instead of duplicating precise reference material that can drift.
 *   **Naming Conventions:** React Admin components must follow `SCREAMING_SNAKE_CASE` conventions (e.g., `CREATE_ORDER_ITEM_FOR_ORDER`). This satisfies React and ESLint requirements for JSX components (which must be PascalCase or SCREAMING_SNAKE_CASE) while avoiding complex case conversion logic from the database's snake_case. When in doubt, we prioritize simplicity over aesthetic code style.
 *   **Dictionary Access:**
     *   **Schema Fields:** Do not use `.get()` for fields that are marked as `required` or have a `default` value in `schemas/concepts_schema.json`. Trust the validation and enrichment process.

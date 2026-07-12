@@ -2,11 +2,10 @@ from pathlib import Path
 
 _CONTENT = '''\
 #!/usr/bin/python3
-"""Activate a published version of this proxy (Caddy) on the production server.
+"""Activate the latest published release or roll back to an explicit proxy version.
 
-Target server and default version come from deployment_extended.json
-(prod_dcd_ssh_srv, prod_version). The version must have been published with
-bin/prod-dc-publish.py first. Idempotent.
+Target server comes from deployment_extended.json. The version must have been
+created with bin/prod-dc-publish.py first. Idempotent.
 
 Steps (all on the server, in ~/ubk/<app>):
   1. Verifies docker-compose-<version>.yml exists (else: publish first).
@@ -17,31 +16,64 @@ Steps (all on the server, in ~/ubk/<app>):
   5. Checks the site answers over TLS on 443 and prints the public URL.
 """
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import prod_dc_common as pc
+from prod_dc_release import tagged_versions
 
 parser = argparse.ArgumentParser(
     description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
 )
-parser.add_argument("--version", help="Version to activate (default: prod_version from deployment_extended.json)")
+parser.add_argument("--version", help="Previously published version to activate (rollback)")
 args = parser.parse_args()
 
 cfg = pc.deployment_config()
 srv = cfg["prod_dcd_ssh_srv"]
 domain = cfg["proxy"]["domain"]
-version = args.version or cfg["prod_version"]
 remote_dir = f"$HOME/{pc.REMOTE_APP_DIR}"
 compose = pc.compose_cmd(srv)
 in_app = f"cd {remote_dir} && "
 
+normal_activation = args.version is None
+
+if cfg["prod_versioning"] == "git-tag":
+    versions = tagged_versions(pc.APP_ID, pc.run([
+        "git", "-C", pc.ROOT_DIR, "tag", "--list",
+    ], capture=True).stdout.splitlines())
+    if not versions:
+        sys.exit("Error: no published local release tag. Run python bin/prod-dc-publish.py first.")
+    if args.version:
+        matches = [(item, tag) for item, tag in versions if str(item) == args.version]
+        if not matches:
+            sys.exit(f"Error: {args.version} is not a local release of {pc.APP_ID}.")
+        version_obj, tag = matches[-1]
+    else:
+        version_obj, tag = versions[-1]
+    version = str(version_obj)
+    raw = pc.ssh_output(srv, f"cat {remote_dir}/releases/{version}.json 2>/dev/null || true")
+    if not raw:
+        sys.exit(f"Error: release metadata for {version} is missing on {srv}.")
+    metadata = json.loads(raw)
+    tag_commit = pc.run([
+        "git", "-C", pc.ROOT_DIR, "rev-list", "-n", "1", tag,
+    ], capture=True).stdout.strip()
+    if metadata.get("tag") != tag or metadata.get("commit") != tag_commit:
+        sys.exit(f"Error: local tag {tag} does not match the published artifact metadata.")
+else:
+    version = args.version or "dev"
+    if normal_activation:
+        dev_raw = pc.ssh_output(srv, f"cat {remote_dir}/releases/dev.json 2>/dev/null || true")
+        if not dev_raw:
+            sys.exit("Error: dev is not published. Run python bin/prod-dc-publish.py first.")
+
 # 1. Published?
 if pc.ssh(srv, f"test -f {remote_dir}/docker-compose-{version}.yml", check=False).returncode != 0:
     sys.exit(f"Error: version {version} is not published on {srv}. "
-             f"Run: python bin/prod-dc-publish.py --version {version}")
+             "Run: python bin/prod-dc-publish.py")
 
 # 2./3. Switch the active version
 current = pc.ssh_output(srv, f"readlink {remote_dir}/docker-compose.yml 2>/dev/null || true")

@@ -3,9 +3,8 @@ from pathlib import Path
 _CONTENT = '''\
 """Shared helpers for the bin/prod-* scripts. Not a script itself.
 
-Everything is driven by deployment_extended.json in the app root:
-prod_dcd_ssh_srv (SSH host of the production server), prod_base_port and
-prod_version. The production layout on the remote host is:
+Everything is driven by deployment_extended.json in the app root, including
+the SSH server, base port and prod_versioning policy. The remote layout is:
 
   ~/ubk/<app>/.env                          secrets + PUBLIC_HOST (created once)
   ~/ubk/<app>/docker-compose-<version>.yml  one immutable file per version

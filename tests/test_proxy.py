@@ -10,6 +10,8 @@ test_frontend.py) and assert on the generated artifacts.
 
 import json
 import re
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -32,7 +34,7 @@ def _fake_app_model(models_dir: Path, name: str, deployment: dict):
     """Minimal app model: only what the proxy cross-validation inspects
     (concepts.jsonc must exist; deployment.jsonc is the source of base_uri/port)."""
     _write(models_dir / name / "concepts.jsonc", {})
-    _write(models_dir / name / "deployment.jsonc", deployment)
+    _write(models_dir / name / "deployment.jsonc", {"prod_versioning": "dev", **deployment})
 
 
 class TestProxyGeneration:
@@ -84,7 +86,7 @@ class TestProxyGeneration:
         dockerfile = (output_dir / "prod" / "docker" / "caddy" / "Dockerfile").read_text()
         assert dockerfile.startswith("FROM caddy:")
 
-        # bin/: exactly the five prod-dc-* scripts, no dev-* scripts.
+        # bin/: production scripts only, no dev-* scripts.
         bin_files = sorted(p.name for p in (output_dir / "bin").iterdir())
         assert bin_files == [
             "prod-dc-check-infra.py",
@@ -92,12 +94,32 @@ class TestProxyGeneration:
             "prod-dc-remove.py",
             "prod-dc-up.py",
             "prod_dc_common.py",
+            "prod_dc_release.py",
         ]
         publish_script = (output_dir / "bin" / "prod-dc-publish.py").read_text()
-        assert 'parser.add_argument("-f", "--force", action="store_true"' in publish_script
-        assert "WARNING: force-publishing existing version" in publish_script
-        assert "or pass --force to overwrite this version." in publish_script
+        assert 'parser.add_argument("--dry-run", action="store_true"' in publish_script
+        assert "publish_git_tag()" in publish_script
+        assert 'releases/{version}.json' in publish_script
+        assert 'git("tag", "-a"' in publish_script
+        up_script = (output_dir / "bin" / "prod-dc-up.py").read_text()
+        assert 'parser.add_argument("--version", help=' in up_script
+        assert "tagged_versions" in up_script
+        assert 'parser.add_argument("--force"' not in publish_script
+        assert 'parser.add_argument("--force"' not in up_script
         assert not (output_dir / "bin" / "dev-supabase-start.py").exists()
+
+        # The generated bin/ must stay self-contained (stdlib + colocated helpers).
+        for script in ("prod-dc-publish.py", "prod-dc-up.py", "prod_dc_release.py"):
+            assert "from unibizkit" not in (output_dir / "bin" / script).read_text()
+
+        publish_help = subprocess.run(
+            [sys.executable, output_dir / "bin" / "prod-dc-publish.py", "-h"],
+            text=True, capture_output=True, check=True,
+        ).stdout
+        assert "Publish this generated model without activating it" in publish_help
+        assert "Steps:" in publish_help
+        assert "Idempotency:" in publish_help
+        assert "never applies SQL" in publish_help
 
         # No app output.
         assert not (output_dir / "frontend").exists()
@@ -118,6 +140,7 @@ class TestProxyGeneration:
         _write(app_dir / "presentation.jsonc", {})
         _write(app_dir / "security.jsonc", {"authentication_required": False})
         _write(app_dir / "deployment.jsonc", {
+            "prod_versioning": "dev",
             "base_uri": "/shop",
             "prod_origin": "https://www.example.com",
             "prod_base_port": 4050,
@@ -135,11 +158,11 @@ class TestProxyGeneration:
         assert "http://${PUBLIC_HOST}:4050/shop" not in compose
 
         publish_script = (output_dir / "bin" / "prod-dc-publish.py").read_text()
+        up_script = (output_dir / "bin" / "prod-dc-up.py").read_text()
         assert 'prod_origin = (cfg.get("prod_origin") or "").rstrip("/")' in publish_script
-        assert 'public_base = f"{prod_origin}{base_uri}"' in publish_script
-        assert 'parser.add_argument("-f", "--force", action="store_true"' in publish_script
-        assert "WARNING: force-publishing existing version" in publish_script
-        assert "or pass --force to overwrite this version." in publish_script
+        assert 'f"{prod_origin}{base_uri}" if prod_origin' in publish_script
+        assert '"VITE_BASE_URL": public_base' in publish_script
+        assert 'parser.add_argument("--force", action="store_true"' in up_script
 
     def test_app_model_rejects_proxy_section(self):
         """An app model (has concepts) whose deployment.jsonc carries a proxy section is rejected."""
@@ -155,6 +178,7 @@ class TestProxyGeneration:
             _write(root / "presentation.jsonc", {})
             _write(root / "security.jsonc", {"authentication_required": False})
             _write(root / "deployment.jsonc", {
+                "prod_versioning": "dev",
                 "base_uri": "/x",
                 "proxy": {"domain": "d", "models": ["y"]},
             })
@@ -167,6 +191,7 @@ class TestProxyGeneration:
             models_dir = Path(tmp) / "models"
             proxy_dir = models_dir / "ubk-app"
             _write(proxy_dir / "deployment.jsonc", {
+                "prod_versioning": "dev",
                 "proxy": {"domain": "d", "models": ["b2c-app"]},
             })
             _write(proxy_dir / "index.md", "# X")
@@ -181,6 +206,7 @@ class TestProxyGeneration:
             models_dir = Path(tmp) / "models"
             proxy_dir = models_dir / "ubk-app"
             _write(proxy_dir / "deployment.jsonc", {
+                "prod_versioning": "dev",
                 "proxy": {"domain": "d", "models": ["a-app", "b-app"]},
             })
             _write(proxy_dir / "index.md", "# X")
@@ -196,6 +222,7 @@ class TestProxyGeneration:
             models_dir = Path(tmp) / "models"
             proxy_dir = models_dir / "ubk-app"
             _write(proxy_dir / "deployment.jsonc", {
+                "prod_versioning": "dev",
                 "proxy": {"domain": "d", "models": ["root-app"]},
             })
             _write(proxy_dir / "index.md", "# X")

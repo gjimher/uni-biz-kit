@@ -14,6 +14,11 @@ from unibizkit.cli import CLI
 from unibizkit.schema_loader import SchemaValidationError
 import shutil
 
+
+def _write_deployment(path):
+    with open(Path(path) / "deployment.jsonc", "w") as f:
+        json.dump({"prod_versioning": "dev"}, f)
+
 class TestCLI:
     """Test cases for CLI functionality."""
     
@@ -58,6 +63,7 @@ class TestCLI:
                 json.dump({}, f)
             with open(temp_path / "security.jsonc", 'w') as f:
                 json.dump({"authentication_required": False}, f)
+            _write_deployment(temp_path)
 
             try:
                 with patch('sys.argv', [
@@ -132,6 +138,7 @@ class TestCLI:
                 json.dump({}, f)
             with open(temp_path / "security.jsonc", 'w') as f:
                 json.dump({"authentication_required": False}, f)
+            _write_deployment(temp_path)
         
             try:
                 # Default task is generate
@@ -186,6 +193,7 @@ class TestCLI:
                 json.dump({}, f)
             with open(temp_path / "security.jsonc", 'w') as f:
                 json.dump({"authentication_required": False}, f)
+            _write_deployment(temp_path)
         
             try:
                 # Test skip frontend
@@ -243,6 +251,7 @@ class TestCLI:
                 json.dump({}, f)
             with open(temp_path / "security.jsonc", 'w') as f:
                 json.dump({"authentication_required": False}, f)
+            _write_deployment(temp_path)
         
             custom_dir = 'my-custom-app'
             try:

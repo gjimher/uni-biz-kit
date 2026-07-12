@@ -19,7 +19,17 @@ def db() -> str:
     official self-hosting compose mounts). Build context: prod/docker/db.
     """
     return f"""\
+FROM {IMAGES['nginx']} AS tls
+RUN apk add --no-cache openssl \
+ && openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+      -subj "/CN=unibizkit-postgres" \
+      -keyout /tmp/ubk-db.key -out /tmp/ubk-db.crt
+
 FROM {IMAGES['db']}
+COPY --from=tls /tmp/ubk-db.key /etc/ssl/private/ubk-db.key
+COPY --from=tls /tmp/ubk-db.crt /etc/ssl/certs/ubk-db.crt
+RUN chown postgres:postgres /etc/ssl/private/ubk-db.key /etc/ssl/certs/ubk-db.crt \
+ && chmod 600 /etc/ssl/private/ubk-db.key
 COPY init-scripts/ /docker-entrypoint-initdb.d/init-scripts/
 """
 
@@ -134,6 +144,7 @@ FROM {IMAGES['python']}
 RUN pip install --no-cache-dir psycopg2-binary
 WORKDIR /app
 COPY backend/supabase_schema.sql backend/supabase_seed_data_dev.sql ./
+COPY backend/release_migration.sql* ./
 COPY security_extended.json seed_data_extended.json concepts_extended.json ./
 COPY prod/docker/provision/provision.py ./
 CMD ["python", "provision.py"]

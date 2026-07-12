@@ -6,5 +6,5 @@
   "prod_smtp_server": "127.0.0.1",
   "prod_smtp_port": 25,
   "prod_smtp_from": "noreply-intranet@unibizkit.dev",
-  "prod_version": "dev"
+  "prod_versioning": "dev"
 }

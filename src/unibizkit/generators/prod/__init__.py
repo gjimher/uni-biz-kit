@@ -68,6 +68,7 @@ def generate(output_dir: Path, app_id: str, deployment_config: Dict[str, Any],
     ctx = ProdContext(app_id, deployment_config, security_config, system_config)
     docker_dir = output_dir / "prod" / "docker"
     docker_dir.mkdir(parents=True, exist_ok=True)
+    _write(output_dir / "backend" / "release_migration.sql", "SELECT 1; -- no release migration prepared\n")
 
     # Whitelist .dockerignore: image builds use the app root as context, which
     # would otherwise upload node_modules and the local supabase state.
@@ -75,6 +76,7 @@ def generate(output_dir: Path, app_id: str, deployment_config: Dict[str, Any],
 *
 !frontend/dist
 !backend/supabase_schema.sql
+!backend/release_migration.sql
 !backend/supabase_seed_data_dev.sql
 !backend/supabase/functions
 !security_extended.json

@@ -26,11 +26,10 @@
       "maximum": 65000,
       "default": 3000
     },
-    "prod_version": {
+    "prod_versioning": {
       "type": "string",
-      "description": "Version name of the production deployment. Versions are immutable: re-publishing an existing version with different content is an error.",
-      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
-      "default": "v1"
+      "description": "Production versioning policy. 'dev' rebuilds database and storage on every mutable deployment; 'git-tag' creates per-model releases from local Git tags.",
+      "enum": ["dev", "git-tag"]
     },
     "prod_origin": {
       "type": "string",
@@ -79,5 +78,6 @@
       "additionalProperties": false
     }
   },
+  "required": ["prod_versioning"],
   "additionalProperties": false
 }

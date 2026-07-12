@@ -6,8 +6,8 @@ from . import (
     dev_supabase_call_edge_function,
     dev_sso_start, dev_sso_chrome, dev_sso_stop, dev_sso_remove,
     dev_smtp_mock, dev_info_ports,
-    prod_dc_common, prod_dc_check_infra, prod_dc_publish, prod_dc_up, prod_dc_remove,
-    prod_dc_publish_proxy, prod_dc_up_proxy, prod_dc_remove_proxy,
+    prod_dc_common, prod_dc_release, prod_dc_check_infra, prod_dc_publish, prod_dc_up,
+    prod_dc_remove, prod_dc_up_proxy, prod_dc_remove_proxy,
 )
 
 
@@ -21,6 +21,7 @@ def generate(bin_dir: Path, security_config: Dict[str, Any], base_uri: str = "/"
     dev_info_ports.generate(bin_dir)
 
     prod_dc_common.generate(bin_dir)
+    prod_dc_release.generate(bin_dir)
     prod_dc_check_infra.generate(bin_dir)
     prod_dc_publish.generate(bin_dir)
     prod_dc_up.generate(bin_dir)
@@ -47,7 +48,8 @@ def generate_proxy(bin_dir: Path):
     """bin/ scripts for a 'proxy' kind model: only the prod-dc-* deploy scripts
     (no dev-* scripts — a proxy has no local Supabase/SSO to run)."""
     prod_dc_common.generate(bin_dir)
+    prod_dc_release.generate(bin_dir)
     prod_dc_check_infra.generate(bin_dir)
-    prod_dc_publish_proxy.generate(bin_dir)
+    prod_dc_publish.generate(bin_dir)
     prod_dc_up_proxy.generate(bin_dir)
     prod_dc_remove_proxy.generate(bin_dir)

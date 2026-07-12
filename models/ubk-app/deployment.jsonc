@@ -3,7 +3,7 @@
   // Deploys a single Caddy container that terminates HTTPS for `domain`, serves the
   // landing page (index.md) and reverse-proxies the listed app models by their base_uri.
   "$schema": "../../schemas/deployment_schema.json",
-  "prod_version": "dev",
+  "prod_versioning": "dev",
   "proxy": {
     "domain": "www.unibizkit.dev",
     "acme_email": "gjimher@gmail.com",

@@ -4,6 +4,10 @@ import tempfile
 from pathlib import Path
 from unibizkit.schema_loader import SchemaLoader, SchemaValidationError
 
+
+def _write_deployment(path):
+    (Path(path) / "deployment.jsonc").write_text('{"prod_versioning":"dev"}')
+
 def test_defaults_population():
     """
     Test that default values from the JSON schema are correctly populated
@@ -36,6 +40,7 @@ def test_defaults_population():
             json.dump({}, f)
         with open(Path(temp_dir) / "security.jsonc", 'w') as f:
             json.dump({"authentication_required": False}, f)
+        _write_deployment(temp_dir)
         
         try:
             loader = SchemaLoader()
@@ -98,6 +103,7 @@ def test_special_required_default():
             json.dump({}, f)
         with open(Path(temp_dir) / "security.jsonc", 'w') as f:
             json.dump({"authentication_required": False}, f)
+        _write_deployment(temp_dir)
             
         try:
             loader = SchemaLoader()
@@ -132,6 +138,7 @@ def test_underscore_role_name_raises_error():
             json.dump({}, f)
         with open(Path(temp_dir) / "security.jsonc", 'w') as f:
             json.dump({"authentication_required": True, "roles": [{"name": "_secret"}]}, f)
+        _write_deployment(temp_dir)
 
         with pytest.raises(SchemaValidationError, match="_secret"):
             SchemaLoader().load_and_validate(str(temp_path))
@@ -147,6 +154,7 @@ def test_anon_role_name_raises_error():
             json.dump({}, f)
         with open(Path(temp_dir) / "security.jsonc", 'w') as f:
             json.dump({"authentication_required": True, "roles": [{"name": "_anon"}]}, f)
+        _write_deployment(temp_dir)
 
         with pytest.raises(SchemaValidationError, match="_anon"):
             SchemaLoader().load_and_validate(str(temp_path))

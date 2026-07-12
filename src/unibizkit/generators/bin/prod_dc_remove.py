@@ -60,6 +60,7 @@ print("Removing app images from the docker daemon...")
 pc.ssh(srv,
        f"docker images --format '{{{{.Repository}}}}:{{{{.Tag}}}}' "
        f"| grep '^{pc.REMOTE_REGISTRY}/{pc.APP_ID}/' "
+       "| grep -v ':<none>$' "
        f"| xargs -r docker rmi -f",
        check=False)
 
