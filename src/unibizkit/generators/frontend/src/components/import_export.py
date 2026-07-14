@@ -753,6 +753,7 @@ export const ImportExportActions = () => {
   const config = IMPORT_EXPORT_CONFIG[resource];
   const canWrite = permissions?.[resource]?.includes('write')
     || permissions?.['*']?.includes('write');
+  const canEdit = canWrite || permissions?.[resource]?.includes('edit');
   const canReadDocs = permissions?.[`${resource}._documents`]?.includes('read')
     || permissions?.[`${resource}._documents`]?.includes('write')
     || permissions?.['*']?.includes('read')
@@ -763,7 +764,7 @@ export const ImportExportActions = () => {
       <SelectColumnsButton />
       <RESET_COLUMNS_BUTTON />
       {hasCreate && <CreateButton />}
-      {canWrite && <QuickEditButton />}
+      {canEdit && <QuickEditButton />}
       {config && (
         <ExportDialogButton resource={resource} config={config}
           filterValues={filterValues} sort={sort} canReadDocs={canReadDocs} />

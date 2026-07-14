@@ -126,7 +126,9 @@ def test_user_directory_and_email_trigger_sql():
     _, security_config, workflow_config = _task_assignment_fixture()
 
     directory_sql = "\n".join(generate_user_directory(workflow_config, security_config))
-    assert 'CREATE TABLE "user_directory"' in directory_sql
+    # The table itself is now an injected standard concept; workflow-specific
+    # SQL only adds the JSON roles lookup index.
+    assert 'CREATE INDEX "user_directory_roles_idx" ON "_user_directory"' in directory_sql
     assert 'USING GIN ("roles")' in directory_sql
 
     email_sql = "\n".join(generate_task_assignment_email_triggers(workflow_config, security_config))
@@ -135,7 +137,7 @@ def test_user_directory_and_email_trigger_sql():
 
     # workflow_tasks view: caller RLS, per-state assigners as text[], stable ids.
     view_sql = "\n".join(generate_workflow_tasks_view(workflow_config, security_config))
-    assert 'CREATE VIEW "workflow_tasks" WITH (security_invoker = true)' in view_sql
+    assert 'CREATE VIEW "_workflow_tasks" WITH (security_invoker = true)' in view_sql
     assert "'order' || '-' || t.\"id\"::text" in view_sql
     assert "WHEN 'ordered' THEN ARRAY['admin']::text[]" in view_sql
     assert "WHEN 'initial' THEN ARRAY[]::text[]" in view_sql
@@ -222,7 +224,7 @@ def test_workflow_task_assignment_permissions():
 
             # Discovery cache populated (seeded, then upgraded to 'login' by the
             # access token hook once a user authenticates)
-            cur.execute("SELECT source FROM user_directory WHERE email = 'admin@test.com'")
+            cur.execute("SELECT source FROM _user_directory WHERE email = 'admin@test.com'")
             row = cur.fetchone()
             assert row and row[0] in ('seed', 'login')
 
@@ -283,7 +285,7 @@ def test_workflow_task_assignment_permissions():
             cur.execute("BEGIN;")
             set_jwt(cur, admin_id, 'admin@test.com', ["admin"])
             cur.execute(
-                "SELECT concept, state, state_task_owner, assigners FROM workflow_tasks "
+                "SELECT concept, state, state_task_owner, assigners FROM _workflow_tasks "
                 "WHERE concept = 'order' AND record_id = %s",
                 (order_id,),
             )

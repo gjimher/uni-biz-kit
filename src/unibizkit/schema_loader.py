@@ -65,6 +65,8 @@ class SchemaLoader:
         self.deployment_config = None
         self.seed_data_config = None
         self.rules_config = None
+        self.deployed_data_config = None
+        self.integrations_config = None
         self.validations_config = {"validations": []}
         self.validation_schema = self._load_validation_schema("concepts_schema.json")
         self.presentation_validation_schema = self._load_validation_schema("presentation_schema.json")
@@ -74,6 +76,8 @@ class SchemaLoader:
         self.deployment_validation_schema = self._load_validation_schema("deployment_schema.json")
         self.seed_data_validation_schema = self._load_validation_schema("seed_data_schema.json")
         self.rules_validation_schema = self._load_validation_schema("rules_schema.json")
+        self.integrations_validation_schema = self._load_validation_schema("integrations_schema.json")
+        self.deployed_data_validation_schema = self._load_validation_schema("deployed_data_schema.json")
     
     def _load_validation_schema(self, schema_name: str) -> Dict[str, Any]:
         """Load a validation schema from the schemas directory."""
@@ -149,6 +153,20 @@ class SchemaLoader:
             else:
                 self.rules_config = {"rules": []}
 
+            integrations_path = parent / "integrations.jsonc"
+            if integrations_path.exists():
+                self.load_integration(str(integrations_path), parent)
+            else:
+                self.integrations_config = {"roles": ["admin"], "integrations": []}
+
+            deployed_data_path = parent / "deployed_data.jsonc"
+            if deployed_data_path.exists():
+                config = _load_jsonc_file(deployed_data_path)
+                DefaultValidatingDraft7Validator(self.deployed_data_validation_schema).validate(config)
+                self.deployed_data_config = config
+            else:
+                self.deployed_data_config = {"concepts": []}
+
             # Apply special defaults before main validation/default injection
             self._apply_special_defaults(business_schema)
             
@@ -157,8 +175,35 @@ class SchemaLoader:
             # to the injected authentication concepts.
             DefaultValidatingDraft7Validator(self.validation_schema).validate(business_schema)
 
+            concept_map = {concept["name"]: concept for concept in business_schema["concepts"]}
+            concept_names = set(concept_map)
+            for integration in self.integrations_config["integrations"]:
+                if integration["target_concept"] not in concept_names:
+                    raise SchemaValidationError(
+                        f"Integration '{integration['name']}' references unknown target concept "
+                        f"'{integration['target_concept']}'"
+                    )
+                on_removed = integration["on_removed"]
+                if isinstance(on_removed, dict):
+                    field_name = on_removed["set_false"]
+                    target = concept_map[integration["target_concept"]]
+                    field = next((item for item in target["fields"] if item["name"] == field_name), None)
+                    if field is None:
+                        raise SchemaValidationError(
+                            f"Integration '{integration['name']}' on_removed references unknown field "
+                            f"'{integration['target_concept']}.{field_name}'"
+                        )
+                    if field["type"] != "boolean":
+                        raise SchemaValidationError(
+                            f"Integration '{integration['name']}' on_removed set_false field "
+                            f"'{integration['target_concept']}.{field_name}' must be boolean"
+                        )
+
             self._validate_reserved_field_names(business_schema)
+            self._validate_backend_action_sources(business_schema, parent)
             self._validate_seed_data_against_business_schema(business_schema)
+            self._inject_internal_concepts(business_schema)
+            self._prepare_deployed_data(business_schema)
             self.load_validations(Path(path).parent, business_schema)
             
             logger.info(f"Successfully loaded and validated schema: {path}")
@@ -271,6 +316,27 @@ class SchemaLoader:
         self.rules_config = rules_config
         logger.info(f"Successfully loaded and validated rules: {rules_path}")
 
+    def load_integration(self, integrations_path: str, model_dir: Path):
+        """Load external replication definitions and validate local source modules."""
+        config = _load_jsonc_file(integrations_path)
+        DefaultValidatingDraft7Validator(self.integrations_validation_schema).validate(config)
+        names = [item["name"] for item in config["integrations"]]
+        if len(names) != len(set(names)):
+            raise SchemaValidationError("Integration names must be unique")
+        configured_roles = self.security_config.get("roles")
+        roles = {role["name"] for role in configured_roles} if configured_roles else {"admin", "user"}
+        unknown_roles = sorted(set(config["roles"]) - roles)
+        if unknown_roles:
+            raise SchemaValidationError(f"Integrations reference unknown roles: {unknown_roles}")
+        for item in config["integrations"]:
+            source_path = model_dir / "backend" / "integrations" / item["source"]
+            if not source_path.is_file():
+                raise SchemaValidationError(
+                    f"Integration '{item['name']}' source does not exist: {item['source']}"
+                )
+        self.integrations_config = config
+        logger.info(f"Successfully loaded and validated integrations: {integrations_path}")
+
     def load_validations(self, model_dir: Path, business_schema: Dict[str, Any]):
         """
         Load CSV validations from validations/<concept>[-name].csv.
@@ -346,7 +412,7 @@ class SchemaLoader:
         for concept in data["concepts"]:
             if 'fields' not in concept:
                 continue
-                
+
             for field in concept["fields"]:
                 # Rule: required defaults to true for relation_to_one with subtype 'part_of'
                 if "required" not in field:
@@ -442,12 +508,185 @@ class SchemaLoader:
         Reserve underscore-prefixed columns for UniBizKit generated internals.
         """
         for concept in business_schema["concepts"]:
+            if concept["name"].startswith("_"):
+                raise SchemaValidationError(
+                    f"Concept name '{concept['name']}' is reserved: user concepts cannot start with '_'"
+                )
             for field in concept["fields"]:
                 if field["name"].startswith("_"):
                     raise SchemaValidationError(
                         f"Field '{concept['name']}.{field['name']}' uses reserved '_' prefix"
                     )
 
+    def _inject_internal_concepts(self, business_schema: Dict[str, Any]):
+        """Add generated operational tables/views before the extended IR is built."""
+        def field(name, type_, description, **values):
+            return {
+                "name": name, "type": type_, "description": description,
+                "required": values.pop("required", False),
+                "unique": values.pop("unique", False),
+                "size": values.pop("size", "s"), **values,
+            }
+
+        concepts = business_schema["concepts"]
+        security = self.security_config
+        level3 = security.setdefault("rules_level_3", [])
+        all_roles = [role["name"] for role in security.get("roles") or [{"name": "admin"}, {"name": "user"}]]
+        def internal_concept(name, plural, description, presentation_fields, fields, storage):
+            return {
+                "name": name, "plural_name": plural, "description": description,
+                "id_presentation": {"fields": presentation_fields, "separator": " - ", "show": False},
+                "fields": fields, "data_size": "s", "checks": [],
+                "_be_storage": storage, "_fe_allow_create": False, "_fe_allow_delete": False,
+            }
+
+        if self.integrations_config["integrations"]:
+            self.presentation_config.setdefault("list_sort", {})["_integration_run"] = "requested_at DESC"
+            list_rules = self.presentation_config.setdefault("list_field_rules_level_3", {})
+            list_rules.update({
+                "_integration": "!*,name,target_concept,schedule,operational_status,last_status,last_completed_at,next_execution_at,last_received_count,last_upserted_count",
+                "_integration_run": "!*,integration,trigger,status,requested_by,requested_at,completed_at,received_count,upserted_count,error",
+            })
+            integration_fields = [
+                field("name", "string", "Stable integration name", required=True, unique=True),
+                field("description", "string", "Model-defined description", size="m"),
+                field("target_concept", "string", "Replicated target concept"),
+                field("source_file", "string", "JavaScript source module", size="s"),
+                field("schedule", "string", "UTC cron expression"),
+                field("on_removed", "json", "Behavior for records explicitly removed at the source", required=True, size="s"),
+                field("notes", "string", "Operational notes", size="l"),
+                field("operational_status", "enum", "Whether executions are active or paused", required=True, default="active", enum_values=["active", "paused"]),
+                field("checkpoint", "json", "Last confirmed source checkpoint", size="s"),
+                field("lease_owner", "string", "Current execution lease owner"),
+                field("lease_expires_at", "datetime", "Lease expiry", precision="second"),
+                field("last_started_at", "datetime", "Last start time", precision="second"),
+                field("last_completed_at", "datetime", "Last completion time", precision="second"),
+                field("last_status", "string", "Last execution status"),
+                field("next_execution_at", "datetime", "Next expected scheduled execution", precision="second"),
+                field("last_error", "string", "Last error", size="l"),
+                field("last_received_count", "integer", "Records received", required=True, default=0),
+                field("last_upserted_count", "integer", "Records upserted", required=True, default=0),
+                field("last_removed_count", "integer", "Source removals handled", required=True, default=0),
+            ]
+            run_fields = [
+                field("integration", "relation_to_one", "Integration", required=True, subtype="related_to", target="_integration", on_delete="cascade"),
+                field("trigger", "enum", "Invocation source", required=True, enum_values=["manual", "scheduled"]),
+                field("requested_by", "string", "Requesting user"),
+                field("requested_at", "datetime", "Request time", required=True, precision="second"),
+                field("started_at", "datetime", "Start time", precision="second"),
+                field("completed_at", "datetime", "Completion time", precision="second"),
+                field("status", "enum", "Run status", required=True, enum_values=["queued", "running", "completed", "failed", "skipped"]),
+                field("checkpoint_before", "json", "Checkpoint before the run", size="l"),
+                field("checkpoint_after", "json", "Checkpoint after the run", size="l"),
+                field("pages_count", "integer", "Pages received", required=True, default=0),
+                field("received_count", "integer", "Records received", required=True, default=0),
+                field("upserted_count", "integer", "Records upserted", required=True, default=0),
+                field("removed_count", "integer", "Source removals handled", required=True, default=0),
+                field("error", "string", "Execution error", size="l"),
+            ]
+            integration_concept = internal_concept("_integration", "integrations", "Configured external integrations", ["name"], integration_fields, "table")
+            integration_concept["actions"] = [
+                {"label": "Run now", "source": "_integration-run.js", "placement": ["edit"]},
+                {"label": "Reset checkpoint", "source": "_integration-reset-checkpoint.js", "placement": ["edit"]},
+            ]
+            concepts.extend([
+                integration_concept,
+                internal_concept("_integration_run", "integration_runs", "Integration execution history", ["id"], run_fields, "table"),
+            ])
+            readonly = [f["name"] for f in integration_fields if f["name"] not in ("notes", "operational_status")]
+            for role in self.integrations_config["roles"]:
+                level3.append({"concept": "_integration", "role": role, "access": "read", "field": "*"})
+                level3.append({"concept": "_integration", "role": role, "access": "write", "field": "notes"})
+                level3.append({"concept": "_integration", "role": role, "access": "write", "field": "operational_status"})
+                level3.extend({"concept": "_integration", "role": role, "access": "read", "field": name} for name in readonly)
+                level3.append({"concept": "_integration_run", "role": role, "access": "read", "field": "*"})
+
+        if self.workflow_config.get("workflow_rules") and security["authentication_required"]:
+            directory_fields = [
+                field("email", "string", "Known user email", required=True, unique=True),
+                field("_user", "string", "Authentication user id", unique=True),
+                field("roles", "json", "Last known roles", required=True),
+                field("source", "string", "Discovery source", required=True),
+                field("last_seen_at", "datetime", "Last discovery time"),
+            ]
+            task_fields = [
+                field("concept", "string", "Source concept"), field("record_id", "integer", "Source record id"),
+                field("state", "string", "Workflow state"), field("state_task_owner", "string", "Task owner"),
+                field("assigners", "json", "Roles allowed to assign"), field("record_text", "string", "Record label", size="m"),
+            ]
+            concepts.extend([
+                internal_concept("_user_directory", "user_directory", "Workflow user discovery cache", ["email"], directory_fields, "table"),
+                internal_concept("_workflow_tasks", "workflow_tasks", "Unified workflow task view", ["record_text"], task_fields, "view"),
+            ])
+            for role in all_roles:
+                level3.append({"concept": "_user_directory", "role": role, "access": "read", "field": "*"})
+                level3.append({"concept": "_workflow_tasks", "role": role, "access": "read", "field": "*"})
+
+    def _validate_backend_action_sources(self, business_schema: Dict[str, Any], model_dir: Path):
+        for concept in business_schema["concepts"]:
+            for action in concept["actions"]:
+                if Path(action["source"]).name.startswith("_"):
+                    raise SchemaValidationError(
+                        f"Concept '{concept['name']}' action source uses the reserved internal '_' prefix: {action['source']}"
+                    )
+                source = model_dir / "backend" / "actions" / action["source"]
+                if not source.is_file():
+                    raise SchemaValidationError(
+                        f"Concept '{concept['name']}' action source does not exist: {action['source']}"
+                    )
+
+    def _prepare_deployed_data(self, business_schema: Dict[str, Any]):
+        entries = copy.deepcopy(self.deployed_data_config.get("concepts", []))
+        names = [entry["concept"] for entry in entries]
+        if len(names) != len(set(names)):
+            raise SchemaValidationError("deployed_data concept names must be unique")
+        if any(name.startswith("_") for name in names):
+            raise SchemaValidationError("deployed_data concepts starting with '_' are reserved for generated data")
+        if self.integrations_config["integrations"]:
+            entries.append({
+                "concept": "_integration",
+                "on_removed": "delete",
+                "records": [{
+                    "name": item["name"],
+                    "description": item["description"],
+                    "target_concept": item["target_concept"],
+                    "source_file": item["source"],
+                    "schedule": item.get("schedule", ""),
+                    "on_removed": item["on_removed"],
+                } for item in self.integrations_config["integrations"]],
+            })
+        concept_map = {concept["name"]: concept for concept in business_schema["concepts"]}
+        for entry in entries:
+            concept_name = entry["concept"]
+            concept_records = entry["records"]
+            concept = concept_map.get(concept_name)
+            if not concept:
+                raise SchemaValidationError(f"deployed_data references unknown concept '{concept_name}'")
+            field_map = {field["name"]: field for field in concept["fields"]}
+            key_fields = [name for name in concept["id_presentation"]["fields"] if "." not in name]
+            if not key_fields or any(name == "id" for name in key_fields):
+                raise SchemaValidationError(
+                    f"Concept '{concept_name}' needs local, non-id id_presentation fields for deployed_data"
+                )
+            for name in key_fields:
+                field = field_map.get(name)
+                if not field or field.get("calculated") or field.get("_be_sql_type") == "SERIAL":
+                    raise SchemaValidationError(
+                        f"Concept '{concept_name}' has invalid deployed_data key field '{name}'"
+                    )
+            for record in concept_records:
+                missing = [name for name in key_fields if name not in record]
+                if missing:
+                    raise SchemaValidationError(
+                        f"deployed_data record for '{concept_name}' is missing key field(s): {', '.join(missing)}"
+                    )
+                for name in record:
+                    field = field_map.get(name)
+                    if not field:
+                        raise SchemaValidationError(f"Unknown deployed_data field '{concept_name}.{name}'")
+                    if field.get("calculated") or field.get("_be_sql_type") == "SERIAL" or field["type"] == "relation_to_many":
+                        raise SchemaValidationError(f"deployed_data cannot set generated field '{concept_name}.{name}'")
+        self.deployed_data_config = {"concepts": entries}
     def _validate_seed_document(self, concept: Dict[str, Any], document: Dict[str, Any]):
         concept_name = concept["name"]
         docs = concept["documents"]

@@ -8,6 +8,9 @@ def generate_table_sql(concept: Dict[str, Any]) -> str:
     sql_lines = [f'CREATE TABLE "{table_name}" (']
     sql_lines.append(f'  "{pk_name}" SERIAL PRIMARY KEY,')
 
+    if concept.get("_integration_target"):
+        sql_lines.append('  "_external_id" TEXT NOT NULL,')
+
     for field in concept["fields"]:
         field_sql = generate_field_sql(field, concept)
         if field_sql:
@@ -34,6 +37,12 @@ def generate_table_sql(concept: Dict[str, Any]) -> str:
         field_name = field["name"]
         constraint_name = f"{table_name}_{field_name}_unique"
         sql_lines.append(f'CREATE UNIQUE INDEX "{constraint_name}" ON "{table_name}" ("{field_name}");')
+
+    if concept.get("_integration_target"):
+        sql_lines.append(
+            f'CREATE UNIQUE INDEX "{table_name}_external_id_unique" '
+            f'ON "{table_name}" ("_external_id");'
+        )
 
     return '\n'.join(sql_lines)
 

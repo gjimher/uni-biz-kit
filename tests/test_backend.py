@@ -10,6 +10,7 @@ import sys
 import json
 import subprocess
 import time
+import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,9 +22,9 @@ from unibizkit.cli import CLI
 from conftest import HAS_SECONDARY_MODEL, PRIMARY_BASE, assert_secondary_model_is_normal_app
 
 
-def _run(cmd, timeout=600):
+def _run(cmd, timeout=600, input=None):
     """Run a command, capture output, print it in order, and return the result."""
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=input)
     if result.stdout:
         print(result.stdout, end='')
     if result.stderr:
@@ -139,7 +140,7 @@ class TestAppBackend:
 
     @pytest.mark.integration
     @pytest.mark.timeout(600)  # 10 minutes timeout
-    def test_generate_app_backend_and_setup_database(self):
+    def test_generate_app_backend_and_setup_database(self, request):
         """Test generating a complete app app backend and setting up the database.
 
         This integration test:
@@ -173,6 +174,81 @@ class TestAppBackend:
             result = _run([sys.executable, str(create_script)], timeout=600)
             assert result.returncode == 0, f"dev-supabase-start.py failed with code {result.returncode}"
 
+            print("Setting a local Edge Function secret...")
+            set_secret_script = output_dir / 'bin' / 'dev-set-secret.py'
+            result = _run(
+                [sys.executable, str(set_secret_script), 'UBK_TEST_SECRET', '--stdin'],
+                timeout=600,
+                input='dev-secret-value\n',
+            )
+            assert result.returncode == 0, f"dev-set-secret.py failed with code {result.returncode}"
+            assert 'dev-secret-value' not in result.stdout
+            secrets_file = backend_dir / '.env.secrets'
+            functions_env = backend_dir / 'supabase' / 'functions' / '.env'
+            generated_functions_env = backend_dir / 'supabase' / 'functions' / '.env.generated'
+            assert secrets_file.stat().st_mode & 0o777 == 0o600
+            assert 'UBK_TEST_SECRET=dev-secret-value\n' in secrets_file.read_text()
+            effective_env = functions_env.read_text()
+            assert generated_functions_env.read_text() == (
+                'INTEGRATION_SCHEDULER_TOKEN=dev-integration-scheduler-token\n'
+                f'UBK_DEV_BASE_PORT={PRIMARY_BASE}\n'
+            )
+            assert f'UBK_DEV_BASE_PORT={PRIMARY_BASE}\n' in effective_env
+            assert 'UBK_TEST_SECRET=dev-secret-value\n' in effective_env
+            with open(backend_dir / 'supabase' / 'config.toml', 'rb') as config_file:
+                project_id = tomllib.load(config_file)['project_id']
+            inspected = _run([
+                'docker', 'inspect', f'supabase_edge_runtime_{project_id}', '--format',
+                '{{range .Config.Env}}{{if eq . "UBK_TEST_SECRET=dev-secret-value"}}found{{end}}{{end}}',
+            ])
+            assert inspected.returncode == 0
+            assert inspected.stdout.strip() == 'found'
+            base_port_inspected = _run([
+                'docker', 'inspect', f'supabase_edge_runtime_{project_id}', '--format',
+                '{{range .Config.Env}}{{if eq . "UBK_DEV_BASE_PORT=' + str(PRIMARY_BASE) + '"}}found{{end}}{{end}}',
+            ])
+            assert base_port_inspected.returncode == 0
+            assert base_port_inspected.stdout.strip() == 'found'
+
+            unchanged = _run(
+                [sys.executable, str(set_secret_script), 'UBK_TEST_SECRET', '--stdin'],
+                timeout=600,
+                input='dev-secret-value\n',
+            )
+            assert unchanged.returncode == 0
+            assert 'dev-secret-value' not in unchanged.stdout
+            assert 'Nothing to do.' in unchanged.stdout
+
+            if request.config.getoption("--slow"):
+                def container_identity(name):
+                    state = _run([
+                        'docker', 'inspect', name, '--format', '{{.Id}} {{.State.StartedAt}}',
+                    ])
+                    assert state.returncode == 0
+                    return tuple(state.stdout.strip().split())
+
+                db_container = f'supabase_db_{project_id}'
+                edge_container = f'supabase_edge_runtime_{project_id}'
+                db_before = container_identity(db_container)
+                edge_before = container_identity(edge_container)
+                function_js = backend_dir / 'supabase' / 'functions' / 'external-company-dummy-ok' / 'function.js'
+                original_function_js = function_js.read_text()
+                function_js.write_text(original_function_js + '\n// selective Edge Runtime restart probe\n')
+                try:
+                    code_change = _run([sys.executable, str(create_script)], timeout=60)
+                    assert code_change.returncode == 0
+                    assert 'Only JS/TS Edge Function code changed' in code_change.stdout
+                    assert 'Edge Runtime restarted with updated JS/TS functions.' in code_change.stdout
+                    assert container_identity(db_container) == db_before
+                    edge_after = container_identity(edge_container)
+                    assert edge_after[0] == edge_before[0]
+                    assert edge_after[1] != edge_before[1]
+                finally:
+                    function_js.write_text(original_function_js)
+                    restored = _run([sys.executable, str(create_script)], timeout=60)
+                    assert restored.returncode == 0
+                    assert 'Edge Runtime restarted with updated JS/TS functions.' in restored.stdout
+
             print("Running dev-supabase-reset-schema-and-data.py...")
             reset_script = output_dir / 'bin' / 'dev-supabase-reset-schema-and-data.py'
             result = _run([sys.executable, str(reset_script), '--force'], timeout=120)
@@ -199,6 +275,66 @@ class TestAppBackend:
 
         finally:
             os.chdir(original_cwd)
+
+    @pytest.mark.integration
+    @pytest.mark.timeout(60)
+    def test_dev_deploy_data_restores_and_updates_categories(self):
+        """The generated command reapplies deleted and modified deployed rows."""
+        db_url = dotenv_values(Path("test-app/backend/.env")).get("DB_URL")
+        assert db_url
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn, conn.cursor() as cur:
+                cur.execute("DELETE FROM category WHERE name = 'Deployed Hardware'")
+                cur.execute(
+                    "UPDATE category SET description = 'locally changed' "
+                    "WHERE name = 'Deployed Services'"
+                )
+                cur.execute(
+                    "INSERT INTO _integration(name, on_removed) "
+                    "VALUES ('removed-from-model', '\"ignore\"'::jsonb) "
+                    "ON CONFLICT (name) DO NOTHING"
+                )
+        finally:
+            conn.close()
+
+        result = _run([
+            sys.executable,
+            "test-app/bin/dev-deploy-data.py",
+            "models/test-app/deployed_data.jsonc",
+        ], timeout=60)
+        assert result.returncode == 0
+        stats = json.loads(result.stdout)
+        assert stats["category"] == {
+            "inserted": 1,
+            "updated": 1,
+            "removed_affected": 0,
+        }
+        result = _run([sys.executable, "test-app/bin/dev-deploy-data.py"], timeout=60)
+        assert result.returncode == 0
+        assert json.loads(result.stdout)["_integration"]["removed_affected"] == 1
+
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM _integration WHERE name = 'removed-from-model'")
+                assert cur.fetchone() is None
+        finally:
+            conn.close()
+
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT name, description FROM category "
+                    "WHERE name IN ('Deployed Hardware', 'Deployed Services') ORDER BY name"
+                )
+                assert cur.fetchall() == [
+                    ("Deployed Hardware", "Hardware managed by deployed data"),
+                    ("Deployed Services", "Services managed by deployed data"),
+                ]
+        finally:
+            conn.close()
 
     @pytest.mark.integration
     @pytest.mark.timeout(600)  # 10 minutes timeout
@@ -246,6 +382,25 @@ class TestAppBackend:
                 )
         finally:
             conn.close()
+
+    @pytest.mark.integration
+    @pytest.mark.timeout(60)
+    def test_external_company_dummy_action_via_generated_caller(self):
+        """The generated caller logs in and invokes a model-defined backend action."""
+        returncode, response = _call_edge_function_script(
+            "user1@test.com",
+            "external-company-dummy-ok",
+            {"id": 1},
+        )
+
+        assert returncode == 0
+        assert response == {
+            "status": 200,
+            "body": {
+                "status": "ok",
+                "message": "Dummy OK received: external_company_name_1",
+            },
+        }
 
     @pytest.mark.integration
     @pytest.mark.timeout(60)

@@ -261,9 +261,9 @@ def _generate_access_token_hook(security_config: Dict[str, Any], workflow_config
     user_directory_sql = ""
     if workflow_config["_concept_workflow"]:
         user_directory_sql = """
-  -- Refresh the user_directory discovery cache (workflow task assignment).
+  -- Refresh the _user_directory discovery cache (workflow task assignment).
   IF current_email IS NOT NULL THEN
-    INSERT INTO public.user_directory ("email", "_user", "roles", "source", "last_seen_at")
+    INSERT INTO public._user_directory ("email", "_user", "roles", "source", "last_seen_at")
     VALUES (lower(current_email), current_user_id, effective_roles, 'login', now())
     ON CONFLICT ("email") DO UPDATE
     SET "_user" = EXCLUDED."_user",
@@ -536,14 +536,18 @@ WITH CHECK (true);
                     if access in ("write", "owner_write"):
                         allowed_roles.append(role)
 
-                if allowed_roles and set(allowed_roles) != all_role_names:
-                    roles_json_array = ", ".join(f"'{r}'" for r in allowed_roles)
+                if set(allowed_roles) != all_role_names:
+                    if allowed_roles:
+                        roles_json_array = ", ".join(f"'{r}'" for r in allowed_roles)
+                        role_guard = f"""IF NOT (user_roles ?| array[{roles_json_array}]) THEN
+            RAISE EXCEPTION 'Permission denied for field {field_name}' USING ERRCODE = 'insufficient_privilege';
+        END IF;"""
+                    else:
+                        role_guard = f"RAISE EXCEPTION 'Permission denied for field {field_name}' USING ERRCODE = 'insufficient_privilege';"
                     check = f"""
     -- Check field '{field_name}'
     IF (TG_OP = 'UPDATE' AND NEW."{field_name}" IS DISTINCT FROM OLD."{field_name}") OR (TG_OP = 'INSERT' AND NEW."{field_name}" IS NOT NULL) THEN
-        IF NOT (user_roles ?| array[{roles_json_array}]) THEN
-            RAISE EXCEPTION 'Permission denied for field {field_name}' USING ERRCODE = 'insufficient_privilege';
-        END IF;
+        {role_guard}
     END IF;"""
                     trigger_checks.append(check)
 
@@ -585,8 +589,8 @@ EXECUTE FUNCTION "{trigger_name}_func"();
         for field_name, field_rules in concept_acl["_fields"].items():
             for role, access in field_rules.items():
                 current = role_table_access.get(role, "none")
-                if access == "write" or current == "write":
-                    role_table_access[role] = "write"
+                if access == "write" and current in ("none", "read"):
+                    role_table_access[role] = "field_write"
                 elif access == "owner_write" and current not in ("write", "owner_write"):
                     role_table_access[role] = "owner_write"
                 elif access == "read" and current == "none":
@@ -637,6 +641,20 @@ CREATE POLICY "{role}_delete_{table}" ON "{table}"
 FOR DELETE
 TO authenticated
 USING ({role_condition});
+""")
+            elif access == "field_write":
+                policies.append(f"""
+CREATE POLICY "{role}_select_{table}" ON "{table}"
+FOR SELECT
+TO authenticated
+USING ({role_condition});
+""")
+                policies.append(f"""
+CREATE POLICY "{role}_update_{table}" ON "{table}"
+FOR UPDATE
+TO authenticated
+USING ({role_condition})
+WITH CHECK ({role_condition});
 """)
             elif access == "owner_write":
                 parent_state_cond = build_parent_state_condition(table, role)

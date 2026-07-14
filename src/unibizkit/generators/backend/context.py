@@ -15,4 +15,6 @@ class Context:
     seed_data_config: Dict[str, Any]
     rules_config: Dict[str, Any]
     validations_config: Dict[str, Any]
+    deployed_data_config: Dict[str, Any] = field(default_factory=lambda: {"concepts": []})
+    integrations_config: Dict[str, Any] = field(default_factory=lambda: {"roles": ["admin"], "integrations": []})
     model_dir: Path = field(default_factory=lambda: Path("."))

@@ -2,13 +2,20 @@
   "properties": {
     "concepts": {
       "items": {
-        "optional_properties": ["_prefill_groups", "_profile_for_roles"],
+        "optional_properties": ["_prefill_groups", "_profile_for_roles", "_be_storage", "_fe_allow_create", "_fe_allow_delete"],
         "properties": {
           "_type": {
             "type": "string",
             "description": "Calculated archetype of the concept. 'root' = standalone top-level concept; 'part_of' = child concept owned by a parent via a part_of relation_to_one; 'recursive_part_of' = concept that is part_of itself (tree structure).",
             "enum": ["root", "part_of", "recursive_part_of"]
           },
+          "_be_storage": {
+            "type": "string",
+            "description": "Physical backend representation of the concept.",
+            "enum": ["table", "view"]
+          },
+          "_fe_allow_create": { "type": "boolean" },
+          "_fe_allow_delete": { "type": "boolean" },
           "_profile_for_roles": {
             "type": "array",
             "description": "Roles for which this concept acts as profile. Only present if the concept is a profile for at least one role. A profile concept stores the extended user data for users of those roles.",

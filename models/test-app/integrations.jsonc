@@ -1,0 +1,15 @@
+{
+  "$schema": "../../schemas/integrations_schema.json",
+  "roles": ["admin"],
+  "integrations": [
+    {
+      "name": "odata-companies",
+      "description": "Replicates accounts from the deterministic development OData mock",
+      "target_concept": "external_company",
+      "schedule": "* * * * *",
+      "source": "odata-companies.js",
+      "on_removed": { "set_false": "active" },
+      "transform": "{ _external_id: input.accountId, name: input.legalName, active: input.statusCode = 1, street: input.addresses[isPrimary = true][1].line1, city: input.addresses[isPrimary = true][1].city, country: input.addresses[isPrimary = true][1].country }"
+    }
+  ]
+}

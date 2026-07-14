@@ -141,6 +141,7 @@
                     "boolean",
                     "date",
                     "datetime",
+                    "json",
                     "relation_to_one",
                     "relation_to_many",
                     "prefill"

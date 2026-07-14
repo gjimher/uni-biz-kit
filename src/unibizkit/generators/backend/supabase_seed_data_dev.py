@@ -29,6 +29,8 @@ def generate(ctx: Context) -> str:
 
     if ctx.seed_data_config["include_test_data"]:
         for concept in sorted_concepts:
+            if concept["name"].startswith("_"):
+                continue
             profile_seed_data = _generate_profile_seed_data_for_concept(concept, ctx)
             if profile_seed_data:
                 sql_parts.append(profile_seed_data)
@@ -41,7 +43,7 @@ def generate(ctx: Context) -> str:
 
 
 def _generate_user_directory_seed(ctx: Context) -> str:
-    """Seed the user_directory discovery cache with the model-defined users.
+    """Seed the _user_directory discovery cache with the model-defined users.
 
     Runs before auth users exist, so _user stays NULL until each user's first
     login (the access token hook upserts the row with the real auth uuid).
@@ -61,8 +63,8 @@ def _generate_user_directory_seed(ctx: Context) -> str:
     if not rows:
         return ""
     return (
-        "-- user_directory discovery cache: model-defined users\n"
-        'INSERT INTO "user_directory" ("email", "roles", "source") VALUES\n'
+        "-- _user_directory discovery cache: model-defined users\n"
+        'INSERT INTO "_user_directory" ("email", "roles", "source") VALUES\n'
         + ",\n".join(rows)
         + '\nON CONFLICT ("email") DO NOTHING;'
     )
@@ -109,6 +111,10 @@ def _generate_sample_data_for_concept(concept: Dict[str, Any], ctx: Context) -> 
     for i in range(1, num_records + 1):
         field_values = []
         field_names = []
+
+        if concept.get("_integration_target"):
+            field_names.append("_external_id")
+            field_values.append(f"'sample:{table_name}:{i}'")
 
         for field in concept["fields"]:
             field_name = field["name"]

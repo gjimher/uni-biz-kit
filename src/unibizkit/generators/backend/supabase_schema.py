@@ -10,11 +10,11 @@ from .schema_parts.workflow_tasks import (
     generate_task_assignment_email_triggers,
     generate_workflow_tasks_view,
 )
-from . import rules
+from . import integrations, rules
 
 
 def _generated_table_names(ctx: Context) -> list[str]:
-    table_names = [concept["name"] for concept in ctx.concepts]
+    table_names = [concept["name"] for concept in ctx.concepts if concept.get("_be_storage", "table") == "table"]
     table_names.extend(get_join_table_names(ctx.concepts, ctx.concept_map))
     table_names.extend(
         f"{concept['name']}_document"
@@ -30,6 +30,8 @@ def generate(ctx: Context) -> str:
     sql_parts.append("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
 
     for concept in ctx.concepts:
+        if concept.get("_be_storage", "table") != "table":
+            continue
         sql_parts.append(generate_table_sql(concept))
 
     sql_parts.extend(generate_join_tables(ctx.concepts, ctx.concept_map))
@@ -67,10 +69,12 @@ def generate(ctx: Context) -> str:
     sql_parts.extend(generate_user_directory(ctx.workflow_config, ctx.security_config))
     sql_parts.extend(generate_workflow_tasks_view(ctx.workflow_config, ctx.security_config))
     sql_parts.extend(generate_task_assignment_email_triggers(ctx.workflow_config, ctx.security_config))
+    sql_parts.extend(integrations.generate_integration_sql(ctx))
 
     if ctx.security_config["authentication_required"]:
+        table_concepts = [c for c in ctx.concepts if c.get("_be_storage", "table") == "table"]
         sql_parts.extend(generate_security_policies(
-            ctx.concepts, ctx.concept_map, ctx.security_config, ctx.workflow_config
+            table_concepts, ctx.concept_map, ctx.security_config, ctx.workflow_config
         ))
 
     return '\n\n'.join(sql_parts)

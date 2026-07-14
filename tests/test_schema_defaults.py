@@ -180,6 +180,20 @@ def test_underscore_role_name_raises_error():
             SchemaLoader().load_and_validate(str(temp_path))
 
 
+def test_underscore_concept_name_raises_error():
+    """The underscore namespace is reserved for generated auxiliary concepts."""
+    schema = json.loads(json.dumps(_MINIMAL_CONCEPTS))
+    schema["concepts"][0]["name"] = "_internal_collision"
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        (root / "concepts.jsonc").write_text(json.dumps(schema))
+        (root / "presentation.jsonc").write_text("{}")
+        (root / "security.jsonc").write_text('{"authentication_required":false}')
+        _write_deployment(root)
+        with pytest.raises(SchemaValidationError, match="reserved"):
+            SchemaLoader().load_and_validate(str(root / "concepts.jsonc"))
+
+
 def test_anon_role_name_raises_error():
     """'_anon' declared explicitly in the roles list must be rejected."""
     with tempfile.TemporaryDirectory() as temp_dir:

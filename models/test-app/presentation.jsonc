@@ -18,7 +18,8 @@
     {
       "label": "Test",
       "children": [
-        { "label": "Field checkers", "concept": "field_checker" }
+        { "label": "Field checkers", "concept": "field_checker" },
+        { "label": "External company", "concept": "external_company" }
       ]
     },
     {

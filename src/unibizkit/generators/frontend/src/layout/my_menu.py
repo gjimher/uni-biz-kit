@@ -6,8 +6,10 @@ def generate(ctx: Context) -> str:
     menu_items_json = json.dumps(ctx.presentation_config.get("menu"), indent=2)
     concept_descriptions = {c["name"]: c["description"] for c in ctx.concepts if c["description"]}
     concept_descriptions_json = json.dumps(concept_descriptions)
+    integration_roles_json = json.dumps(ctx.integrations_config["roles"])
+    has_integrations = str(bool(ctx.integrations_config["integrations"])).lower()
     return f"""import * as React from 'react';
-import {{ Menu, useTranslate }} from 'react-admin';
+import {{ Menu, useGetIdentity, useTranslate }} from 'react-admin';
 import {{ Collapse, List, ListItemButton, ListItemIcon, ListItemText }} from '@mui/material';
 import Tooltip from '@mui/material/Tooltip';
 import {{
@@ -21,6 +23,8 @@ import {{
     Home as HomeIcon,
     AssignmentInd as AssignableTasksIcon,
     AssignmentTurnedIn as MyTasksIcon,
+    Settings as OperationsIcon,
+    Sync as IntegrationsIcon,
 }} from '@mui/icons-material';
 
 const WORKFLOW_PAGE_ROUTES = {{
@@ -30,6 +34,8 @@ const WORKFLOW_PAGE_ROUTES = {{
 
 const menuItems = {menu_items_json};
 const conceptDescriptions = {concept_descriptions_json};
+const integrationRoles = new Set({integration_roles_json});
+const hasIntegrations = {has_integrations};
 
 const SubMenu = ({{ handleToggle, isOpen, name, icon, children, dense }}) => {{
     const translate = useTranslate();
@@ -111,10 +117,12 @@ const RenderMenu = ({{ items, state, handleToggle }}) => {{
 }};
 
 export const MyMenu = () => {{
+    const {{ identity }} = useGetIdentity();
     const [state, setState] = React.useState({{}});
     const handleToggle = (menu) => {{
         setState(state => ({{ ...state, [menu]: !state[menu] }}));
     }};
+    const canOperateIntegrations = hasIntegrations && (identity?.roles || []).some(role => integrationRoles.has(role));
 
     return (
         <Menu>
@@ -125,6 +133,15 @@ export const MyMenu = () => {{
                 <ListItemText primary="Home" />
             </ListItemButton>
              <RenderMenu items={{menuItems}} state={{state}} handleToggle={{handleToggle}} />
+             {{canOperateIntegrations && <SubMenu
+                name="Operations"
+                icon={{<OperationsIcon />}}
+                isOpen={{state.Operations}}
+                handleToggle={{() => handleToggle('Operations')}}
+             >
+                <Menu.Item to="/_integration" primaryText="Integrations" leftIcon={{<IntegrationsIcon />}} />
+                <Menu.Item to="/_integration_run" primaryText="Integration runs" leftIcon={{<IntegrationsIcon />}} />
+             </SubMenu>}}
         </Menu>
     );
 }};

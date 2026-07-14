@@ -1,5 +1,5 @@
 def generate() -> str:
-    """Admin task pages backed by the workflow_tasks SQL view.
+    """Admin task pages backed by the _workflow_tasks SQL view.
 
     Regular React-Admin lists (server-side filtering, sorting and pagination
     via PostgREST) over the UNION view of every workflow concept; the concept
@@ -107,7 +107,7 @@ export const WORKFLOW_ASSIGNABLE_TASKS = () => {
     const preferenceKey = 'workflow_tasks_assignable.datagrid';
     return (
         <List
-            resource="workflow_tasks"
+            resource="_workflow_tasks"
             storeKey="workflow_tasks_assignable"
             title="Assignable workflow tasks"
             filter={{ 'state_task_owner@is': null, 'assigners@ov': `{${roles.join(',')}}` }}
@@ -133,7 +133,7 @@ export const WORKFLOW_MY_TASKS = () => {
     const preferenceKey = 'workflow_tasks_mine.datagrid';
     return (
         <List
-            resource="workflow_tasks"
+            resource="_workflow_tasks"
             storeKey="workflow_tasks_mine"
             title="My workflow tasks"
             filter={{ state_task_owner: identity.email.toLowerCase() }}

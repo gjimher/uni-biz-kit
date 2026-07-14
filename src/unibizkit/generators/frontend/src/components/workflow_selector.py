@@ -57,7 +57,7 @@ export const useWorkflowCanAssign = (workflow, record, identity, identityLoading
 };
 
 // Form-bound task owner controls: freeSolo email autocomplete (suggestions come
-// from the user_directory discovery cache, limited to users whose roles own the
+// from the _user_directory discovery cache, limited to users whose roles own the
 // current state) plus an "Assign to me" shortcut.
 const TaskOwnerControl = ({ workflow, canAssign }) => {
     const record = useRecordContext();
@@ -77,7 +77,7 @@ const TaskOwnerControl = ({ workflow, canAssign }) => {
         if (!canAssign) return;
         let cancelled = false;
         supabaseClient
-            .from('user_directory')
+            .from('_user_directory')
             .select('email, roles')
             .then(({ data }) => {
                 if (cancelled || !data) return;

@@ -771,6 +771,8 @@ Examples:
             # Write Supabase Edge Functions for FEEL business rules and payments.
             supabase_rules = supabase_generator.generate_supabase_rules()
             supabase_rules.update(supabase_generator.generate_supabase_payments())
+            supabase_rules.update(supabase_generator.generate_supabase_integrations())
+            supabase_rules.update(supabase_generator.generate_backend_actions())
             rules_dir = backend_dir / "supabase" / "functions"
             if rules_dir.exists():
                 for item in rules_dir.iterdir():
@@ -785,8 +787,14 @@ Examples:
                     function_dir = rules_dir / function_name
                     function_dir.mkdir(parents=True, exist_ok=True)
                     for filename, content in files.items():
-                        with open(function_dir / filename, 'w', encoding='utf-8') as f:
+                        output_file = function_dir / filename
+                        output_file.parent.mkdir(parents=True, exist_ok=True)
+                        with open(output_file, 'w', encoding='utf-8') as f:
                             f.write(content)
+            if getattr(schema_loader, "integrations_config", {"integrations": []})["integrations"]:
+                with open(rules_dir / ".env.generated", "w", encoding="utf-8") as f:
+                    f.write("INTEGRATION_SCHEDULER_TOKEN=dev-integration-scheduler-token\n")
+                    f.write(f"UBK_DEV_BASE_PORT={dev_ports.BASE}\n")
 
             logger.info(f"Supabase schema generated: {sql_file}")
             logger.info(f"Development seed data generated: {seed_data_dev_file}")

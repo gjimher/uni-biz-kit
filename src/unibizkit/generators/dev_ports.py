@@ -17,6 +17,7 @@ def _recompute():
 
     # External services  (base + 10..19)
     g['SMTP'] = base + 10
+    g['INTEGRATION_MOCK'] = base + 11
 
     # SSO / Keycloak  (base + 30..39)
     g['KC_PORT']      = base + 30

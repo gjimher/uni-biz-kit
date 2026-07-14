@@ -60,6 +60,10 @@ const buildPermissions = (user) => {{
                     if (fieldAccess === 'owner_write' && !permissions[fieldKey].includes('write')) {{
                         permissions[fieldKey].push('write');
                     }}
+                    if (fieldAccess === 'write' && mainAccess !== 'write' && mainAccess !== 'owner_write') {{
+                        if (!permissions[concept]) permissions[concept] = [];
+                        if (!permissions[concept].includes('edit')) permissions[concept].push('edit');
+                    }}
                 }}
             }}
         }}

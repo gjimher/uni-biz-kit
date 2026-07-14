@@ -14,4 +14,5 @@ class Context:
     business_schema: Dict[str, Any]
     workflow_config: Dict[str, Any]
     validations_config: Dict[str, Any]
+    integrations_config: Dict[str, Any]
     output_dir: Path

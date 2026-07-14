@@ -502,7 +502,9 @@ class SchemaProcessor:
 
                 concepts_to_apply = []
                 if rule["concept"] == "*":
-                    concepts_to_apply = [c["name"] for c in self.concepts]
+                    # Wildcards belong to the user model. Generated underscore
+                    # concepts receive explicit internal rules instead.
+                    concepts_to_apply = [c["name"] for c in self.concepts if not c["name"].startswith("_")]
                 else:
                     concepts_to_apply = [rule["concept"]]
 
@@ -1129,6 +1131,7 @@ class SchemaProcessor:
             'boolean': 'BOOLEAN',
             'date': 'DATE',
             'datetime': 'TIMESTAMP WITH TIME ZONE',
+            'json': 'JSONB',
             'enum': 'TEXT',
             'relation_to_one': 'INTEGER'
         }

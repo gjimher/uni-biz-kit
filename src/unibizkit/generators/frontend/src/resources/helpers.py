@@ -503,6 +503,10 @@ def generate_field_components(
             # filter either: long-form content is not useful as a filter.
             input_html = f'          <MarkdownInput source="{field_name}"{validation}{disabled_prop}{col_label_prop} />'
 
+        elif field["type"] == "json":
+            json_layout = " multiline rows={4}" if field["size"] == "l" else ""
+            input_html = f'          <TextInput source="{field_name}" format={{value => value == null ? "" : JSON.stringify(value, null, 2)}} parse={{value => value ? JSON.parse(value) : null}}{json_layout} fullWidth margin="none" size="small" disabled{label_prop} />'
+
         elif field["type"] == "enum":
             enum_values = field["enum_values"]
             choices_str = ', '.join([f"{{ id: '{val}', name: '{val}' }}" for val in enum_values])

@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Integrations Schema",
+  "description": "External data replication and FEEL schema mappings",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "roles": {
+      "type": "array",
+      "description": "Roles allowed to inspect integrations, edit operational notes and start runs.",
+      "default": ["admin"],
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "integrations": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+          "description": { "type": "string", "default": "" },
+          "target_concept": { "type": "string" },
+          "source": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*\\.js$",
+            "description": "JavaScript file name located in backend/integrations beside concepts.jsonc, exporting async fetchPage(context)."
+          },
+          "schedule": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional five-field UTC cron expression. Without it, runs are manual only."
+          },
+          "on_removed": {
+            "description": "Behavior for source records explicitly reported as deleted.",
+            "default": "ignore",
+            "oneOf": [
+              { "const": "ignore" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "set_false": { "type": "string", "minLength": 1 }
+                },
+                "required": ["set_false"]
+              }
+            ]
+          },
+          "transform": { "type": "string", "minLength": 1 }
+        },
+        "required": ["name", "target_concept", "source", "transform"]
+      }
+    }
+  },
+  "required": ["integrations"]
+}

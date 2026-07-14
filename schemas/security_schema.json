@@ -123,7 +123,7 @@
       "properties": {
         "concept": { "type": "string", "description": "Concept name or '*' for all" },
         "role": { "type": "string", "description": "Role name (e.g., 'admin', 'user'). Use '_anon' for unauthenticated (anonymous) access — only 'read' is allowed for this built-in role." },
-        "access": { "enum": ["read", "write", "owner_write"], "description": "Access level" },
+        "access": { "enum": ["read", "write", "owner_write"], "description": "Access level." },
         "field": { "type": "string", "description": "Field name or '*' for all fields", "default": "*" }
       },
       "required": ["concept", "role", "access"]

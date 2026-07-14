@@ -8,25 +8,32 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
     import_statements = []
     resource_components = []
     has_workflows = bool(ctx.workflow_config["_concept_workflow"])
+    has_integrations = bool(ctx.integrations_config["integrations"])
     # 'workflow' is the path segment of the built-in task pages; the custom
     # router must prefix it with /admin like any resource route.
     admin_route_segments = [concept["name"] for concept in ctx.concepts]
     if has_workflows:
         admin_route_segments.append("workflow")
+    if has_integrations:
+        admin_route_segments.extend(["_integration", "_integration_run"])
     admin_resource_names = json.dumps(admin_route_segments)
 
     for concept in ctx.concepts:
         resource_name = concept["name"]
+        create_component = (
+            f"{{(permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write')) ? {resource_name.upper()}_CREATE : null}}"
+            if concept.get("_fe_allow_create", True) else "{null}"
+        )
         import_statements.append(
             f"import {{ {resource_name.upper()}_LIST, {resource_name.upper()}_CREATE, "
             f"{resource_name.upper()}_EDIT, {resource_name.upper()}_SHOW }} "
             f"from './resources/{resource_name}/{resource_name}.jsx';"
         )
         resource_components.append(
-            f"""          {{(permissions?.['{resource_name}']?.includes('read') || permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('read') || permissions?.['*']?.includes('write')) ? (
+            f"""          {{(permissions?.['{resource_name}']?.includes('read') || permissions?.['{resource_name}']?.includes('edit') || permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('read') || permissions?.['*']?.includes('write')) ? (
               <Resource name="{resource_name}"
                   list={{ {resource_name.upper()}_LIST }}
-                  create={{(permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write')) ? {resource_name.upper()}_CREATE : null}}
+                  create={create_component}
                   edit={{ {resource_name.upper()}_EDIT }}
                   show={{ {resource_name.upper()}_SHOW }}
               />

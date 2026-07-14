@@ -44,7 +44,7 @@ def generate_workflow_tasks_view(workflow_config: Dict[str, Any], security_confi
   FROM {_quote_ident(concept_name)} t""")
 
     view_sql = (
-        'CREATE VIEW "workflow_tasks" WITH (security_invoker = true) AS\n  '
+        'CREATE VIEW "_workflow_tasks" WITH (security_invoker = true) AS\n  '
         + "\nUNION ALL\n  ".join(selects)
         + ";"
     )
@@ -64,27 +64,7 @@ def generate_user_directory(workflow_config: Dict[str, Any], security_config: Di
     if not security_config["authentication_required"]:
         return []
 
-    return ["""
-CREATE TABLE "user_directory" (
-    "email"        TEXT PRIMARY KEY,
-    "_user"        UUID,
-    "roles"        JSONB NOT NULL DEFAULT '[]'::jsonb,
-    "source"       TEXT NOT NULL,
-    "last_seen_at" TIMESTAMP WITH TIME ZONE
-);
-
--- Supports roles ?| array[...] and roles @> ... (PostgREST cs.) lookups.
-CREATE INDEX "user_directory_roles_idx" ON "user_directory" USING GIN ("roles");
-
-ALTER TABLE "user_directory" ENABLE ROW LEVEL SECURITY;
-
--- Read-only for the app: writes happen through the access token hook
--- (SECURITY DEFINER) and seed/service-role scripts only.
-CREATE POLICY "authenticated_read_user_directory" ON "user_directory"
-FOR SELECT
-TO authenticated
-USING (true);
-"""]
+    return ['CREATE INDEX "user_directory_roles_idx" ON "_user_directory" USING GIN ("roles");']
 
 
 def generate_task_assignment_email_triggers(
