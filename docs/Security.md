@@ -1,6 +1,6 @@
 # Security in UniBizKit
 
-UniBizKit provides a flexible, declarative security model to handle access control for your business applications. When authentication is required, you can define roles, users, and detailed security rules in `security.jsonc` (see [Backend.md](Backend.md#the-model-directory)) that are compiled into an Access Control List (`_acl`) for the system to enforce.
+UniBizKit provides a flexible, declarative security model to handle access control for your business applications. When authentication is required, you can define roles, users, and detailed security rules in `security.jsonc` (see [Backend.md](Backend.md#backend-model-files)) that are compiled into an Access Control List (`_acl`) for the system to enforce.
 
 All enforcement happens in the backend — the [frontend](Frontend.md) is untrusted and only mirrors permissions for usability.
 
@@ -274,7 +274,9 @@ The web application authenticates requests with Supabase's **anon key** (a publi
 
 - Has access only to the tables exposed via PostgREST under the `public` schema, subject to RLS.
 - Has **no access to `auth.users`**, which is an internal Supabase schema not reachable through PostgREST.
-- Has **no access to the Admin API** (`/auth/v1/admin/...`), which requires the **service role key** — a secret that must never leave the server and is not present in the web app.
+- Has **no access to the Admin API** (`/auth/v1/admin/...`), which requires the
+  **service-role key**. This privileged credential never leaves trusted backend
+  infrastructure; see [Secrets.md](Secrets.md#supabase-infrastructure-credentials).
 
 The only path to changing a role from the application layer would be a vulnerability in Supabase itself (e.g. a privilege-escalation bug in PostgREST or the auth service). Short of that, role changes require either the service role key or direct database access.
 

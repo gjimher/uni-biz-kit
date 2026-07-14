@@ -37,6 +37,6 @@ Both in development and in production, **each model gets its own Supabase instan
 
 ## Integration Between Models
 
-Models integrate with each other through business APIs: [edge functions](Backend.md#edge-functions) that call one another.
+Models integrate with each other through business APIs: [backend functions](Backend.md#backend-functions) that call one another.
 
 Sharing users between models is on the [roadmap](Roadmap.md) (one model using the user database of another). The current workaround is [Single Sign-On](SingleSignOn.md), already supported: all applications authenticate against the same identity provider.

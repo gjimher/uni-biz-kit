@@ -13,6 +13,27 @@ immutable and switched atomically; app data survives version switches.
 * **Workstation**: docker (to build and push the images) and the generated
   app's frontend able to build (`npm`).
 
+## Runtime configuration (`system.jsonc`)
+
+`system.jsonc` configures services used by the generated application in every
+environment:
+
+* `smtp` selects the mail server, port and sender used for auth and workflow
+  emails. UniBizKit supports SMTP servers without authentication. Development
+  can use the generated
+  [SMTP mock](Development.md#dev-scripts-appbindev-); production-specific host,
+  port and sender overrides belong in `deployment.jsonc`.
+* `base_url` is the production application URL used in email links and
+  redirects. Local development derives its URL from the generated port layout.
+* `payments` enables the generated `payment` backend function, selects its
+  concept, amount and status fields, and configures the currency. With
+  `dev_mode: true`, a built-in simulator replaces the provider and needs no
+  credentials.
+
+Payment-provider and other Edge Function credentials use the mechanisms in
+[Secrets.md](Secrets.md). SMTP credentials are neither accepted by the model
+nor injected as secrets because authenticated SMTP is not supported.
+
 ## Configuration (`deployment.jsonc`)
 
 In the model's `deployment.jsonc`:
@@ -71,9 +92,11 @@ traceability requirement and accepts a dirty worktree. The two phases are:
 
 1. `prod-dc-publish.py` builds and uploads mutable `dev` images without touching
    the running stack, database or storage.
+   The functions build resolves every Deno import, verifies the graph with
+   `--cached-only` and embeds the complete dependency cache in the image.
 2. `prod-dc-up.py` asks for confirmation (`--force` skips it).
 3. Only after confirmation, `up` removes the PostgreSQL and Storage volumes.
-4. `up` starts a clean stack and loads the complete schema, seed rows, seed documents
+4. `up` starts a clean stack and loads the complete schema, seed rows, deployed data and seed documents
    and configured auth users.
 5. `up` verifies the provisioner and frontend, then prunes dangling images.
 
@@ -131,7 +154,8 @@ Layout on the server:
 
 ```
 ~/ubk/<app>/
-├── .env                          # secrets + PUBLIC_HOST (created on first publish)
+├── .env                          # generated infrastructure configuration and credentials
+├── .env.secrets                  # custom backend and integration secrets
 ├── docker-compose-<version>.yml  # one immutable file per published version
 ├── docker-compose.yml            # symlink to the active version
 ├── releases/<version>.sha256     # content hash guarding immutability
@@ -148,10 +172,9 @@ Layout on the server:
   `prod-dc-publish.py` creates the next version, or explicitly replaces the
   current candidate with `--republish` when its schema and migration are
   identical. Versions are never selected manually during publication.
-* **Secrets** — Postgres password, JWT secret and the anon/service API keys are
-  generated on the first publish and stored only in the server's
-  `~/ubk/<app>/.env`. They survive version switches; `prod-dc-remove.py`
-  deletes them.
+* **Secrets** — infrastructure credentials and custom backend secrets have
+  separate lifecycles and files; [Secrets.md](Secrets.md#production) documents
+  their creation, rotation, precedence and removal.
 * **Provisioning** — a one-shot `provision` container waits for Supabase. It
   loads the complete schema and seeds for a fresh database; versioned releases
   preserve existing data and apply only their pending Supabase migration.

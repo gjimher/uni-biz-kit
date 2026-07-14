@@ -23,9 +23,12 @@ Every generated app ships scripts to operate its local stack. The state-changing
 |--------|--------------|
 | `dev-supabase-start.py` | Creates/starts the app's Supabase instance; writes `backend/.env` with URL and keys |
 | `dev-supabase-stop.py` | Stops the instance (idempotent, data preserved) |
-| `dev-supabase-remove.py` | Stops and removes the instance |
+| `dev-supabase-remove.py` | Stops and removes the local instance while preserving generated Edge Functions |
+| `dev-deploy-data.py [FILE]` | Transactionally applies generated or alternative deployed data |
 | `dev-supabase-reset-schema-and-data.py` | Resets the database to the generated schema and seed data |
-| `dev-supabase-call-edge-function.py` | Calls an [edge function](Backend.md#edge-functions) authenticated as a given user |
+| `dev-supabase-call-edge-function.py` | Calls a [backend function](Backend.md#backend-functions) authenticated as a given user |
+| `dev-set-secret.py` | Manages local Edge Function secrets and reconciles Supabase when they change |
+| `dev-integration-odata-mock.py` | Runs the deterministic paginated source used by [integration](Integrations.md) development |
 | `dev-smtp-mock.py` | SMTP mock: captures auth emails and prints them (with their links) to stdout |
 | `dev-info-ports.py` | Prints the generated app's baked development port layout |
 | `dev-sso-start.py` | Starts and auto-configures the [SSO](SingleSignOn.md) dev environment (Kerberos + Keycloak) |
@@ -34,6 +37,16 @@ Every generated app ships scripts to operate its local stack. The state-changing
 | `dev-sso-chrome.py` | Gets a Kerberos ticket and launches Chrome for SSO login |
 
 The `dev-sso-*` scripts are only generated when the model enables [SSO](SingleSignOn.md).
+
+Use `dev-set-secret.py` for local backend and integration credentials. Its safe
+input contract, storage and restart behavior are documented in
+[Secrets.md](Secrets.md#development).
+
+Function changes use two reproducible tar signatures with timestamps removed.
+If only existing `.js`/`.ts` code changes, `dev-supabase-start.py` restarts the
+Edge Runtime container alone. Changes to configuration, the Functions
+environment, directories or non-code files conservatively restart the complete
+Supabase stack.
 
 Every app also ships `bin/prod-dc-*` scripts to deploy it to a production server — see [Deployment.md](Deployment.md).
 
@@ -78,6 +91,7 @@ primary app.
 | base+2  | 3002 | 3102 | Chrome remote debugging (SSO) |
 | base+3  | 3003 | 3103 | Edge Runtime inspector (Deno) |
 | base+10 | 3010 | 3110 | SMTP mock |
+| base+11 | 3011 | 3111 | Integration OData mock |
 | base+30 | 3030 | 3130 | Keycloak web (SSO) |
 | base+31 | 3031 | 3131 | Keycloak management |
 | base+32 | 3032 | 3132 | KDC (Kerberos) |

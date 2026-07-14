@@ -2,20 +2,25 @@
 
 UniBizKit generates a complete **Supabase (PostgreSQL)** backend from the model. All security and business-rule enforcement lives here: the [frontend](Frontend.md) is untrusted and the database only accepts what the policies, triggers and edge functions allow.
 
-## The Model Directory
+## Backend Model Files
 
-An application model is a directory (see `models/test-app`, `models/b2c-app`) of JSON files — with comments, hence the `.jsonc` extension (see [Model.md](Model.md#model-files)) — each validated against its meta-schema in `schemas/`:
+The backend-relevant part of an application model (see `models/test-app`,
+`models/b2c-app`) consists of JSON files—with comments, hence the `.jsonc`
+extension (see [Model.md](Model.md#model-files))—each validated against its
+meta-schema in `schemas/`:
 
 | File | Defines | Docs |
 |------|---------|------|
 | `concepts.jsonc` | Entities, fields, relationships | this page |
 | `security.jsonc` | Roles, users, access rules, SSO | [Security.md](Security.md) |
 | `rules.jsonc` | Server-side business rules (FEEL) | this page |
+| `integrations.jsonc` | External replication and FEEL mappings | [Integrations.md](Integrations.md) |
+| `backend/actions/*.js` | Authenticated concept actions | [Action functions](#action-functions) |
+| `deployed_data.jsonc` | Rows synchronized on every deployment | this page |
 | `workflow.jsonc` | State machines per concept | [Workflow.md](Workflow.md) |
-| `presentation.jsonc` + `presentation/` | UI configuration and custom pages | [Frontend.md](Frontend.md) |
 | `seed_data.jsonc` | Initial records | this page |
-| `system.jsonc` | SMTP, payments | this page |
-| `deployment.jsonc` | Base URI | this page |
+| `system.jsonc` | Runtime services such as SMTP and payments | [Deployment.md](Deployment.md#runtime-configuration-systemjsonc) |
+| `deployment.jsonc` | Development and production deployment | [Deployment.md](Deployment.md#configuration-deploymentjsonc) |
 | `validations/*.csv` | Data-driven field validations | this page |
 
 ## Concepts
@@ -70,7 +75,7 @@ Some types accept a `subtype` refining rendering/storage — e.g. `decimal` with
 
 ### Field properties
 
-`required`, `unique`, `default`, `min`/`max`, `min_length`/`max_length`, `precision`/`scale` (decimal), `enum_values`, `size` (UI hint: `s`/`m`/`l`), `calculated` (see [Calculated fields](#calculated-fields)) and `description`.
+`required`, `unique`, `default`, `min`/`max`, `min_length`/`max_length`, `precision`/`scale`, `enum_values`, `size` (UI hint: `s`/`m`/`l`), `calculated` (see [Calculated fields](#calculated-fields)) and `description`. For `decimal`, `precision` is the total number of digits and `scale` the fractional digits. For `datetime`, `precision` is `"minute"` (the default) or `"second"`; it controls list/show formatting and the input step.
 
 Constraints are enforced in the database (`NOT NULL`, `UNIQUE`, `CHECK`) and mirrored as form validation in the UI.
 
@@ -118,35 +123,72 @@ Example (from `models/b2c-app/rules.jsonc`):
 }
 ```
 
-Each rule compiles to its own [edge function](#edge-functions), so it runs server-side and cannot be bypassed by the frontend.
+Each rule compiles to its own [backend function](#backend-functions), so it runs server-side and cannot be bypassed by the frontend.
 
 ## Seed Data (`seed_data.jsonc`)
 
-Initial records per concept (`records`), plus `include_test_data` to toggle generated sample data. Document fields (e.g. product images) can be embedded base64; the reset script uploads them to the storage buckets.
+`seed_data.jsonc` supplies the initial records grouped by concept under `records`.
+`include_test_data` controls whether the generator also creates deterministic
+sample rows. Document fields, such as product images, can be embedded as base64;
+the reset process uploads them to the generated Storage buckets.
 
-## System (`system.jsonc`)
+Seed data is loaded when a development database is reset and when a fresh
+production database is provisioned. It is initialization data, not an
+authoritative set: later deployments do not reconcile rows that users have
+changed or removed.
 
-* `smtp` — mail server used for auth emails (in dev, the [SMTP mock](Development.md) prints them to stdout).
-* `payments` — enables the `payment` edge function (Stripe proxy). `dev_mode: true` uses a built-in simulator, no Stripe credentials needed.
+## Deployed Data (`deployed_data.jsonc`)
 
-## Deployment (`deployment.jsonc`)
+Deployed data declares model-owned records that are reconciled on every
+development reset and production deployment:
 
-* `base_uri` — path prefix the app is served under (e.g. `/b2c`). Drives the frontend base path and the `/<base>/api` proxy (see [Frontend.md](Frontend.md)).
+```jsonc
+{
+  "$schema": "../../schemas/deployed_data_schema.json",
+  "concepts": [{
+    "concept": "currency",
+    "on_removed": "ignore",
+    "records": [
+      { "code": "EUR", "name": "Euro", "active": true }
+    ]
+  }]
+}
+```
 
-## Generated Output (`<app>/backend/`)
+The upsert key comes from the concept's local stored
+`id_presentation.fields`; related presentation paths are ignored. Every record
+must provide each key field. Generated fields and to-many relations cannot be
+assigned.
 
-| Artifact | Contents |
-|----------|----------|
-| `supabase_schema.sql`, `supabase/migrations/` | Tables, constraints, RLS policies, triggers, auth hooks |
-| `supabase/seed.sql`, `supabase_seed_data_dev.sql` | Seed data |
-| `supabase/functions/` | Edge functions |
-| `supabase/config.toml`, `supabase_config_dev.toml` | Supabase instance configuration (ports, auth, SMTP) |
+`on_removed` controls rows whose key exists in the database but is absent from
+the authoritative `records` array:
 
-Each application gets its **own Supabase instance**, in dev and in production (see [Architecture.md](Architecture.md)).
+* `"ignore"` leaves those rows unchanged and is the default.
+* `"delete"` deletes them, subject to foreign keys and cascades.
 
-## Edge Functions
+An empty `records` array applies the removal policy to every existing row. The
+whole operation is transactional: validation, upserts and removals either all
+succeed or none are committed.
 
-Edge functions are Deno functions deployed inside the app's Supabase instance. They are the trusted place for business logic that goes beyond what SQL constraints and RLS can express — the frontend calls them, it never implements them. Generated functions:
+The generator writes the merged model and framework-owned entries to
+`deployed_data_extended.json`. For example, `_integration` uses `"delete"`, so
+removing an integration definition also removes its run history through the
+generated cascade. The shared `backend/deployed_data_runtime.py` applies this
+data both from local resets and from the production provisioner.
+
+During development, apply the generated file or an alternative JSON/JSONC file
+with:
+
+```bash
+python bin/dev-deploy-data.py
+python bin/dev-deploy-data.py /tmp/alternative-deployed-data.jsonc
+```
+
+The command reports inserted, updated and removed rows for each concept.
+
+## Backend Functions
+
+Backend functions, implemented as Supabase Edge Functions, are Deno functions deployed inside the app's Supabase instance. They are the trusted place for business logic that goes beyond what SQL constraints and RLS can express — the frontend calls them, it never implements them. Generated functions:
 
 * **`workflow-transition`** — applies a state change to a record: checks the caller's role owns the current state, runs the `check`/`update` rules bound to the transition, and records the history. See [Workflow.md](Workflow.md).
 * **One function per rule** in `rules.jsonc` (e.g. `order-compute-totals`, `order-require-payment`), invoked by `workflow-transition` or directly.
@@ -154,4 +196,47 @@ Edge functions are Deno functions deployed inside the app's Supabase instance. T
 
 Edge functions are also the intended mechanism for **integration between models**: business APIs that call each other across applications (see [Architecture.md](Architecture.md#integration-between-models)).
 
+The generated `integration-run` function executes scheduled and manual external replication; see [Integrations](Integrations.md).
+
+Concept actions use the same generated backend runtime without exposing its provider-specific details in the model; see [Action functions](#action-functions).
+
 For manual testing, `bin/dev-supabase-call-edge-function.py` calls a function authenticated as a given user (see [Development.md](Development.md)).
+
+## Dependencies
+
+Keep external dependencies and their exact versions explicit in the source:
+
+```js
+import slugify from "npm:slugify@1.6.6";
+import path from "jsr:@std/path@1.0.8";
+```
+
+`prod-dc-publish.py` builds the functions image through a Deno stage that resolves every generated entrypoint. It then repeats dependency installation with `--cached-only` and copies the complete `DENO_DIR` into the final Edge Runtime image. A missing package fails publication; a published image can load its dependency graph without npm, JSR or another module registry being available. Imports assembled dynamically from runtime strings cannot be discovered and are not supported.
+
+### Action functions
+
+Concept actions expose trusted JavaScript as standard buttons in generated list, edit or show views. Put the module in `backend/actions/` beside `concepts.jsonc` and declare only its file name on the concept:
+
+```jsonc
+"actions": [{
+  "label": "Recalculate",
+  "source": "recalculate.js",
+  "placement": ["list", "edit"]
+}]
+```
+
+The file name becomes the generated function endpoint. The module exports one function:
+
+```js
+export async function run({ id, ids, supabase, serviceClient, user }) {
+  return { status: "ok", message: `Updated ${ids.length} records` };
+}
+```
+
+`id` is set for a single selected record and `ids` always contains the selection. `supabase` preserves the caller's row-level security; `serviceClient` is privileged and must be used deliberately. `user` is the authenticated Supabase user.
+
+The result is `{ status: "ok" | "ko", message?: string }`. The UI supplies a generic success or error notification when `message` is absent, otherwise it displays the returned message. Thrown errors become `ko` responses. A list action is disabled until at least one row is selected.
+
+List actions appear in the bulk-selection toolbar beside Delete and receive every selected id. Edit actions appear in the upper action bar before Show, so they remain accessible independently of the form length.
+
+Sources whose file name begins with `_` are reserved for framework-injected actions. The current backend generates authenticated Supabase Edge Function wrappers as an implementation detail.

@@ -8,7 +8,7 @@ A workflow defines a sequence of states that a concept can go through. For each 
 
 ## Configuration
 
-Workflows are defined in `workflow.jsonc` (see [Backend.md](Backend.md#the-model-directory)).
+Workflows are defined in `workflow.jsonc`.
 
 ### Schema
 
@@ -68,15 +68,15 @@ Two built-in admin pages can be linked from the [custom menu](Frontend.md) using
 *   **assignable_tasks**: unassigned records (`state_task_owner` is null) in states where the user can assign, with an *Assign to me* button per row.
 *   **my_tasks**: records whose task is assigned to the logged-in user.
 
-Both are standard list views (server-side filtering by concept, state and record text, sorting and pagination) backed by the generated `workflow_tasks` SQL view: a UNION of every workflow concept with the concept as a column and the current state's `assigners` baked in as an array. The view uses `security_invoker`, so each user only sees the records their row-level security already allows.
+Both are standard list views (server-side filtering by concept, state and record text, sorting and pagination) backed by the generated `_workflow_tasks` SQL view: a UNION of every workflow concept with the concept as a column and the current state's `assigners` baked in as an array. The view uses `security_invoker`, so each user only sees the records their row-level security already allows.
 
 ### User directory
 
-Assignment suggestions come from the `user_directory` table, a **discovery cache** (never a source of truth or a security input): email, auth uuid, last known roles, source and last login. It is filled by the model's seed users and refreshed on every login by the access token hook; an external directory synchronization (LDAP/IdC/CDC, see [Roadmap](Roadmap.md)) can feed the same table later. The assignment autocomplete suggests directory users whose roles own the current state, but accepts any email (free entry), so users unknown to the cache can still be assigned.
+Assignment suggestions come from the `_user_directory` table, a **discovery cache** (never a source of truth or a security input): email, auth uuid, last known roles, source and last login. It is filled by the model's seed users and refreshed on every login by the access token hook; an external directory synchronization (LDAP/IdC/CDC, see [Roadmap](Roadmap.md)) can feed the same table later. The assignment autocomplete suggests directory users whose roles own the current state, but accepts any email (free entry), so users unknown to the cache can still be assigned.
 
 ### Email notification
 
-When the task owner changes and the change is not a self-assignment, a database trigger calls the `task-assigned-email` [edge function](Backend.md#edge-functions), which emails the new owner (sender and edit link included). SMTP settings and the app URL come from the `SMTP_*` / `APP_BASE_URL` environment variables in production (wired into the generated docker-compose from [system.json](Backend.md) `smtp` and `base_url`) and fall back to the development SMTP mock.
+When the task owner changes and the change is not a self-assignment, a database trigger calls the `task-assigned-email` [backend function](Backend.md#backend-functions), which emails the new owner (sender and edit link included). SMTP settings and the app URL come from the `SMTP_*` / `APP_BASE_URL` environment variables in production (wired into the generated docker-compose from [`system.jsonc`](Deployment.md#runtime-configuration-systemjsonc)) and fall back to the development SMTP mock.
 
 ## Backend Implementation
 
@@ -86,7 +86,7 @@ When a concept has an associated workflow, the `SchemaProcessor` automatically i
 2.  **state_info**: An `XML` column storing the transition history.
 3.  **state_task_owner**: The email of the user assigned to the workflow task (see [Task Assignment](#task-assignment)).
 
-Transitions are applied by the `workflow-transition` [edge function](Backend.md#edge-functions), which verifies state ownership and runs the [business rules](Backend.md#business-rules-rulesjsonc) bound to the transition (`when: ["on_state_changed_to_<state>"]`).
+Transitions are applied by the `workflow-transition` [backend function](Backend.md#backend-functions), which verifies state ownership and runs the [business rules](Backend.md#business-rules-rulesjsonc) bound to the transition (`when: ["on_state_changed_to_<state>"]`).
 
 ## Frontend Implementation
 

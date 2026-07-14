@@ -7,9 +7,11 @@
 | [USAGE.md](USAGE.md) | Install, quick start, running the generated applications |
 | [Architecture.md](Architecture.md) | Layers, design principles, where to make changes |
 | [Model.md](Model.md) | Model-driven development and the model files |
-| [Backend.md](Backend.md) | Model format, generated database, edge functions |
+| [Backend.md](Backend.md) | Concepts, fields, rules, data initialization and backend functions |
+| [Integrations.md](Integrations.md) | External schema mapping, polling and operational control |
 | [Frontend.md](Frontend.md) | Generated UI, custom MDX/JSX pages, routing |
 | [Security.md](Security.md) | Roles, ACL, RLS policies, profile concepts |
+| [Secrets.md](Secrets.md) | Infrastructure credentials and custom backend secrets |
 | [SingleSignOn.md](SingleSignOn.md) | Kerberos/Keycloak single sign-on |
 | [Workflow.md](Workflow.md) | State machines on concepts |
 | [Development.md](Development.md) | Dev environments, ports, `bin/dev-*` scripts |
