@@ -6,6 +6,8 @@ UniBizKit is intentionally developed in phases. See [docs/README.md](README.md) 
 
 * External user directory synchronization (LDAP/IdC/CDC) feeding the workflow `_user_directory` cache (see [Workflow.md](Workflow.md))
 * Presentation-lib helpers so custom UIs can build their own profile-completion, password and auth flows easily
+* In-application visual model designer producing validated model patches
+* Explicit workflow transitions with visual state diagrams
 * Data versioning and record history
 * Cross-model integration: one model using the user database of another (today the workaround is [Single Sign-On](SingleSignOn.md))
 * Example models for medium-sized applications
@@ -16,6 +18,7 @@ UniBizKit is intentionally developed in phases. See [docs/README.md](README.md) 
 * Operational improvements: backups, logging, etc.
 * Deployment scripts for open-source monitoring stacks
 * Kubernetes deployment
+* Deployment to managed SaaS platforms
 * Example models for large-scale applications
 
 ## Long Term
