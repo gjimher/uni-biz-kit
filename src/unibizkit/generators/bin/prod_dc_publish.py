@@ -150,7 +150,8 @@ def publish_artifact(version, *, force=False):
         hash_files = [
             "prod/docker/vendor-images.json", "backend/supabase_schema.sql",
             "backend/release_migration.sql", "backend/supabase_seed_data_dev.sql",
-            "security_extended.json", "seed_data_extended.json", "concepts_extended.json",
+            "backend/deployed_data_runtime.py", "security_extended.json", "seed_data_extended.json",
+            "deployed_data_extended.json", "deployed_data_extended_schema.json", "concepts_extended.json",
         ]
     else:
         vendor = {}

@@ -78,9 +78,12 @@ def generate(output_dir: Path, app_id: str, deployment_config: Dict[str, Any],
 !backend/supabase_schema.sql
 !backend/release_migration.sql
 !backend/supabase_seed_data_dev.sql
+!backend/deployed_data_runtime.py
 !backend/supabase/functions
 !security_extended.json
 !seed_data_extended.json
+!deployed_data_extended.json
+!deployed_data_extended_schema.json
 !concepts_extended.json
 !prod/docker
 prod/docker/docker-compose-*.yml

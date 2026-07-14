@@ -709,6 +709,14 @@ Examples:
         schema_loader.validations_config = {"validations": processor.all_validations_with_rows}
         schema_loader.workflow_config = processor.workflow_extended
 
+        deployed_dump_path = output_dir / "deployed_data_extended.json"
+        deployed_config = {"$schema": "./deployed_data_extended_schema.json", **schema_loader.deployed_data_config}
+        with open(deployed_dump_path, "w", encoding="utf-8") as f:
+            json.dump(deployed_config, f, indent=2)
+        deployed_schema_path = output_dir / "deployed_data_extended_schema.json"
+        with open(deployed_schema_path, "w", encoding="utf-8") as f:
+            json.dump(schema_loader.deployed_data_validation_schema, f, indent=2)
+
         seed_dump_path = output_dir / "seed_data_extended.json"
         new_seed_config = {"$schema": "./seed_data_extended_schema.json"}
         seed_config_copy = schema_loader.seed_data_config.copy()
@@ -742,6 +750,14 @@ Examples:
             seed_data_dev_file = backend_dir / "supabase_seed_data_dev.sql"
             with open(seed_data_dev_file, 'w', encoding='utf-8') as f:
                 f.write(seed_data_dev)
+
+            deployed_data_runtime = supabase_generator.generate_deployed_data_runtime()
+            deployed_data_runtime_file = backend_dir / "deployed_data_runtime.py"
+            with open(deployed_data_runtime_file, "w", encoding="utf-8") as f:
+                f.write(deployed_data_runtime)
+            legacy_deployed_sql = backend_dir / "deployed_data.sql"
+            if legacy_deployed_sql.exists():
+                legacy_deployed_sql.unlink()
             legacy_sample_data_file = backend_dir / "supabase_sample_data.sql"
             if legacy_sample_data_file.exists():
                 legacy_sample_data_file.unlink()

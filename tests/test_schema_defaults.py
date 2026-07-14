@@ -194,3 +194,37 @@ def test_anon_role_name_raises_error():
 
         with pytest.raises(SchemaValidationError, match="_anon"):
             SchemaLoader().load_and_validate(str(temp_path))
+
+
+def test_deployed_data_uses_id_presentation_and_preserves_declared_fields():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        (root / "concepts.jsonc").write_text(json.dumps(_MINIMAL_CONCEPTS))
+        (root / "presentation.jsonc").write_text("{}")
+        (root / "security.jsonc").write_text('{"authentication_required":false}')
+        (root / "deployed_data.jsonc").write_text(json.dumps({
+            "concepts": [{"concept": "item", "records": [{"f1": "stable-key"}]}]
+        }))
+        _write_deployment(root)
+
+        loader = SchemaLoader()
+        loader.load_and_validate(str(root / "concepts.jsonc"))
+        assert loader.deployed_data_config == {"concepts": [{
+            "concept": "item", "on_removed": "ignore", "records": [{"f1": "stable-key"}]
+        }]}
+
+
+def test_deployed_data_rejects_generated_id_as_key():
+    schema = json.loads(json.dumps(_MINIMAL_CONCEPTS))
+    schema["concepts"][0]["id_presentation"]["fields"] = ["id"]
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        (root / "concepts.jsonc").write_text(json.dumps(schema))
+        (root / "presentation.jsonc").write_text("{}")
+        (root / "security.jsonc").write_text('{"authentication_required":false}')
+        (root / "deployed_data.jsonc").write_text(json.dumps({
+            "concepts": [{"concept": "item", "records": [{"f1": "x"}]}]
+        }))
+        _write_deployment(root)
+        with pytest.raises(SchemaValidationError, match="non-id id_presentation"):
+            SchemaLoader().load_and_validate(str(root / "concepts.jsonc"))

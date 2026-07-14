@@ -142,8 +142,35 @@ with conn.cursor() as cur:
     print("Loading schema...")
     cur.execute(schema_file.read_text())
 
+    scheduler_token = backend_env.get('INTEGRATION_SCHEDULER_TOKEN')
+    if scheduler_token:
+        cur.execute("SELECT to_regclass('public._integration_scheduler_secret')")
+        if cur.fetchone()[0]:
+            cur.execute(
+                'INSERT INTO public._integration_scheduler_secret (id, token) VALUES (true, %s) '
+                'ON CONFLICT (id) DO UPDATE SET token = EXCLUDED.token',
+                (scheduler_token,),
+            )
+
     print("Loading seed data...")
     cur.execute(seed_file.read_text())
+
+
+print("Synchronizing deployed data...")
+sys.path.insert(0, str(backend_dir))
+from deployed_data_runtime import apply_deployed_data
+stats = apply_deployed_data(
+    conn,
+    root_dir / 'concepts_extended.json',
+    root_dir / 'deployed_data_extended.json',
+)
+print(json.dumps(stats, indent=2, sort_keys=True))
+
+with conn.cursor() as cur:
+    cur.execute("SELECT to_regprocedure('public._reconcile_integration_cron()')")
+    if cur.fetchone()[0]:
+        print("Reconciling integration schedules...")
+        cur.execute("SELECT public._reconcile_integration_cron()")
 
 # Upload seed documents through the Storage API so binary content is stored
 # and document metadata is created by the database trigger.

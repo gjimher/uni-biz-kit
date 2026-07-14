@@ -162,9 +162,9 @@ def provision() -> str:
 FROM {IMAGES['python']}
 RUN pip install --no-cache-dir psycopg2-binary
 WORKDIR /app
-COPY backend/supabase_schema.sql backend/supabase_seed_data_dev.sql ./
+COPY backend/supabase_schema.sql backend/supabase_seed_data_dev.sql backend/deployed_data_runtime.py ./
 COPY backend/release_migration.sql* ./
-COPY security_extended.json seed_data_extended.json concepts_extended.json ./
+COPY security_extended.json seed_data_extended.json deployed_data_extended.json deployed_data_extended_schema.json concepts_extended.json ./
 COPY prod/docker/provision/provision.py ./
 CMD ["python", "provision.py"]
 """

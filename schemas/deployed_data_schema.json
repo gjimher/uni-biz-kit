@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Deployed Data Schema",
+  "description": "Records idempotently upserted on every deployment",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "concepts": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "concept": { "type": "string", "minLength": 1 },
+          "on_removed": {
+            "default": "ignore",
+            "enum": ["ignore", "delete"]
+          },
+          "records": {
+            "type": "array",
+            "default": [],
+            "items": { "type": "object" }
+          }
+        },
+        "required": ["concept", "records"]
+      }
+    }
+  },
+  "required": ["concepts"]
+}

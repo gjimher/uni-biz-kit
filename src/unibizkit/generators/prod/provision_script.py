@@ -20,11 +20,13 @@ import urllib.parse
 import urllib.request
 
 import psycopg2
+from deployed_data_runtime import apply_deployed_data
 
 DB_URL = os.environ["DB_URL"]
 API_URL = os.environ["SUPABASE_URL"]
 SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 VERSION = os.environ.get("UBK_VERSION", "unknown")
+INTEGRATION_SCHEDULER_TOKEN = os.environ.get("INTEGRATION_SCHEDULER_TOKEN", "")
 
 WAIT_TIMEOUT = 300
 
@@ -126,6 +128,25 @@ if first_run:
 else:
     log(f"Database already provisioned by version(s): {', '.join(provisioned)} — "
         "skipping schema and seed (versions are additive; data is preserved).")
+
+if os.path.exists("deployed_data_extended.json"):
+    log("Synchronizing deployed data...")
+    stats = apply_deployed_data(conn, "concepts_extended.json", "deployed_data_extended.json")
+    log(json.dumps(stats, sort_keys=True))
+
+if INTEGRATION_SCHEDULER_TOKEN and table_exists(conn.cursor(), "public", "_integration_scheduler_secret"):
+    with conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO public._integration_scheduler_secret (id, token)
+               VALUES (true, %s) ON CONFLICT (id) DO UPDATE SET token = EXCLUDED.token""",
+            (INTEGRATION_SCHEDULER_TOKEN,),
+        )
+
+with conn.cursor() as cur:
+    cur.execute("SELECT to_regprocedure('public._reconcile_integration_cron()')")
+    if cur.fetchone()[0]:
+        log("Reconciling integration schedules...")
+        cur.execute("SELECT public._reconcile_integration_cron()")
 
 # --- Seed documents (first run only) -----------------------------------------
 if first_run and os.path.exists("seed_data_extended.json"):

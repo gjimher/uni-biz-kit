@@ -1,0 +1,13 @@
+{
+  "$schema": "../../schemas/deployed_data_schema.json",
+  "concepts": [
+    {
+      "concept": "category",
+      "on_removed": "ignore",
+      "records": [
+        { "name": "Deployed Hardware", "description": "Hardware managed by deployed data", "slug": "deployed-hardware" },
+        { "name": "Deployed Services", "description": "Services managed by deployed data", "slug": "deployed-services" }
+      ]
+    }
+  ]
+}

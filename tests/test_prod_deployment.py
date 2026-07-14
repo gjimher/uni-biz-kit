@@ -49,6 +49,20 @@ def _remove_previous_test_worktrees(root):
         _run(["git", "branch", "-D", branch], cwd=root, check=False)
 
 
+def _remove_remote_test_deployment(root):
+    """Remove state left by an interrupted earlier smoke test."""
+    _run([
+        "ssh", "ubk-prod",
+        "if [ -d ~/ubk/deploy-test-app ]; then "
+        "cd ~/ubk/deploy-test-app; "
+        "if [ -e docker-compose.yml ] || [ -L docker-compose.yml ]; then "
+        "docker-compose down -v --remove-orphans; "
+        "fi; "
+        "cd; rm -rf ~/ubk/deploy-test-app; "
+        "fi",
+    ], cwd=root)
+
+
 @pytest.mark.integration
 @pytest.mark.timeout(3600)
 def test_dev_then_git_tag_deployment(request):
@@ -57,6 +71,7 @@ def test_dev_then_git_tag_deployment(request):
 
     root = Path(__file__).resolve().parents[1]
     _remove_previous_test_worktrees(root)
+    _remove_remote_test_deployment(root)
     suffix = f"{os.getpid()}-{uuid.uuid4().hex[:6]}"
     branch = f"ubk-deploy-test-{suffix}"
     worktree = root / "tmp" / branch
@@ -74,6 +89,33 @@ def test_dev_then_git_tag_deployment(request):
             "prod_base_port": 6000,
             "prod_versioning": "dev",
         }, indent=2) + "\n")
+        (model / "deployed_data.jsonc").write_text(json.dumps({
+            "$schema": "../../schemas/deployed_data_schema.json",
+            "concepts": [{
+                "concept": "widget",
+                "on_removed": "ignore",
+                "records": [
+                    {"name": "deployed-widget-a", "quantity": 11},
+                    {"name": "deployed-widget-b", "quantity": 22},
+                ],
+            }],
+        }, indent=2) + "\n")
+        concepts_path = model / "concepts.jsonc"
+        concepts = _load_jsonc_file(str(concepts_path))
+        concepts["concepts"][0]["actions"] = [{
+            "label": "Vendor check",
+            "source": "vendor-check.js",
+            "placement": ["edit"],
+        }]
+        concepts_path.write_text(json.dumps(concepts, indent=2) + "\n")
+        actions_dir = model / "backend" / "actions"
+        actions_dir.mkdir(parents=True)
+        (actions_dir / "vendor-check.js").write_text(
+            'import slugify from "npm:slugify@1.6.6";\n\n'
+            'export async function run({ ids }) {\n'
+            '  return { status: "ok", message: slugify(`widgets-${ids.join("-")}`) };\n'
+            '}\n'
+        )
         _run(["git", "add", "models/deploy-test-app"], cwd=worktree)
         _run(["git", "commit", "-m", "test: add temporary deployment model"], cwd=worktree)
         _run([sys.executable, "-m", "unibizkit.cli", "models/deploy-test-app", "--output-dir", output], cwd=worktree)
@@ -87,6 +129,12 @@ def test_dev_then_git_tag_deployment(request):
         deployed = True
         remote_dev = _run(["ssh", "ubk-prod", "cat ~/ubk/deploy-test-app/releases/dev.json"], cwd=worktree)
         assert json.loads(remote_dev.stdout)["version"] == "dev"
+        _run([
+            "ssh", "ubk-prod",
+            "cd ~/ubk/deploy-test-app && "
+            "docker-compose exec -T functions sh -c "
+            "'test -n \"$(find /deno-dir -iname \"*slugify*\" -print -quit)\"'",
+        ], cwd=worktree)
 
         deployment = json.loads((model / "deployment.jsonc").read_text())
         deployment["prod_versioning"] = "git-tag"
@@ -114,6 +162,23 @@ def test_dev_then_git_tag_deployment(request):
             "assert urllib.request.urlopen('http://127.0.0.1:6000/deploy-test/', timeout=15).status == 200\"",
         ], cwd=worktree)
 
+        compose_psql = (
+            "cd ~/ubk/deploy-test-app && "
+            "docker-compose exec -T db psql -U supabase_admin postgres"
+        )
+        deployed_values = compose_psql.replace(
+            "psql -U supabase_admin postgres",
+            "psql -At -U supabase_admin postgres -c \"SELECT name || ':' || quantity FROM widget WHERE name LIKE 'deployed-widget-%' ORDER BY name\"",
+        )
+        assert _run(["ssh", "ubk-prod", deployed_values], cwd=worktree).stdout.splitlines() == [
+            "deployed-widget-a:11", "deployed-widget-b:22",
+        ]
+        damage_deployed = compose_psql.replace(
+            "psql -U supabase_admin postgres",
+            "psql -U supabase_admin postgres -c \"DELETE FROM widget WHERE name='deployed-widget-a'; UPDATE widget SET quantity=999 WHERE name='deployed-widget-b'\"",
+        )
+        _run(["ssh", "ubk-prod", damage_deployed], cwd=worktree)
+
         # A frontend-only amend has the same DB migration and may republish v1.0.
         presentation_path = model / "presentation.jsonc"
         presentation = json.loads(presentation_path.read_text())
@@ -127,12 +192,11 @@ def test_dev_then_git_tag_deployment(request):
             ["git", "rev-parse", "HEAD"], cwd=worktree
         ).stdout.strip()
         _run([sys.executable, output / "bin" / "prod-dc-up.py"], cwd=worktree)
+        assert _run(["ssh", "ubk-prod", deployed_values], cwd=worktree).stdout.splitlines() == [
+            "deployed-widget-a:11", "deployed-widget-b:22",
+        ]
 
         # Preserve a non-seed row across the compatible minor migration.
-        compose_psql = (
-            "cd ~/ubk/deploy-test-app && "
-            "docker-compose exec -T db psql -U supabase_admin postgres"
-        )
         insert = compose_psql.replace(
             "psql -U supabase_admin postgres",
             "psql -U supabase_admin postgres -c \"INSERT INTO widget(name, quantity) VALUES ('kept-release-row', 7)\"",
@@ -184,9 +248,17 @@ def test_dev_then_git_tag_deployment(request):
         for record in seed_data["records"]["widget"]:
             record.pop("quantity", None)
         seed_path.write_text(json.dumps(seed_data, indent=2) + "\n")
+        deployed_data_path = model / "deployed_data.jsonc"
+        deployed_data = _load_jsonc_file(str(deployed_data_path))
+        for entry in deployed_data["concepts"]:
+            if entry["concept"] == "widget":
+                for record in entry["records"]:
+                    record.pop("quantity", None)
+        deployed_data_path.write_text(json.dumps(deployed_data, indent=2) + "\n")
         _run([
             "git", "add", "models/deploy-test-app/concepts.jsonc",
             "models/deploy-test-app/seed_data.jsonc",
+            "models/deploy-test-app/deployed_data.jsonc",
         ], cwd=worktree)
         _run(["git", "commit", "-m", "test: introduce incompatible schema"], cwd=worktree)
         _run([sys.executable, "-m", "unibizkit.cli", "models/deploy-test-app", "--output-dir", output], cwd=worktree)
@@ -196,6 +268,7 @@ def test_dev_then_git_tag_deployment(request):
     finally:
         if deployed and (output / "bin" / "prod-dc-remove.py").exists():
             _run([sys.executable, output / "bin" / "prod-dc-remove.py", "--force"], cwd=worktree, check=False)
+        _remove_remote_test_deployment(root)
         tags_after = set(_run(["git", "tag", "--list", "prod-deploy-test-app-v*"], cwd=root).stdout.splitlines())
         for tag in tags_after - tags_before:
             _run(["git", "tag", "-d", tag], cwd=root, check=False)
