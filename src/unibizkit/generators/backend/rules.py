@@ -672,8 +672,6 @@ def _generate_task_assigned_email_ts(ctx: Context) -> str:
     else:
         smtp_port = smtp.get("port", 25)
     smtp_from = smtp.get("from_email", "noreply@localhost")
-    smtp_user = smtp.get("user") or ""
-    smtp_pass = smtp.get("password") or ""
     base_uri = ctx.deployment_config.get("base_uri", "/")
     dev_app_base_url = f"http://localhost:{dev_ports.FRONTEND}{base_uri}"
 
@@ -683,8 +681,6 @@ def _generate_task_assigned_email_ts(ctx: Context) -> str:
 const WORKFLOW_CONCEPTS = new Set({workflow_concepts_json});
 const SMTP_HOST = Deno.env.get("SMTP_HOST") || {json.dumps(smtp_host)};
 const SMTP_PORT = Number(Deno.env.get("SMTP_PORT") || {json.dumps(str(smtp_port))});
-const SMTP_USER = Deno.env.get("SMTP_USER") ?? {json.dumps(smtp_user)};
-const SMTP_PASS = Deno.env.get("SMTP_PASS") ?? {json.dumps(smtp_pass)};
 const SMTP_FROM = Deno.env.get("SMTP_FROM") || {json.dumps(smtp_from)};
 const SMTP_TLS = (Deno.env.get("SMTP_TLS") || "false") === "true";
 const APP_BASE_URL = Deno.env.get("APP_BASE_URL") || {json.dumps(dev_app_base_url)};
@@ -751,7 +747,7 @@ Deno.serve(async (req) => {{
   return jsonResponse({{ ok: true, to: ownerEmail }});
 }});
 
-// Minimal SMTP client (EHLO / AUTH LOGIN / MAIL / RCPT / DATA) over a raw
+// Minimal unauthenticated SMTP client (EHLO / MAIL / RCPT / DATA) over a raw
 // socket: the edge runtime cannot load remote deno.land modules and the needs
 // here (plain text mail to one recipient) do not justify a dependency.
 // TLS is connection-level (SMTP_TLS); STARTTLS is not supported.
@@ -787,11 +783,6 @@ async function sendSmtpMail({{ to, subject, body }}: {{ to: string; subject: str
   try {{
     await command(null, "220");
     await command("EHLO localhost", "250");
-    if (SMTP_USER) {{
-      await command("AUTH LOGIN", "334");
-      await command(btoa(SMTP_USER), "334");
-      await command(btoa(SMTP_PASS), "235");
-    }}
     await command(`MAIL FROM:<${{SMTP_FROM}}>`, "250");
     await command(`RCPT TO:<${{to}}>`, "250");
     await command("DATA", "354");

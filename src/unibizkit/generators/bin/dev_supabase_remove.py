@@ -14,8 +14,8 @@ Idempotent: exits successfully when there is nothing to remove.
 * Asks for confirmation unless -f/--force is given.
 * Runs `supabase stop --no-backup`: removes the app's containers and data
   volumes. All database data is lost.
-* Deletes the backend/supabase directory (config.toml, migrations, deployed
-  functions), leaving the app ready for a fresh dev-supabase-start.py.
+* Deletes generated Supabase state such as config.toml and migrations, but
+  preserves backend/supabase/functions because those files come from the model.
 
 For a stop that preserves data use dev-supabase-stop.py.
 \"\"\"
@@ -45,12 +45,12 @@ args = parser.parse_args()
 backend_dir = Path(__file__).parent.parent / 'backend'
 supabase_dir = backend_dir / 'supabase'
 
-if not supabase_dir.exists():
-    print("Nothing to remove (backend/supabase does not exist).")
+if not supabase_dir.exists() or not any(path.name != 'functions' for path in supabase_dir.iterdir()):
+    print("Nothing to remove (only generated Edge Functions may remain).")
     sys.exit(0)
 
 if not args.force:
-    answer = input("This will stop Supabase and delete backend/supabase. Are you sure? [y/N] ")
+    answer = input("This will stop Supabase and delete its local config, migrations and data. Are you sure? [y/N] ")
     if answer.strip().lower() != 'y':
         print("Aborted.")
         sys.exit(0)
@@ -62,8 +62,14 @@ result = subprocess.run(['npx', f'supabase@{{SUPABASE_CLI_VERSION}}', 'stop', '-
 if result.returncode != 0:
     sys.exit(result.returncode)
 
-print("Removing backend/supabase...")
-shutil.rmtree(supabase_dir)
+print("Removing generated backend/supabase state (preserving functions)...")
+for path in supabase_dir.iterdir():
+    if path.name == 'functions':
+        continue
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
 print("Done.")
 """)
     script.chmod(0o755)

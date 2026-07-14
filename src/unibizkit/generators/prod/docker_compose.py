@@ -25,14 +25,10 @@ def generate(ctx) -> str:
         mailer_verify_path = "/" + mailer_verify_path
     if ctx.smtp:
         smtp_host = "host.docker.internal" if ctx.smtp_uses_host_gateway else ctx.smtp["host"]
-        smtp_user = ctx.smtp.get("user") or ""
-        smtp_password = ctx.smtp.get("password") or ""
         mailer = f"""\
       GOTRUE_MAILER_AUTOCONFIRM: "false"
       GOTRUE_SMTP_HOST: {smtp_host}
       GOTRUE_SMTP_PORT: {ctx.smtp.get('port', 25)}
-      GOTRUE_SMTP_USER: {smtp_user}
-      GOTRUE_SMTP_PASS: {smtp_password}
       GOTRUE_SMTP_ADMIN_EMAIL: {ctx.smtp.get('from_email', 'noreply@localhost')}
       GOTRUE_SMTP_SENDER_NAME: """
     else:
@@ -45,8 +41,6 @@ def generate(ctx) -> str:
         functions_smtp = f"""
       SMTP_HOST: {smtp_host}
       SMTP_PORT: {ctx.smtp.get('port', 25)}
-      SMTP_USER: {smtp_user}
-      SMTP_PASS: {smtp_password}
       SMTP_FROM: {ctx.smtp.get('from_email', 'noreply@localhost')}"""
 
     return f"""\
@@ -185,11 +179,14 @@ services:
       - start
       - --main-service
       - /home/deno/functions/main
+    env_file:
+      - .env.secrets
     environment:
       JWT_SECRET: ${{JWT_SECRET}}
       SUPABASE_URL: http://kong:8000
       SUPABASE_ANON_KEY: ${{ANON_KEY}}
       SUPABASE_SERVICE_ROLE_KEY: ${{SERVICE_ROLE_KEY}}
+      INTEGRATION_SCHEDULER_TOKEN: ${{INTEGRATION_SCHEDULER_TOKEN}}
       SUPABASE_DB_URL: postgresql://postgres:${{POSTGRES_PASSWORD}}@db:5432/postgres
       VERIFY_JWT: "false"
       APP_BASE_URL: {site_url}{functions_smtp}
@@ -285,6 +282,7 @@ services:
       SUPABASE_URL: http://kong:8000
       SUPABASE_ANON_KEY: ${{ANON_KEY}}
       SUPABASE_SERVICE_ROLE_KEY: ${{SERVICE_ROLE_KEY}}
+      INTEGRATION_SCHEDULER_TOKEN: ${{INTEGRATION_SCHEDULER_TOKEN}}
       UBK_VERSION: __VERSION__
 
 volumes:

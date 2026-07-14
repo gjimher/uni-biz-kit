@@ -12,6 +12,7 @@ if sys.prefix == sys.base_prefix:
     )
 
 import argparse
+import io
 import json
 import hashlib
 import os
@@ -19,7 +20,9 @@ import re
 import socket
 import socketserver
 import subprocess
+import tarfile
 import threading
+import time
 import tomllib
 import http.server
 import urllib.error
@@ -36,6 +39,39 @@ supabase_dir = backend_dir / 'supabase'
 config_toml = supabase_dir / 'config.toml'
 delta_toml = backend_dir / 'supabase_config_dev.toml'
 sso_delta_toml = backend_dir / 'supabase_sso_config_dev.toml'
+secrets_file = backend_dir / '.env.secrets'
+generated_functions_env = supabase_dir / 'functions' / '.env.generated'
+functions_env = supabase_dir / 'functions' / '.env'
+
+
+def _read_env_entries(path):
+    entries = []
+    if not path.exists():
+        return entries
+    for line in path.read_text(encoding='utf-8').splitlines():
+        if not line or line.lstrip().startswith('#') or '=' not in line:
+            continue
+        key, _, value = line.partition('=')
+        entries.append((key.strip(), value))
+    return entries
+
+
+def _sync_function_secrets():
+    """Merge generated defaults and durable secrets where Supabase loads them."""
+    generated = _read_env_entries(generated_functions_env)
+    generated_keys = {key for key, _ in generated}
+    custom = [(key, value) for key, value in _read_env_entries(secrets_file) if key not in generated_keys]
+    content = ''.join(f'{key}={value}\n' for key, value in generated + custom)
+    if content:
+        functions_env.parent.mkdir(parents=True, exist_ok=True)
+        if not functions_env.exists() or functions_env.read_text(encoding='utf-8') != content:
+            functions_env.write_text(content, encoding='utf-8')
+        functions_env.chmod(0o600)
+    elif functions_env.exists():
+        functions_env.unlink()
+
+
+_sync_function_secrets()
 
 os.chdir(backend_dir)
 
@@ -218,24 +254,38 @@ def _upsert_env(path, values):
     path.write_text(''.join(f"{key}={existing[key]}\n" for key in dict.fromkeys(order)))
 
 
-def _functions_signature(functions_dir):
-    digest = hashlib.sha256()
-    if not functions_dir.exists():
-        return ''
-    for path in sorted(functions_dir.rglob('*')):
-        if not path.is_file():
-            continue
-        digest.update(str(path.relative_to(functions_dir)).encode())
-        digest.update(b'\0')
-        digest.update(path.read_bytes())
-        digest.update(b'\0')
-    return digest.hexdigest()
+def _functions_tar_signature(functions_dir, *, code):
+    """Hash a deterministic tar of either JS/TS code or the remaining tree."""
+    archive = io.BytesIO()
+    with tarfile.open(fileobj=archive, mode='w', format=tarfile.PAX_FORMAT) as tar:
+        if functions_dir.exists():
+            paths = sorted(functions_dir.rglob('*'), key=lambda path: path.relative_to(functions_dir).as_posix())
+            for path in paths:
+                is_code = path.is_file() and path.suffix.lower() in ('.js', '.ts')
+                if path.is_file() and is_code != code:
+                    continue
+                info = tar.gettarinfo(str(path), arcname=path.relative_to(functions_dir).as_posix())
+                info.mtime = 0
+                if info.isfile():
+                    with path.open('rb') as source:
+                        tar.addfile(info, source)
+                else:
+                    tar.addfile(info)
+    return hashlib.sha256(archive.getvalue()).hexdigest()
 
 
-def _stored_functions_signature(marker_path):
+def _stored_signature(marker_path):
     if not marker_path.exists():
         return None
     return marker_path.read_text().strip()
+
+
+def _write_function_signatures(structure_path, structure_signature, code_path, code_signature):
+    structure_path.write_text(structure_signature)
+    code_path.write_text(code_signature)
+    legacy_path = supabase_dir / '.functions_signature'
+    if legacy_path.exists():
+        legacy_path.unlink()
 
 
 def _project_id(config_path):
@@ -272,15 +322,36 @@ def _restart_supabase(reason):
         sys.exit(f"supabase start failed with code {result.returncode}")
 
 
+def _restart_edge_runtime(config_path):
+    project_id = _project_id(config_path)
+    if not project_id:
+        sys.exit("Could not determine the Supabase project id")
+    container = f'supabase_edge_runtime_{project_id}'
+    print("Only JS/TS Edge Function code changed — restarting Edge Runtime...")
+    result = subprocess.run(['docker', 'restart', container], stdout=subprocess.DEVNULL, stderr=sys.stderr)
+    if result.returncode != 0:
+        sys.exit(f"docker restart {container} failed with code {result.returncode}")
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        if _edge_runtime_running(config_path):
+            print("Edge Runtime restarted with updated JS/TS functions.")
+            return
+        time.sleep(0.2)
+    sys.exit("Edge Runtime did not become ready after restart")
+
+
 delta_files = [delta_toml] + ([sso_delta_toml] if sso_delta_toml.exists() else [])
-functions_signature_path = supabase_dir / '.functions_signature'
-current_functions_signature = _functions_signature(supabase_dir / 'functions')
-functions_changed = current_functions_signature != _stored_functions_signature(functions_signature_path)
+functions_structure_signature_path = supabase_dir / '.functions_structure_signature'
+functions_code_signature_path = supabase_dir / '.functions_code_signature'
+current_structure_signature = _functions_tar_signature(supabase_dir / 'functions', code=False)
+current_code_signature = _functions_tar_signature(supabase_dir / 'functions', code=True)
+structure_changed = current_structure_signature != _stored_signature(functions_structure_signature_path)
+code_changed = current_code_signature != _stored_signature(functions_code_signature_path)
 
 if config_toml.exists():
     config_changed = not _merged_deltas_applied(config_toml, delta_files)
-    if config_changed or functions_changed:
-        print("Config or Edge Functions changed.")
+    if config_changed or structure_changed:
+        print("Config or Edge Functions structure changed.")
         result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'stop'],
                                 stdout=sys.stdout, stderr=sys.stderr)
         if result.returncode != 0:
@@ -291,8 +362,31 @@ if config_toml.exists():
         result = _supabase_start()
         if result.returncode != 0:
             sys.exit(f"supabase start failed with code {result.returncode}")
-        functions_signature_path.write_text(current_functions_signature)
-        print("Supabase restarted with updated config or Edge Functions.")
+        _write_function_signatures(
+            functions_structure_signature_path, current_structure_signature,
+            functions_code_signature_path, current_code_signature,
+        )
+        print("Supabase restarted with updated config or Edge Functions structure.")
+    elif code_changed:
+        status_check = subprocess.run(
+            ['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'status', '-o', 'json'],
+            capture_output=True, text=True,
+        )
+        if status_check.returncode != 0:
+            print("Functions changed but Supabase is not running — starting...")
+            result = _supabase_start()
+            if result.returncode != 0:
+                sys.exit(f"supabase start failed with code {result.returncode}")
+            print("Supabase started with updated functions.")
+        elif not _edge_runtime_running(config_toml):
+            _restart_supabase("Functions changed and Edge Runtime is not running")
+            print("Supabase restarted.")
+        else:
+            _restart_edge_runtime(config_toml)
+        _write_function_signatures(
+            functions_structure_signature_path, current_structure_signature,
+            functions_code_signature_path, current_code_signature,
+        )
     else:
         status_check = subprocess.run(
             ['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'status', '-o', 'json'],
@@ -303,11 +397,17 @@ if config_toml.exists():
             result = _supabase_start()
             if result.returncode != 0:
                 sys.exit(f"supabase start failed with code {result.returncode}")
-            functions_signature_path.write_text(current_functions_signature)
+            _write_function_signatures(
+                functions_structure_signature_path, current_structure_signature,
+                functions_code_signature_path, current_code_signature,
+            )
             print("Supabase started.")
         elif not _edge_runtime_running(config_toml):
             _restart_supabase("Supabase status is up but Edge Runtime is not running")
-            functions_signature_path.write_text(current_functions_signature)
+            _write_function_signatures(
+                functions_structure_signature_path, current_structure_signature,
+                functions_code_signature_path, current_code_signature,
+            )
             print("Supabase restarted.")
         else:
             print("Config is up to date and Supabase is running. Nothing to do.")
@@ -327,7 +427,10 @@ print("Starting Supabase...")
 result = _supabase_start()
 if result.returncode != 0:
     sys.exit(f"supabase start failed with code {result.returncode}")
-functions_signature_path.write_text(current_functions_signature)
+_write_function_signatures(
+    functions_structure_signature_path, current_structure_signature,
+    functions_code_signature_path, current_code_signature,
+)
 
 print("Creating initial migration...")
 result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'migration', 'new', 'init_schema'],
@@ -356,6 +459,7 @@ print("Writing .env files...")
 (backend_dir / '.env').write_text(
     f"DB_URL={db_url}\nSUPABASE_URL={supabase_url}\n"
     f"SUPABASE_ANON_KEY={anon_key}\nSUPABASE_SERVICE_ROLE_KEY={service_role_key}\n"
+    "INTEGRATION_SCHEDULER_TOKEN=dev-integration-scheduler-token\n"
 )
 _upsert_env(frontend_dir / '.env.development', {
     'VITE_SUPABASE_KEY': anon_key,
@@ -383,9 +487,12 @@ running, up-to-date state. What it does depends on the current state:
   - backend/.env: DB_URL, SUPABASE_URL (direct Kong URL) and the anon /
     service-role keys, used by the test suite and the other dev scripts.
   - frontend/.env.development: adds VITE_SUPABASE_KEY (anon key).
-* Later runs: if the config deltas or the Edge Functions changed, restarts
-  the stack to apply them; if the stack is stopped, starts it; if the Edge
-  Runtime container died, restarts the stack; otherwise does nothing.
+* Later runs: changes limited to existing Edge Function .js/.ts files restart
+  only Edge Runtime. Config, secrets or any other Functions tree change restart
+  the complete stack. If the stack is stopped, starts it; if Edge Runtime died,
+  restarts the stack; otherwise does nothing.
+* Synchronizes backend/.env.secrets to Supabase's local Edge Functions .env;
+  secret changes therefore participate in the same idempotent restart check.
 
 During a cold `supabase start` (no dev server running) it serves a temporary
 /api -> Kong proxy on the frontend port, so the Supabase CLI can verify

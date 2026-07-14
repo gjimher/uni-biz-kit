@@ -126,13 +126,32 @@ COPY temp.yml /home/kong/temp.yml
 
 
 def functions() -> str:
-    """Edge runtime with the generated functions and the main router baked in.
+    """Edge runtime with an offline Deno cache and the main router baked in.
 
     Build context is the app output root (needs backend/supabase/functions).
     """
     return f"""\
+FROM denoland/deno:2.1.4 AS dependencies
+USER root
+WORKDIR /functions
+COPY backend/supabase/functions/ ./
+RUN set -eu; \
+    find . -mindepth 2 -maxdepth 2 -name index.ts -print | sort | \
+    while read -r entrypoint; do \
+      directory="$(dirname "${{entrypoint}}")"; \
+      (cd "${{directory}}" && deno install --entrypoint index.ts); \
+    done
+RUN set -eu; \
+    find . -mindepth 2 -maxdepth 2 -name index.ts -print | sort | \
+    while read -r entrypoint; do \
+      directory="$(dirname "${{entrypoint}}")"; \
+      (cd "${{directory}}" && deno install --cached-only --entrypoint index.ts); \
+    done
+
 FROM {IMAGES['edge_runtime']}
-COPY backend/supabase/functions/ /home/deno/functions/
+ENV DENO_DIR=/deno-dir/
+COPY --from=dependencies /deno-dir/ /deno-dir/
+COPY --from=dependencies /functions/ /home/deno/functions/
 COPY prod/docker/functions/main/ /home/deno/functions/main/
 """
 

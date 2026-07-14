@@ -14,8 +14,6 @@ def generate(ctx: Context) -> str:
     else:
         smtp_port = smtp.get('port', 25)
     smtp_from = smtp.get('from_email', 'noreply@localhost')
-    smtp_user = smtp.get('user') or 'mock'
-    smtp_pass = smtp.get('password') or 'mock'
 
     base_uri = ctx.deployment_config.get('base_uri', '/')
     # base_uri always ends with / (normalized by SchemaProcessor)
@@ -64,6 +62,11 @@ port = {dev_ports.SUPABASE_ANALYTICS}
 [edge_runtime]
 inspector_port = {dev_ports.EDGE_INSPECTOR}
 
+""" + ("""
+[functions.integration-run]
+verify_jwt = false
+""" if ctx.integrations_config["integrations"] else "") + f"""
+
 [auth]
 site_url = "{base_url}"
 additional_redirect_urls = ["{base_url}", "{base_url.rstrip('/')}/**"]
@@ -86,8 +89,6 @@ host = "{smtp_host}"
 port = {smtp_port}
 admin_email = "{smtp_from}"
 sender_name = "App"
-user = "{smtp_user}"
-pass = "{smtp_pass}"
 """ + (f"""
 [auth.external.keycloak]
 enabled = true

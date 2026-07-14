@@ -178,6 +178,9 @@ def test_workflow_transition_handles_retain_task_owner():
     # Built-in SMTP client: the edge runtime cannot load remote deno.land modules
     assert "sendSmtpMail" in email_ts
     assert "MAIL FROM" in email_ts
+    assert "AUTH LOGIN" not in email_ts
+    assert "SMTP_USER" not in email_ts
+    assert "SMTP_PASS" not in email_ts
     assert "https://deno.land" not in email_ts
     assert "state_task_owner" in email_ts
     assert "#/admin/" in email_ts

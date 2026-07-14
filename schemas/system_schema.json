@@ -10,7 +10,7 @@
     },
     "smtp": {
       "type": "object",
-      "description": "SMTP server configuration for sending emails",
+      "description": "Unauthenticated SMTP server configuration for sending emails",
       "properties": {
         "host": {
           "type": "string",
@@ -26,16 +26,6 @@
           "type": "string",
           "description": "Sender email address",
           "default": "noreply@localhost"
-        },
-        "user": {
-          "type": ["string", "null"],
-          "description": "SMTP authentication user (null if no auth)",
-          "default": null
-        },
-        "password": {
-          "type": ["string", "null"],
-          "description": "SMTP authentication password (null if no auth)",
-          "default": null
         }
       },
       "additionalProperties": false,

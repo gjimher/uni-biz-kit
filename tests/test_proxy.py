@@ -139,6 +139,13 @@ class TestProxyGeneration:
         })
         _write(app_dir / "presentation.jsonc", {})
         _write(app_dir / "security.jsonc", {"authentication_required": False})
+        _write(app_dir / "system.jsonc", {
+            "smtp": {
+                "host": "mail.internal",
+                "port": 2525,
+                "from_email": "noreply@example.com",
+            },
+        })
         _write(app_dir / "deployment.jsonc", {
             "prod_versioning": "dev",
             "base_uri": "/shop",
@@ -155,7 +162,18 @@ class TestProxyGeneration:
         compose = (output_dir / "prod" / "docker" / "docker-compose.template.yml").read_text()
         assert "GOTRUE_SITE_URL: https://www.example.com/shop/" in compose
         assert "API_EXTERNAL_URL: https://www.example.com/shop/api" in compose
+        assert "GOTRUE_SMTP_HOST: mail.internal" in compose
+        assert "GOTRUE_SMTP_PORT: 2525" in compose
+        assert "GOTRUE_SMTP_USER" not in compose
+        assert "GOTRUE_SMTP_PASS" not in compose
+        assert "SMTP_USER" not in compose
+        assert "SMTP_PASS" not in compose
         assert "http://${PUBLIC_HOST}:4050/shop" not in compose
+
+        dev_config = (output_dir / "backend" / "supabase_config_dev.toml").read_text()
+        assert "[auth.email.smtp]" in dev_config
+        assert "\nuser =" not in dev_config
+        assert "\npass =" not in dev_config
 
         publish_script = (output_dir / "bin" / "prod-dc-publish.py").read_text()
         up_script = (output_dir / "bin" / "prod-dc-up.py").read_text()

@@ -113,6 +113,7 @@ def generate_secrets(public_host: str) -> dict:
         "JWT_SECRET": jwt_secret,
         "ANON_KEY": api_key("anon"),
         "SERVICE_ROLE_KEY": api_key("service_role"),
+        "INTEGRATION_SCHEDULER_TOKEN": secrets.token_hex(32),
     }
 
 
@@ -134,6 +135,7 @@ def fetch_or_create_secrets(srv) -> dict:
     """
     result = ssh(srv, f"cat $HOME/{REMOTE_APP_DIR}/.env", check=False, capture=True)
     if result.returncode == 0 and result.stdout.strip():
+        ssh(srv, f"umask 077 && touch $HOME/{REMOTE_APP_DIR}/.env.secrets")
         return parse_env(result.stdout)
     env = generate_secrets(remote_host(srv))
     content = "".join(f"{key}={value}\\n" for key, value in env.items())
@@ -141,6 +143,7 @@ def fetch_or_create_secrets(srv) -> dict:
         f"mkdir -p $HOME/{REMOTE_APP_DIR} && umask 077 && cat > $HOME/{REMOTE_APP_DIR}/.env",
         input=content)
     print(f"Created secrets file {srv}:~/{REMOTE_APP_DIR}/.env")
+    ssh(srv, f"umask 077 && touch $HOME/{REMOTE_APP_DIR}/.env.secrets")
     return env
 
 
