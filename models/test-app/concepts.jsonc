@@ -150,6 +150,23 @@
         // related_to a data_size s concept: selectors preload the full option list
         { "name": "a_product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "description": "FK to a data_size s concept" }
       ]
+    },
+    {
+      "name": "external_company",
+      "plural_name": "external_companies",
+      "description": "Companies replicated from the OData integration mock",
+      "id_presentation": { "fields": ["name"] },
+      "actions": [
+        { "label": "Dummy OK", "source": "external-company-dummy-ok.js", "placement": ["list", "edit"] },
+        { "label": "Dummy KO", "source": "external-company-dummy-ko.js", "placement": ["list", "edit"] }
+      ],
+      "fields": [
+        { "name": "name", "type": "string", "required": true },
+        { "name": "active", "type": "boolean", "required": true },
+        { "name": "street", "type": "string" },
+        { "name": "city", "type": "string" },
+        { "name": "country", "type": "string" }
+      ]
     }
   ]
 }

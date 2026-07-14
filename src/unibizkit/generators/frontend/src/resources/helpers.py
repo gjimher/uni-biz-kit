@@ -265,6 +265,10 @@ def get_optimized_react_admin_imports(
     presentation_config = concept["id_presentation"]
     if presentation_config["show"]:
         needed_components.update(['TextField', 'TextInput'])
+    if any("show" in action["placement"] for action in concept.get("actions", [])):
+        needed_components.add("TopToolbar")
+    if any("edit" in action["placement"] for action in concept.get("actions", [])):
+        needed_components.update(["TopToolbar", "ShowButton"])
 
     return ', '.join(sorted(needed_components))
 

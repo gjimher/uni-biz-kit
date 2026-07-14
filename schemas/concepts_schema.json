@@ -98,6 +98,28 @@
             "required": ["tags"],
             "additionalProperties": false
           },
+          "actions": {
+            "type": "array",
+            "description": "Backend actions exposed as authenticated buttons in generated views.",
+            "default": [],
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": { "type": "string", "minLength": 1 },
+                "source": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9_][a-zA-Z0-9_.-]*\\.js$",
+                  "description": "JavaScript file name located in backend/actions beside concepts.jsonc."
+                },
+                "placement": {
+                  "type": "array", "minItems": 1, "uniqueItems": true,
+                  "items": { "enum": ["list", "edit", "show"] }
+                }
+              },
+              "required": ["label", "source", "placement"]
+            }
+          },
           "fields": {
             "type": "array",
             "items": {

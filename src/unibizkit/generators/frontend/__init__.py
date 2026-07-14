@@ -7,7 +7,7 @@ from .context import Context
 from . import eslintrc, index_html, package_json, vite_config
 from .src import (
     supabase_client, index, auth_provider, data_provider, app,
-    import_export_config, quick_edit_config, workflow_config
+    import_export_config, quick_edit_config, workflow_config, backend_actions_config
 )
 from .src.layout import (
     my_app_bar, my_layout, my_login_page, my_menu,
@@ -17,7 +17,8 @@ from .src.layout import (
 from .src.components import (
     title, reorderable_datagrid, recursive_parent_selector,
     custom_edit_toolbar, document_tab, workflow_selector, field_help_icon,
-    markdown_input, import_export, quick_edit, workflow_tasks, deleted_snapshot_reference
+    markdown_input, import_export, quick_edit, workflow_tasks, deleted_snapshot_reference,
+    concept_actions, precision_datetime_input
 )
 from .src.resources import resource
 from .src.presentation import model_js, router, custom_page
@@ -108,6 +109,7 @@ class ReactAdminGenerator:
         _write(ctx.output_dir / "src" / "dataProvider.js", data_provider.generate(ctx))
         _write(ctx.output_dir / "src" / "importExportConfig.js", import_export_config.generate(ctx))
         _write(ctx.output_dir / "src" / "quickEditConfig.js", quick_edit_config.generate(ctx))
+        _write(ctx.output_dir / "src" / "backendActionsConfig.js", backend_actions_config.generate(ctx))
 
         has_auth_provider = False
         if ctx.security_config["authentication_required"]:
@@ -139,6 +141,9 @@ class ReactAdminGenerator:
         _write(ctx.output_dir / "src" / "components" / "field_help_icon.jsx", field_help_icon.generate())
         _write(ctx.output_dir / "src" / "components" / "import_export.jsx", import_export.generate())
         _write(ctx.output_dir / "src" / "components" / "quick_edit.jsx", quick_edit.generate())
+        _write(ctx.output_dir / "src" / "components" / "concept_actions.jsx", concept_actions.generate())
+        if any(f["type"] == "datetime" for c in ctx.concepts for f in c["fields"]):
+            _write(ctx.output_dir / "src" / "components" / "precision_datetime_input.jsx", precision_datetime_input.generate())
         if any(f.get("on_delete") == "snapshot_data" for c in ctx.concepts for f in c["fields"]):
             _write(ctx.output_dir / "src" / "components" / "deleted_snapshot_reference.jsx", deleted_snapshot_reference.generate())
         if ctx.workflow_config["_concept_workflow"]:

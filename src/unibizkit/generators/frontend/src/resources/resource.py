@@ -156,7 +156,7 @@ const {edit_comp_name} = ({{ canEditParent = true }}) => {{
   const refresh = useRefresh();
   const [update] = useUpdate();
   const {{ permissions }} = usePermissions();
-  const canWrite = (permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write')) && canEditParent;
+  const canWrite = (permissions?.['{resource_name}']?.includes('edit') || permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write')) && canEditParent;
 
   const handleClick = (e) => {{
     e.stopPropagation();
@@ -429,6 +429,7 @@ def _collect_validation_concepts(ctx: Context, concept: Dict[str, Any]) -> List[
 
 def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     resource_name = concept["name"]
+    allow_delete_prop = "" if concept.get("_fe_allow_delete", True) else " allowDelete={false}"
     title_desc_prop = f' description="{concept["description"].replace(chr(34), "&quot;")}"' if concept["description"] else ''
 
     owned_children = find_owned_children(resource_name, ctx.concepts)
@@ -513,6 +514,8 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         f"import {{ CustomEditToolbar }} from '../../components/custom_edit_toolbar';",
         f"import {{ ImportExportActions }} from '../../components/import_export';"
     ]
+    if concept.get("actions"):
+        component_imports.append("import { ConceptActions, ConceptBulkActions } from '../../components/concept_actions';")
     if not workflow_import and "WorkflowSelector" in child_dialog_components:
         # Child dialogs render the selector when the child concept has a
         # workflow, even if this (parent) concept does not.
@@ -569,6 +572,16 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
       </FormTab>"""
 
     edit_inner_component = ""
+    edit_actions = ""
+    edit_actions_prop = ""
+    if any("edit" in action["placement"] for action in concept.get("actions", [])):
+        edit_actions = f"const {resource_name.upper()}_EDIT_ACTIONS = () => <TopToolbar><ConceptActions placement=\"edit\" /><ShowButton /></TopToolbar>;"
+        edit_actions_prop = f" actions={{<{resource_name.upper()}_EDIT_ACTIONS />}}"
+    show_actions = ""
+    show_actions_prop = ""
+    if any("show" in action["placement"] for action in concept.get("actions", [])):
+        show_actions = f"const {resource_name.upper()}_SHOW_ACTIONS = () => <TopToolbar><ConceptActions placement=\"show\" /></TopToolbar>;"
+        show_actions_prop = f" actions={{<{resource_name.upper()}_SHOW_ACTIONS />}}"
     validate_prop = f" validate={{validate_{resource_name}_related_fields}}" if _has_validations(ctx, concept) else ""
     if concept_workflow:
         wf_json = json.dumps(concept_workflow)
@@ -607,12 +620,12 @@ const {inner_comp_name} = () => {{
         {form_content}
     );
 }};"""
-        edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}} {{...props}}>
+        edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}}{edit_actions_prop} {{...props}}>
     <{inner_comp_name} />
   </Edit>"""
     elif owned_children or many_to_many_links or has_documents:
-        edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}} {{...props}}>
-    <TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" />}}{validate_prop}>
+        edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}}{edit_actions_prop} {{...props}}>
+    <TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}"{allow_delete_prop} />}}{validate_prop}>
       <FormTab label="Summary">
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
           {field_components["edit_fields"]}
@@ -624,8 +637,8 @@ const {inner_comp_name} = () => {{
     </TabbedForm>
   </Edit>"""
     else:
-        edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}} {{...props}}>
-    <SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}" />}}{validate_prop}>
+        edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}}{edit_actions_prop} {{...props}}>
+    <SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}"{allow_delete_prop} />}}{validate_prop}>
       <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
         {field_components["edit_fields"]}
       </Grid>
@@ -642,6 +655,8 @@ import {{ {mui_imports_str} }} from '@mui/material';
 {prefill_components}
 {validation_components}
 {edit_inner_component}
+{edit_actions}
+{show_actions}
 
 const {resource_name}_filters = [
 {field_components["filter_fields"]}
@@ -651,7 +666,7 @@ export const {resource_name.upper()}_LIST = (props) => {{
   const {{ permissions }} = usePermissions();
   return (
     <List {{...props}} filters={{{resource_name}_filters}}{list_sort_prop} actions={{<ImportExportActions />}}>
-      <DatagridConfigurable rowClick="edit" omit={{{field_components["list_omit_json"]}}}>
+      <DatagridConfigurable rowClick="edit" omit={{{field_components["list_omit_json"]}}}{' bulkActionButtons={<ConceptBulkActions' + allow_delete_prop + ' />}' if any('list' in action['placement'] for action in concept.get('actions', [])) else ''}>
         {field_components["list_fields"]}
       </DatagridConfigurable>
     </List>
@@ -680,7 +695,7 @@ export const {resource_name.upper()}_EDIT = (props) => {{
 }};
 
 export const {resource_name.upper()}_SHOW = (props) => (
-  <Show title={{<Title name="{resource_name}"{title_desc_prop} />}} {{...props}}>
+  <Show title={{<Title name="{resource_name}"{title_desc_prop} />}}{show_actions_prop} {{...props}}>
     <SimpleShowLayout>
       {id_field_show}
       {field_components["show_fields"]}

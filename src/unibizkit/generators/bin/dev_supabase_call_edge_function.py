@@ -28,16 +28,23 @@ import urllib.error
 import urllib.request
 
 
-def usage():
-    sys.exit(
+def help_text():
+    return (
         __doc__ + "\n"
         "Usage:\n"
         f"  python bin/{Path(__file__).name} USER [PASSWORD] EDGE_FUNCTION [JSON_ARGS]\n\n"
         "Examples:\n"
+        f"  python bin/{Path(__file__).name} admin@test.com external-company-dummy-ok '{{\"id\": 1}}'\n"
+        f"  python bin/{Path(__file__).name} admin@test.com integration-run '{{\"id\": 1}}'\n"
+        f"  python bin/{Path(__file__).name} admin@test.com integration-reset-checkpoint '{{\"id\": 1}}'\n"
         f"  python bin/{Path(__file__).name} user1@test.com order-shipping-costs '{{\"id\": 1}}'\n"
         f"  python bin/{Path(__file__).name} user1@test.com workflow-transition '{{\"concept\":\"order\",\"id\":1,\"to_state\":\"initial\",\"comment\":\"Back to initial\"}}'\n"
         f"  python bin/{Path(__file__).name} user1@test.com useruser order-shipping-costs '{{\"id\": 1}}'"
     )
+
+
+def usage():
+    sys.exit(help_text())
 
 
 def parse_args(argv):
@@ -120,6 +127,9 @@ def request_json(method, url, headers, body=None):
 
 
 def main():
+    if sys.argv[1:] in (["-h"], ["--help"]):
+        print(help_text())
+        return
     user, password, function_name, payload = parse_args(sys.argv[1:])
     root_dir = Path(__file__).parent.parent
     # Reach Supabase (Kong) directly via backend/.env, not the Vite proxy.
