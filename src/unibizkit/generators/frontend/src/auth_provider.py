@@ -50,7 +50,7 @@ const buildPermissions = (user) => {{
             }}
 
             for (const [field, fRules] of Object.entries(fieldRules)) {{
-                const fieldAccess = fRules[role] || mainAccess;
+                const fieldAccess = mainAccess ? fRules[role] : undefined;
                 if (fieldAccess) {{
                     const fieldKey = `${{concept}}.${{field}}`;
                     if (!permissions[fieldKey]) permissions[fieldKey] = [];
@@ -60,8 +60,7 @@ const buildPermissions = (user) => {{
                     if (fieldAccess === 'owner_write' && !permissions[fieldKey].includes('write')) {{
                         permissions[fieldKey].push('write');
                     }}
-                    if (fieldAccess === 'write' && mainAccess !== 'write' && mainAccess !== 'owner_write') {{
-                        if (!permissions[concept]) permissions[concept] = [];
+                    if (fieldAccess === 'write' && mainAccess === 'read') {{
                         if (!permissions[concept].includes('edit')) permissions[concept].push('edit');
                     }}
                 }}

@@ -66,6 +66,28 @@ def test_anon_read_appears_in_acl():
     assert acl.get("item", {}).get("_main", {}).get("_anon") == "read"
 
 
+def test_anon_none_removes_lower_priority_read_from_acl():
+    security_config = {
+        "authentication_required": True,
+        "rules_level_1": [
+            {"role": "_anon", "concept": "item", "access": "read"},
+        ],
+        "rules_level_2": [
+            {"role": "_anon", "concept": "item", "access": "none"},
+        ],
+    }
+    processor = SchemaProcessor(
+        {"concepts": [_MINIMAL_CONCEPT]}, security_config=security_config
+    )
+
+    processor.process()
+
+    acl = processor.security_extended["_acl"]
+    assert "_anon" not in acl["item"]["_main"]
+    assert "_anon" not in acl["item"]["_fields"]["f1"]
+    assert "none" not in json.dumps(acl)
+
+
 def test_anon_write_raises_error():
     """_anon with write access must raise ValueError at process time."""
     processor = _make_processor(
@@ -322,6 +344,142 @@ def test_security_rules_merging():
     # Final cleanup check: should NOT be removed anymore
     for level in ["rules_level_1", "rules_level_2", "rules_level_3"]:
         assert level in processor.security_extended, f"{level} should be preserved in processed security"
+
+
+def test_none_removes_concept_and_field_permissions_from_effective_acl():
+    schema = {
+        "concepts": [{
+            "name": "product",
+            "plural_name": "products",
+            "fields": [
+                {"name": "name", "type": "string", "size": "s", "required": False},
+                {"name": "secret", "type": "string", "size": "s", "required": False},
+            ],
+            "id_presentation": {"fields": ["name"], "separator": " "},
+        }]
+    }
+    security_config = {
+        "authentication_required": True,
+        "roles": [{"name": "admin"}, {"name": "user"}, {"name": "blocked"}],
+        "rules_level_1": [
+            {"role": "admin", "concept": "*", "access": "write"},
+            {"role": "user", "concept": "*", "access": "write"},
+            {"role": "blocked", "concept": "*", "access": "read"},
+        ],
+        "rules_level_2": [
+            {"role": "user", "concept": "product", "field": "secret", "access": "none"},
+            {"role": "blocked", "concept": "product", "access": "none"},
+        ],
+    }
+    processor = SchemaProcessor(schema, security_config=security_config)
+
+    processor.process()
+
+    product_acl = processor.security_extended["_acl"]["product"]
+    assert product_acl["_main"] == {"admin": "write", "user": "write"}
+    assert product_acl["_fields"]["name"] == {"admin": "write", "user": "write"}
+    assert product_acl["_fields"]["secret"] == {"admin": "write"}
+    assert "none" not in json.dumps(processor.security_extended["_acl"])
+
+
+def test_read_concept_with_write_field_grants_update_only():
+    security_config = {
+        "authentication_required": True,
+        "registration": {"allow": False, "role": "user"},
+        "sso": {"enabled": False, "role_claim": "roles", "default_role": "user"},
+        "roles": [{"name": "user"}],
+        "rules_level_1": [
+            {"role": "user", "concept": "item", "access": "read"},
+        ],
+        "rules_level_2": [
+            {"role": "user", "concept": "item", "field": "f1", "access": "write"},
+        ],
+    }
+    processor = SchemaProcessor(
+        {"concepts": [_MINIMAL_CONCEPT]}, security_config=security_config
+    )
+
+    processor.process()
+
+    item_acl = processor.security_extended["_acl"]["item"]
+    assert item_acl["_main"]["user"] == "read"
+    assert item_acl["_fields"]["f1"]["user"] == "write"
+
+    sql = "\n".join(generate_security_policies(
+        processor.concepts,
+        processor.concept_map,
+        processor.security_extended,
+        processor.workflow_extended,
+    ))
+    assert 'CREATE POLICY "user_select_item"' in sql
+    assert 'CREATE POLICY "user_update_item"' in sql
+    assert 'CREATE POLICY "user_insert_item"' not in sql
+    assert 'CREATE POLICY "user_delete_item"' not in sql
+
+
+def test_higher_priority_concept_rule_can_make_field_write_valid():
+    security_config = {
+        "authentication_required": True,
+        "roles": [{"name": "user"}],
+        "rules_level_1": [
+            {"role": "user", "concept": "item", "access": "read"},
+        ],
+        "rules_level_2": [
+            {"role": "user", "concept": "item", "field": "f1", "access": "write"},
+        ],
+        "rules_level_3": [
+            {"role": "user", "concept": "item", "access": "write"},
+        ],
+    }
+    processor = SchemaProcessor(
+        {"concepts": [_MINIMAL_CONCEPT]}, security_config=security_config
+    )
+
+    processor.process()
+
+    item_acl = processor.security_extended["_acl"]["item"]
+    assert item_acl["_main"]["user"] == "write"
+    assert item_acl["_fields"]["f1"]["user"] == "write"
+
+
+def test_generated_fields_are_materialized_in_effective_acl():
+    schema = {
+        "concepts": [
+            {
+                "name": "order",
+                "plural_name": "orders",
+                "fields": [],
+                "id_presentation": {"fields": []},
+            },
+            {
+                "name": "order_item",
+                "plural_name": "order_items",
+                "fields": [{
+                    "name": "order",
+                    "type": "relation_to_one",
+                    "subtype": "part_of",
+                    "target": "order",
+                    "required": True,
+                    "size": "s",
+                }],
+                "id_presentation": {"fields": []},
+            },
+        ]
+    }
+    security_config = {
+        "authentication_required": True,
+        "roles": [{"name": "user"}],
+        "rules_level_1": [
+            {"role": "user", "concept": "*", "access": "write"},
+        ],
+    }
+    processor = SchemaProcessor(schema, security_config=security_config)
+
+    processor.process()
+
+    item_acl = processor.security_extended["_acl"]["order_item"]
+    assert item_acl["_fields"]["part_of_order"]["user"] == "write"
+
 
 def test_security_rules_default_level_1():
     schema = {

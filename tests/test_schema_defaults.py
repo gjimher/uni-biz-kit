@@ -210,6 +210,22 @@ def test_anon_role_name_raises_error():
             SchemaLoader().load_and_validate(str(temp_path))
 
 
+def test_security_rules_accept_none_access():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        (root / "concepts.jsonc").write_text(json.dumps(_MINIMAL_CONCEPTS))
+        (root / "presentation.jsonc").write_text("{}")
+        (root / "security.jsonc").write_text(json.dumps({
+            "authentication_required": True,
+            "rules_level_2": [
+                {"role": "user", "concept": "item", "field": "f1", "access": "none"}
+            ],
+        }))
+        _write_deployment(root)
+
+        SchemaLoader().load_and_validate(str(root / "concepts.jsonc"))
+
+
 def test_deployed_data_uses_id_presentation_and_preserves_declared_fields():
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)

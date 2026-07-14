@@ -76,7 +76,6 @@ CREATE TRIGGER "{table_name}_manage_current_trigger"
         _acl = security_config.get("_acl", {})
         concept_acl = _acl.get(owner_name, {})
         docs_field_acl = concept_acl.get("_fields", {}).get("_documents", {})
-        main_acl = concept_acl.get("_main", {})
         all_roles = security_config.get("roles", [])
 
         workflow = (concept_workflows or {}).get(owner_name)
@@ -103,7 +102,7 @@ CREATE TRIGGER "{table_name}_manage_current_trigger"
         # A concept readable by anonymous visitors (e.g. a storefront catalog) needs its
         # documents served publicly so <img> tags resolve without a session. Gate the
         # public flag on _anon read access; private concepts (orders, invoices) stay closed.
-        anon_doc_access = docs_field_acl.get("_anon") or main_acl.get("_anon", "none")
+        anon_doc_access = docs_field_acl.get("_anon", "none")
         is_public = anon_doc_access == "read"
         public_sql = "true" if is_public else "false"
 
@@ -122,7 +121,7 @@ ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public;"""]
 
         for r in all_roles:
             role = r["name"]
-            access = docs_field_acl.get(role) or main_acl.get(role, "none")
+            access = docs_field_acl.get(role, "none")
             if access == "none":
                 continue
             role_cond = f"auth.jwt() -> 'app_metadata' -> 'roles' ? '{role}'"

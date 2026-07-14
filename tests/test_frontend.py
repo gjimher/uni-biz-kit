@@ -5,6 +5,7 @@ This test generates a complete app application frontend and compiles it.
 """
 
 import pytest
+import json
 import os
 import sys
 import shutil
@@ -51,6 +52,19 @@ class TestAppFrontend:
         assert f"BASE_PORT = {PRIMARY_BASE}" in dev_info_ports
 
         frontend_dir = output_dir / 'frontend'
+
+        # Integration operators may edit only the explicitly writable operational
+        # fields. This must not grant INSERT or DELETE on the model-owned row.
+        security_extended = json.loads((output_dir / 'security_extended.json').read_text())
+        integration_acl = security_extended['_acl']['_integration']
+        assert integration_acl['_main']['admin'] == 'read'
+        assert integration_acl['_fields']['notes']['admin'] == 'write'
+        assert integration_acl['_fields']['operational_status']['admin'] == 'write'
+        schema_sql = (output_dir / 'backend' / 'supabase_schema.sql').read_text()
+        assert 'CREATE POLICY "admin_select__integration"' in schema_sql
+        assert 'CREATE POLICY "admin_update__integration"' in schema_sql
+        assert 'CREATE POLICY "admin_insert__integration"' not in schema_sql
+        assert 'CREATE POLICY "admin_delete__integration"' not in schema_sql
 
         # The shared helper library for custom presentation pages must be generated.
         lib_dir = frontend_dir / 'src' / 'presentation' / 'lib'

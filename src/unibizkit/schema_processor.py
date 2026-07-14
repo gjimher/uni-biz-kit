@@ -270,6 +270,11 @@ class SchemaProcessor:
             # Process fields (fields are inside the new_concept now)
             for field in new_concept["fields"]:
                 self._process_field(field, new_concept)
+
+        # Concept processing may inject fields such as part_of_order after the
+        # security rules were compiled. Materialize their effective _main access
+        # in _fields so every ACL consumer can rely exclusively on _acl.
+        self._complete_acl_fields()
         
         # Pass 2: Cross-Concept Processing (Relationships)
         for concept in self.concepts:
@@ -281,6 +286,17 @@ class SchemaProcessor:
         self._validate_payments()
 
         return self.extended_schema
+
+    def _complete_acl_fields(self):
+        """Add effective ACL entries for fields generated after rule resolution."""
+        for concept in self.concepts:
+            concept_acl = self.security_extended["_acl"].get(concept["name"])
+            if not concept_acl:
+                continue
+            for field in concept["fields"]:
+                concept_acl["_fields"].setdefault(
+                    field["name"], dict(concept_acl["_main"])
+                )
 
     def _validate_payments(self):
         """Check that the payments config points to an existing concept and fields."""
@@ -466,14 +482,14 @@ class SchemaProcessor:
         if "rules_level_3" not in self.security_extended:
             self.security_extended["rules_level_3"] = []
 
-        # Validate _anon rules: only concept-level read is allowed
+        # Validate _anon rules: only concept-level read or permission removal is allowed
         for level_key in ["rules_level_1", "rules_level_2", "rules_level_3"]:
             for rule in self.security_extended.get(level_key, []):
                 if rule["role"] != "_anon":
                     continue
-                if rule["access"] != "read":
+                if rule["access"] not in ("read", "none"):
                     raise ValueError(
-                        f"Role '_anon' only supports 'read' access, got '{rule['access']}' "
+                        f"Role '_anon' only supports 'read' or 'none' access, got '{rule['access']}' "
                         f"for concept '{rule['concept']}' in {level_key}"
                     )
                 if rule.get("field", "*") != "*":
@@ -561,11 +577,36 @@ class SchemaProcessor:
             for rule in expand_rules(level_rules):
                 rules_map[(rule["concept"], rule["field"], rule["role"])] = rule["access"]
         
-        # Build _acl structure: concept -> { _main: {role: access}, _fields: {field: {role: access}} }
+        # Build the effective _acl. Rules may use "none" to remove a lower-level
+        # permission, but _acl contains only permissions granted in the final result.
+        # Fields normally restrict _main. The one intentional elevation is a
+        # writable field under read concept access: it grants UPDATE for selected
+        # fields without granting concept-level INSERT or DELETE.
         _acl = {}
         role_names = [r["name"] for r in self.security_extended["roles"]]
         # _anon is a built-in role (not in the roles list) handled separately
         acl_role_names = role_names + ["_anon"]
+        concepts_with_rules = {key[0] for key in rules_map}
+
+        allowed_field_access = {
+            "read": {"read", "write", "none"},
+            "write": {"read", "write", "none"},
+            "owner_write": {"read", "owner_write", "none"},
+        }
+
+        def effective_field_access(concept_name, field_name, role_name, main_access, field_access):
+            if field_access is None:
+                return main_access if main_access != "none" else None
+            if field_access == "none":
+                return None
+            if main_access not in allowed_field_access or field_access not in allowed_field_access[main_access]:
+                resolved_main = main_access if main_access not in (None, "none") else "none"
+                raise ValueError(
+                    f"Field rule for role '{role_name}', concept '{concept_name}', "
+                    f"field '{field_name}' grants '{field_access}' access, which exceeds "
+                    f"the resolved concept access '{resolved_main}'."
+                )
+            return field_access
 
         for concept in self.concepts:
             concept_name = concept["name"]
@@ -574,7 +615,7 @@ class SchemaProcessor:
             # 1. Main access (concept-level)
             for role_name in acl_role_names:
                 access = rules_map.get((concept_name, "*", role_name))
-                if access:
+                if access and access != "none":
                     concept_acl["_main"][role_name] = access
 
             # 2. Field-level access (explicit for all fields)
@@ -584,31 +625,30 @@ class SchemaProcessor:
 
                 # Check each role for this field
                 for role_name in acl_role_names:
-                    # Specific field rule overrides concept rule
-                    access = rules_map.get((concept_name, field_name, role_name))
-                    if not access:
-                        # Fallback to main rule
-                        access = concept_acl["_main"].get(role_name)
-
+                    main_access = concept_acl["_main"].get(role_name)
+                    field_access = rules_map.get((concept_name, field_name, role_name))
+                    access = effective_field_access(
+                        concept_name, field_name, role_name, main_access, field_access
+                    )
                     if access:
                         field_rules[role_name] = access
 
-                if field_rules:
-                    concept_acl["_fields"][field_name] = field_rules
+                concept_acl["_fields"][field_name] = field_rules
 
             # 3. Virtual _documents field (controls access to the concept's document table)
             if concept["documents"]["enabled"]:
                 docs_field_rules = {}
                 for role_name in acl_role_names:
-                    access = rules_map.get((concept_name, "_documents", role_name))
-                    if not access:
-                        access = concept_acl["_main"].get(role_name)
+                    main_access = concept_acl["_main"].get(role_name)
+                    field_access = rules_map.get((concept_name, "_documents", role_name))
+                    access = effective_field_access(
+                        concept_name, "_documents", role_name, main_access, field_access
+                    )
                     if access:
                         docs_field_rules[role_name] = access
-                if docs_field_rules:
-                    concept_acl["_fields"]["_documents"] = docs_field_rules
+                concept_acl["_fields"]["_documents"] = docs_field_rules
 
-            if concept_acl["_main"] or concept_acl["_fields"]:
+            if concept_name in concepts_with_rules:
                 _acl[concept_name] = concept_acl
 
         self.security_extended["_acl"] = _acl
@@ -666,9 +706,7 @@ class SchemaProcessor:
                         )
                 if concept_acl:
                     for role_name in profile_roles:
-                        access = concept_acl["_fields"].get(field_name, {}).get(
-                            role_name, concept_acl["_main"].get(role_name, "none")
-                        )
+                        access = concept_acl["_fields"].get(field_name, {}).get(role_name, "none")
                         if access not in ("write", "owner_write"):
                             raise ValueError(
                                 f"{where} uses {option} but is not writable by profile "

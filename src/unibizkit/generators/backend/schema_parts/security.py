@@ -532,7 +532,7 @@ WITH CHECK (true);
 
                 allowed_roles = []
                 for role in all_role_names:
-                    access = field_rules.get(role, main_rules.get(role, "none"))
+                    access = field_rules.get(role, "none")
                     if access in ("write", "owner_write"):
                         allowed_roles.append(role)
 
@@ -586,15 +586,12 @@ EXECUTE FUNCTION "{trigger_name}_func"();
         if "_anon" in main_rules:
             role_table_access["_anon"] = main_rules["_anon"]
 
-        for field_name, field_rules in concept_acl["_fields"].items():
-            for role, access in field_rules.items():
-                current = role_table_access.get(role, "none")
-                if access == "write" and current in ("none", "read"):
+        # A writable field under read concept access intentionally grants only
+        # SELECT + UPDATE. Field triggers still restrict which columns may change.
+        for field_rules in concept_acl["_fields"].values():
+            for role, field_access in field_rules.items():
+                if field_access == "write" and role_table_access.get(role) == "read":
                     role_table_access[role] = "field_write"
-                elif access == "owner_write" and current not in ("write", "owner_write"):
-                    role_table_access[role] = "owner_write"
-                elif access == "read" and current == "none":
-                    role_table_access[role] = "read"
 
         for role, access in role_table_access.items():
             if role == "_anon":
@@ -713,7 +710,7 @@ WITH CHECK (true);
         if "_anon" in main_acl or "_anon" in docs_field_acl:
             doc_roles.append("_anon")
         for role in doc_roles:
-            access = docs_field_acl.get(role) or main_acl.get(role, "none")
+            access = docs_field_acl.get(role, "none")
             if access == "none":
                 continue
 

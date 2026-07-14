@@ -122,8 +122,8 @@
       "type": "object",
       "properties": {
         "concept": { "type": "string", "description": "Concept name or '*' for all" },
-        "role": { "type": "string", "description": "Role name (e.g., 'admin', 'user'). Use '_anon' for unauthenticated (anonymous) access — only 'read' is allowed for this built-in role." },
-        "access": { "enum": ["read", "write", "owner_write"], "description": "Access level." },
+        "role": { "type": "string", "description": "Role name (e.g., 'admin', 'user'). Use '_anon' for unauthenticated (anonymous) access — only 'read' and its removal with 'none' are allowed for this built-in role." },
+        "access": { "enum": ["none", "read", "write", "owner_write"], "description": "Rule access level. 'none' removes a permission granted by a previous rule." },
         "field": { "type": "string", "description": "Field name or '*' for all fields", "default": "*" }
       },
       "required": ["concept", "role", "access"]

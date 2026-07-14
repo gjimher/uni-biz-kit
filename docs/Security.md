@@ -12,7 +12,7 @@ The core of the security system resolves into an intermediate representation (`_
 
 For every concept, the `_acl` object contains two main sections:
 1. `_main`: Concept-level access.
-2. `_fields`: Field-specific access overrides.
+2. `_fields`: Effective field access, normally restricted by `_main`, with field-level `write` allowed under concept-level `read`.
 
 ```json
 "_acl": {
@@ -31,27 +31,43 @@ For every concept, the `_acl` object contains two main sections:
 
 ### Access Levels
 
-- **`write`**: Allows the user to create, edit, and delete records (or specific fields).
+- **`write`**: At concept level, allows the user to create, edit, and delete records. At field level, allows editing that field when `_main` grants either read or write access.
 - **`owner_write`**: Grants write access strictly to the owner of the record. When a concept uses `owner_write`, UniBizKit automatically injects a `security_owner_id` column (defaulting to the authenticated user ID) and generates corresponding Row Level Security (RLS) policies to ensure users can only modify their own data. Note: `owner_write` inherently grants read access as well.
 - **`read`**: Restricts the user to only viewing the records (or specific fields).
 
 ### How Concept-Level and Field-Level Access Interact
 
-The power of the `_acl` system is in how the `_main` rules and `_fields` rules combine to allow fine-grained permissions:
+`_main` controls row-level access to a concept. It determines whether the role can select records (`read`) or can also insert, update, and delete them (`write` or `owner_write`). `_fields` contains the effective access to each field. It normally restricts `_main`, with one intentional extension: a writable field under concept-level read access enables updates to that field without enabling record creation or deletion.
 
-1. **Downgrading Access (Read-Only Fields)**
-   If a role is granted `write` at the concept level (`_main`), they generally have full access to create, edit, and delete records of that concept.
-   However, you can specify a `read` rule for a specific field in `_fields`. This **downgrades** their access, making that specific field read-only, even while the rest of the concept remains editable.
+- With `_main: "write"`, a field can remain writable, be reduced to `read`, or grant no access when the role is absent from that field's map.
+- With `_main: "read"`, a field can remain readable, grant no access, or be writable. If any field is writable, the generated RLS grants `SELECT` and `UPDATE`, while field triggers reject changes to non-writable fields.
+- Without an entry for the role in `_main`, field entries cannot grant access to the concept.
 
-2. **Upgrading Access (Edit-Specific Fields)**
-   Conversely, a role might only have `read` access at the concept level (`_main`), meaning they can only view the data and cannot create or delete records.
-   By granting a `write` rule to specific fields in `_fields`, you allow the role to edit *only those specific fields* on existing records, while everything else remains read-only.
+Rule resolution fails for unsupported combinations. For example, any field permission under a concept with no access, or `owner_write` under concept-level `read`, raises a generation error instead of being silently reduced. Validation uses the access remaining after all three rule levels have been resolved.
+
+The generated `_acl` is complete: inheritance from `_main` is resolved while compiling the rules. Backend and frontend consume only `_acl` and do not re-read or re-resolve `rules_level_*`.
 
 ## How Rules are Resolved
 
 When defining rules in `security.json` (`rules_level_1`, `rules_level_2`, `rules_level_3`), higher levels override lower levels.
 - A rule applying to `field: "*"` sets the **concept-level (`_main`)** access.
-- A rule applying to a specific field creates a **field-level override** in the `_fields` mapping.
+- A rule applying to a specific field sets the effective access stored in `_fields`. It may restrict `_main`, or grant field-level `write` under concept-level `read`.
+- `access: "none"` removes the permission granted to that role and scope by a lower-priority rule. On a concept it removes the role's concept access; on a field it removes only that field's access. A still higher-priority rule can grant access again.
+
+`none` is an instruction used only while compiling `rules_level_*`. It never appears in the generated `_acl`: a removed permission is represented by the role being absent from the corresponding `_main` or field map.
+
+For example, this removes the default read access to `internal_note` while leaving the rest of `product` readable:
+
+```json
+{
+  "rules_level_1": [
+    { "concept": "product", "role": "user", "access": "read" }
+  ],
+  "rules_level_2": [
+    { "concept": "product", "field": "internal_note", "role": "user", "access": "none" }
+  ]
+}
+```
 
 This compiled `_acl` is then automatically translated into Row Level Security (RLS) policies and triggers in Supabase, and corresponding UI visibility constraints in React-Admin.
 
@@ -88,7 +104,7 @@ USING (true);
 
 ### Constraints
 
-- **`_anon` is read-only.** Using `write` or `owner_write` with `_anon` raises a generation error. There is no stable user identity for anonymous sessions, so writes would be unattributable and untraceable.
+- **`_anon` is read-only.** Its rules accept `read`, or `none` to remove a lower-priority public read rule. Using `write` or `owner_write` raises a generation error. There is no stable user identity for anonymous sessions, so writes would be unattributable and untraceable.
 - **`_anon` does not need to be declared in the `roles` list.** It is a built-in — declaring it there has no effect and is not required.
 - **Rule propagation applies normally.** A `_anon read` rule on a parent concept (e.g. `product`) propagates to its child concepts (e.g. `order_item`) following the same logic as other roles. Override with a higher-priority rule if needed.
 

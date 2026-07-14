@@ -17,7 +17,7 @@
           },
           "_fields": {
             "type": "object",
-            "description": "Field-level access overrides per role. Same access level values as _main. A field entry overrides the concept-level rule for that specific field.",
+            "description": "Effective field access per role after rule inheritance and removals are resolved. Field access normally restricts _main, but 'write' under concept-level 'read' grants UPDATE without INSERT or DELETE. An absent role has no access to that field.",
             "additionalProperties": {
               "type": "object",
               "additionalProperties": {
