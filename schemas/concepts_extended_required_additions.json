@@ -51,11 +51,19 @@
 
                 "_fe_component": {
                   "type": "string",
-                  "description": "React-Admin Input component used in create/edit forms. Possible values: TextInput, NumberInput, BooleanInput, DateInput, SelectInput, ReferenceInput, ReferenceManyField, RelatedValidationInput (for string fields with CSV validation), MarkdownInput (generated markdown editor for markdown fields)."
+                  "description": "Input component used in create/edit forms. Possible values include React-Admin components such as TextInput, NumberInput, BooleanInput and DateInput, plus generated components such as PrecisionDateTimeInput, RelatedValidationInput and MarkdownInput."
+                },
+                "_fe_component_options": {
+                  "type": "string",
+                  "description": "Resolved JSX props appended directly to _fe_component by frontend templates. Empty when the component needs no model-derived options."
                 },
                 "_fe_list_component": {
                   "type": "string",
                   "description": "React-Admin Field component used in list and show views. Possible values: TextField, NumberField, BooleanField, DateField, ReferenceField, ReferenceManyField, MarkdownField (generated markdown renderer for markdown fields)."
+                },
+                "_fe_list_component_options": {
+                  "type": "string",
+                  "description": "Resolved JSX props appended directly to _fe_list_component by frontend templates. Empty when the component needs no model-derived options."
                 },
                 "_fe_grid_width": {
                   "type": "integer",

@@ -1067,6 +1067,20 @@ class SchemaProcessor:
 
     def _process_field(self, field: Dict[str, Any], concept: Dict[str, Any]):
         """Enrich a single field."""
+        if "precision" in field:
+            precision = field["precision"]
+            if field["type"] == "decimal":
+                valid_precision = isinstance(precision, int) and not isinstance(precision, bool)
+            elif field["type"] == "datetime":
+                valid_precision = precision in ("minute", "second")
+            else:
+                valid_precision = False
+            if not valid_precision:
+                raise ValueError(
+                    f"Invalid precision '{precision}' for field '{field['name']}' "
+                    f"of type '{field['type']}' in concept '{concept['name']}'"
+                )
+
         if 'calculated' in field and 'default' in field:
             raise ValueError(
                 f"Field '{field['name']}' in concept '{concept['name']}' has both "
@@ -1082,7 +1096,9 @@ class SchemaProcessor:
         # 2. Frontend Processing
         field["_fe_visibility"] = self._determine_visibility(field)
         field["_fe_component"] = self._determine_ui_component(field)
+        field["_fe_component_options"] = self._determine_ui_component_options(field)
         field["_fe_list_component"] = self._determine_list_component(field)
+        field["_fe_list_component_options"] = self._determine_list_component_options(field)
         if field["type"] == "markdown":
             field["_fe_grid_width"] = 12  # editor always takes the full row
         else:
@@ -1169,7 +1185,8 @@ class SchemaProcessor:
             'decimal': 'NumberInput',
             'boolean': 'BooleanInput',
             'date': 'DateInput',
-            'datetime': 'DateInput',
+            'datetime': 'PrecisionDateTimeInput',
+            'json': 'TextInput',
             'enum': 'SelectInput',
             'relation_to_one': 'ReferenceInput',
             'relation_to_many': 'ReferenceManyField'
@@ -1186,11 +1203,32 @@ class SchemaProcessor:
             'boolean': 'BooleanField',
             'date': 'DateField',
             'datetime': 'DateField',
+            'json': 'FunctionField',
             'enum': 'TextField', # Or ChipField
             'relation_to_one': 'ReferenceField',
             'relation_to_many': 'ReferenceManyField' # Usually not shown in simple lists
         }
         return mapping.get(field["type"], 'TextField')
+
+    def _determine_ui_component_options(self, field: Dict[str, Any]) -> str:
+        """Return JSX props ready to append to the generated input component."""
+        if field["type"] == "datetime" and field.get("precision", "minute") == "second":
+            return ' precision="second"'
+        return ""
+
+    def _determine_list_component_options(self, field: Dict[str, Any]) -> str:
+        """Return JSX props ready to append to the generated list/show component."""
+        if field["type"] != "datetime":
+            return ""
+        if field.get("precision", "minute") == "second":
+            return (
+                " showTime options={{ year: 'numeric', month: '2-digit', day: '2-digit', "
+                "hour: '2-digit', minute: '2-digit', second: '2-digit' }}"
+            )
+        return (
+            " showTime options={{ year: 'numeric', month: '2-digit', day: '2-digit', "
+            "hour: '2-digit', minute: '2-digit' }}"
+        )
 
     def _process_relationships(self, concept: Dict[str, Any]):
         """Process Owned Children and M2M Links."""

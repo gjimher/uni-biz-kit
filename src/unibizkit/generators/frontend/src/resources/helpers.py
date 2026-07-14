@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 
 # Generated components that live in src/components/ and therefore must not be
 # imported from the react-admin package.
-CUSTOM_FIELD_COMPONENTS = {'RelatedValidationInput', 'MarkdownInput', 'MarkdownField'}
+CUSTOM_FIELD_COMPONENTS = {'RelatedValidationInput', 'MarkdownInput', 'MarkdownField', 'PrecisionDateTimeInput'}
 
 
 def find_owned_children(parent_concept_name: str, concepts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -332,6 +332,7 @@ def generate_field_components(
             for field in relevant_fields:
                 fname = field["name"]
                 comp = field["_fe_list_component"]
+                comp_options = field["_fe_list_component_options"]
                 fdesc = field["description"]
                 if fdesc:
                     flabel = fname.replace('_', ' ').capitalize()
@@ -352,7 +353,7 @@ def generate_field_components(
                     number_locale = presentation_config["number_locale"]
                     child_raw_columns.append((fname, f'<NumberField source="{fname}" options={{{{ style: "currency", currency: "{currency}" }}}} locales="{number_locale}"{fcol_label} />'))
                 else:
-                    child_raw_columns.append((fname, f'<{comp} source="{fname}"{fcol_label} />'))
+                    child_raw_columns.append((fname, f'<{comp} source="{fname}"{comp_options}{fcol_label} />'))
 
             child_all_names = [f[0] for f in child_raw_columns]
             child_result_names = presentation_config.get("_list_fields", {}).get(child_name, child_all_names)
@@ -406,7 +407,9 @@ def generate_field_components(
             added_prefill_headers.add(prefill_group_name)
 
         comp_type = field["_fe_component"]
+        component_options = field["_fe_component_options"]
         list_comp = field["_fe_list_component"]
+        list_component_options = field["_fe_list_component_options"]
         width_units = field["_fe_grid_width"]
         visibility = field["_fe_visibility"]
         is_required = field["_be_not_null"] or field["required"] == "ask_after_login"
@@ -510,8 +513,12 @@ def generate_field_components(
             if field["type"] == "decimal":
                 pass
 
-            input_html = f'          <{comp_type} source="{field_name}"{extra_props}{full_width}{validation}{margin}{disabled_prop}{label_prop} />'
-            filter_fields.append((field_name, f'  <{comp_type} source="{field_name}" />'))
+            input_html = f'          <{comp_type} source="{field_name}"{component_options}{extra_props}{full_width}{validation}{margin}{disabled_prop}{label_prop} />'
+            if field["type"] == "datetime":
+                filter_fields.append((field_name, f'  <{comp_type} source="{field_name}@gte"{component_options} label="{field_name.replace("_", " ").capitalize()} from" />'))
+                filter_fields.append((field_name + "_to", f'  <{comp_type} source="{field_name}@lte"{component_options} label="{field_name.replace("_", " ").capitalize()} to" />'))
+            else:
+                filter_fields.append((field_name, f'  <{comp_type} source="{field_name}" />'))
 
         list_html = ""
         show_html = ""
@@ -535,8 +542,11 @@ def generate_field_components(
             else:
                 list_html = f'      <{list_comp} source="{field_name}"{col_label_prop} />'
                 show_html = list_html
+        elif field["type"] == "json":
+            list_html = f'      <FunctionField label="{field_name}" render={{record => record?.{field_name} == null ? "" : JSON.stringify(record.{field_name})}} />'
+            show_html = f'      <FunctionField label="{field_name}" render={{record => record?.{field_name} == null ? "" : JSON.stringify(record.{field_name}, null, 2)}} />'
         else:
-            list_html = f'      <{list_comp} source="{field_name}"{col_label_prop} />'
+            list_html = f'      <{list_comp} source="{field_name}"{list_component_options}{col_label_prop} />'
             show_html = list_html
 
         # The workflow-injected state field is internal (forms use the

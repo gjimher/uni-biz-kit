@@ -339,7 +339,7 @@ def test_create_order_and_upload_document_as_user(page: Page, app_server):
     page.wait_for_url("**#/admin/order/create**")
 
     # Fill the order form (total_amount is rollup read-only; customer is copy_logged_on_insert — auto-set)
-    page.locator('input[name="order_date"]').fill("2024-01-15")
+    page.locator('input[name="order_date"]').fill("2024-01-15T12:00")
     page.locator('input[name="shipping_address_street"]').fill("_E2E Test Order Address")
     city = page.get_by_role("combobox", name="shipping address city")
     city.click()

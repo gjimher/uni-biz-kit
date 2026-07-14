@@ -67,6 +67,11 @@ class TestAppFrontend:
         assert "from '../../components/markdown_input'" in product_resource, \
             "Resource with a markdown field should import the generated markdown component"
         assert '<MarkdownInput source="details"' in product_resource
+        field_checker_resource = (frontend_dir / 'src' / 'resources' / 'field_checker' / 'field_checker.jsx').read_text()
+        assert (
+            '<DateField source="a_datetime" showTime options={{ year: \'numeric\', month: \'2-digit\', '
+            "day: '2-digit', hour: '2-digit', minute: '2-digit' }}"
+        ) in field_checker_resource
         package_json = (frontend_dir / 'package.json').read_text()
         assert '"@uiw/react-md-editor"' in package_json, \
             "Markdown editor dependency should be added when the model uses markdown fields"

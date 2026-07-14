@@ -550,6 +550,8 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     markdown_imports = [name for name in ("MarkdownInput", "MarkdownField") if name in markdown_scan]
     if markdown_imports:
         component_imports.append(f"import {{ {', '.join(markdown_imports)} }} from '../../components/markdown_input';")
+    if "PrecisionDateTimeInput" in markdown_scan:
+        component_imports.append("import { PrecisionDateTimeInput } from '../../components/precision_datetime_input';")
     if "FIELD_HELP_ICON" in field_components["create_fields"] or "FIELD_HELP_ICON" in field_components["edit_fields"] or "FIELD_HELP_ICON" in child_dialog_components:
         component_imports.append(f"import {{ FIELD_HELP_ICON }} from '../../components/field_help_icon';")
     component_imports_str = "\n".join(component_imports)

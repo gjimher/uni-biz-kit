@@ -64,6 +64,8 @@ def generate(ctx: Context) -> str:
             }
             if field["type"] == "enum":
                 entry['values'] = field["enum_values"]
+            if field["type"] == "datetime":
+                entry['precision'] = field.get("precision", "minute")
             if field["type"] == "relation_to_one":
                 entry['target'] = field["target"]
                 entry['targetSize'] = ctx.concept_map[field["target"]]["data_size"]

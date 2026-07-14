@@ -176,10 +176,18 @@
                   "description": "Maximum value for numeric fields"
                 },
                 "precision": {
-                  "type": "integer",
-                  "description": "Precision for decimal fields",
-                  "minimum": 1,
-                  "maximum": 10
+                  "description": "Type-specific precision: total digits for decimal fields, or 'minute'/'second' display and input precision for datetime fields.",
+                  "oneOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10
+                    },
+                    {
+                      "type": "string",
+                      "enum": ["minute", "second"]
+                    }
+                  ]
                 },
                 "scale": {
                   "type": "integer",

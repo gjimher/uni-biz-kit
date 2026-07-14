@@ -77,7 +77,8 @@ const toInputValue = (field, value) => {
     const date = new Date(value);
     if (isNaN(date)) return '';
     const pad = (n) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    const seconds = field.precision === 'second' ? `:${pad(date.getSeconds())}` : '';
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}${seconds}`;
   }
   return value;
 };
@@ -910,7 +911,7 @@ const QUICK_EDIT_DIALOG = ({ resource, config, records, onClose }) => {
       case 'date':
         return <MuiTextField type="date" {...commonProps} />;
       case 'datetime':
-        return <MuiTextField type="datetime-local" {...commonProps} />;
+        return <MuiTextField type="datetime-local" inputProps={{ step: field.precision === 'second' ? 1 : 60 }} {...commonProps} />;
       case 'multiline':
         return <MuiTextField multiline maxRows={4} {...commonProps} />;
       default:
