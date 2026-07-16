@@ -17,7 +17,7 @@ Accessible to anyone, including unauthenticated users. Data is fetched via the S
 
 ## Authenticated pages
 
-These pages require login. The content is the same, but access is enforced via the `authenticated` Supabase role and the `<Authenticated>` wrapper.
+These pages require login. The content is the same, but access is enforced via the `authenticated` Supabase role and the router's session guard, which bounces signed-out visitors to `/signin`.
 
 - [Private MDX](/priv/example-private-mdx) — same concept list, requires auth
 - [Product list — hooks (auth)](/priv/example-data) — same data, auth-only

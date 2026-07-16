@@ -32,9 +32,15 @@ export default function MyAccount() {
   return (
     <div style={{ minHeight: '100vh', background: BG_SOFT, fontFamily: FONT, color: INK }}>
       <div style={{ maxWidth: 860, margin: '0 auto', padding: '28px 20px 60px' }}>
-        <a href="#/" style={{ textDecoration: 'none', color: MUTED, fontSize: 14, fontWeight: 600 }}>
-          ← Back to shop
-        </a>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <a href="#/" style={{ textDecoration: 'none', color: MUTED, fontSize: 14, fontWeight: 600 }}>
+            ← Back to shop
+          </a>
+          {/* Generated presentation page (customizable, see docs/Frontend.md). */}
+          <a href="#/change-password" style={{ textDecoration: 'none', color: ACCENT, fontSize: 14, fontWeight: 600 }}>
+            Change password
+          </a>
+        </div>
         <h1 style={{ fontSize: 26, margin: '18px 0 22px' }}>My profile</h1>
         <ProfileCard />
         <AddressesCard />

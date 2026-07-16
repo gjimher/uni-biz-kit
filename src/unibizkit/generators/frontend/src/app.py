@@ -1,7 +1,7 @@
 import json
 
 from ..context import Context
-from .layout import profile_completion_dialog
+from .presentation.lib import profile as lib_profile
 
 
 def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: bool = False) -> str:
@@ -70,14 +70,16 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
     profile_gate_element = ""
     if has_auth_provider:
         sso_enabled = ctx.security_config["sso"]["enabled"]
-        login_prop_name = "MyLoginPage"
+        # The login page is the customizable signin presentation page (the
+        # model can override it by providing presentation/pages/signin.jsx),
+        # so the whole app — backoffice included — shares one sign-in look.
+        login_prop_name = "SIGN_IN_PAGE"
         auth_import = (
             "import { authProvider } from './authProvider';\n"
-            "import { MyLoginPage } from './layout/MyLoginPage';\n"
-            "import { MySetPasswordPage } from './layout/MySetPasswordPage';\n"
-            "import { ForgotPasswordPage, defaultI18nProvider } from 'ra-supabase';"
+            "import SIGN_IN_PAGE from './presentation/pages/signin.jsx';\n"
+            "import { defaultI18nProvider } from 'ra-supabase';"
         )
-        if profile_completion_dialog.gates(ctx):
+        if lib_profile.gates(ctx):
             auth_import += "\nimport { ProfileCompletionDialog } from './layout/ProfileCompletionDialog';"
             profile_gate_element = "\n          <ProfileCompletionDialog />"
         if sso_enabled:
@@ -143,9 +145,11 @@ const SsoRedirectHandler = () => {
 """
             sso_redirect_element = "\n    <SsoRedirectHandler />"
         login_prop = f"\n            loginPage={{{login_prop_name}}}"
+        # /forgot-password and /set-password are presentation pages (see
+        # src/presentation/pages/), served through the catch-all
+        # PresentationRouter route; they must not be routed here or the exact
+        # match would shadow the customizable page.
         auth_routes_block = f"""        <Route path="/login" element={{<{login_prop_name} />}} />
-        <Route path="/set-password" element={{<MySetPasswordPage />}} />
-        <Route path="/forgot-password" element={{<ForgotPasswordPage />}} />
 """
         i18n_provider_def = "\nconst i18nProvider = defaultI18nProvider;"
         i18n_prop = "\n      i18nProvider={i18nProvider}"

@@ -10,9 +10,8 @@ from .src import (
     import_export_config, quick_edit_config, workflow_config, backend_actions_config
 )
 from .src.layout import (
-    my_app_bar, my_layout, my_login_page, my_menu,
-    my_set_password_page, user_profile_dialog, change_password_dialog,
-    profile_completion_dialog
+    my_app_bar, my_layout, my_menu,
+    user_profile_dialog, profile_completion_dialog
 )
 from .src.components import (
     title, reorderable_datagrid, recursive_parent_selector,
@@ -22,10 +21,16 @@ from .src.components import (
 )
 from .src.resources import resource
 from .src.presentation import model_js, router, custom_page
+from .src.presentation.style import auth as style_auth
 from .src.presentation.lib import (
     auth as lib_auth, validations as lib_validations, format as lib_format,
     workflow as lib_workflow, storage as lib_storage, index as lib_index,
     profile as lib_profile, payment as lib_payment,
+)
+from .src.presentation.pages import (
+    signin as page_signin, register as page_register,
+    forgot_password as page_forgot_password, set_password as page_set_password,
+    change_password as page_change_password, complete_profile as page_complete_profile,
 )
 from .. import dev_ports
 
@@ -115,14 +120,11 @@ class ReactAdminGenerator:
         has_auth_provider = False
         if ctx.security_config["authentication_required"]:
             _write(ctx.output_dir / "src" / "authProvider.js", auth_provider.generate(ctx))
-            _write(ctx.output_dir / "src" / "layout" / "MySetPasswordPage.jsx", my_set_password_page.generate())
             _write(ctx.output_dir / "src" / "layout" / "MyAppBar.jsx", my_app_bar.generate())
             _write(ctx.output_dir / "src" / "layout" / "UserProfileDialog.jsx", user_profile_dialog.generate())
-            _write(ctx.output_dir / "src" / "layout" / "ChangePasswordDialog.jsx", change_password_dialog.generate())
-            _write(ctx.output_dir / "src" / "layout" / "MyLoginPage.jsx", my_login_page.generate(ctx))
-            if profile_completion_dialog.gates(ctx):
+            if lib_profile.gates(ctx):
                 _write(ctx.output_dir / "src" / "layout" / "ProfileCompletionDialog.jsx",
-                       profile_completion_dialog.generate(ctx))
+                       profile_completion_dialog.generate())
             has_auth_provider = True
 
         has_custom_menu = False
@@ -174,6 +176,13 @@ class ReactAdminGenerator:
         _write(pres_dir / "PresentationRouter.jsx", router.generate(ctx))
         _write(pres_dir / "CustomPage.jsx", custom_page.generate())
 
+        # Look & feel of the generated auth pages. A model rebrands them all at
+        # once by providing its own presentation/style/auth.jsx (copied below,
+        # like any other file it adds under presentation/style/).
+        style_dir = pres_dir / "style"
+        style_dir.mkdir(exist_ok=True)
+        _write(style_dir / "auth.jsx", style_auth.generate())
+
         # Shared helper library for custom presentation pages (presentation/*.jsx).
         lib_dir = pres_dir / "lib"
         lib_dir.mkdir(exist_ok=True)
@@ -191,10 +200,33 @@ class ReactAdminGenerator:
         layouts_dir.mkdir(exist_ok=True)
         _write(layouts_dir / "sidebar-left.jsx", _generate_sidebar_layout())
 
-        # Copy model pages
-        pages_src = presentation_src / "pages"
+        # Default auth pages: clean, self-contained JSX flows built on the lib.
+        # Written before the model copy, so a model page with the same file
+        # name replaces the generated default.
         pages_dst = pres_dir / "pages"
         pages_dst.mkdir(exist_ok=True)
+        if ctx.security_config["authentication_required"]:
+            _write(pages_dst / "signin.jsx", page_signin.generate(ctx))
+            if ctx.security_config["registration"]["allow"]:
+                _write(pages_dst / "register.jsx", page_register.generate())
+            _write(pages_dst / "forgot-password.jsx", page_forgot_password.generate())
+            _write(pages_dst / "set-password.jsx", page_set_password.generate())
+            _write(pages_dst / "change-password.jsx", page_change_password.generate())
+            if lib_profile.gates(ctx):
+                _write(pages_dst / "complete-profile.jsx", page_complete_profile.generate())
+
+        # Copy model style modules (a model auth.jsx overrides the generated
+        # look & feel of the auth pages; other files are the model's own)
+        style_src = presentation_src / "style"
+        if style_src.exists():
+            for style_file in style_src.rglob("*"):
+                if style_file.is_file():
+                    target = style_dir / style_file.relative_to(style_src)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(style_file, target)
+
+        # Copy model pages
+        pages_src = presentation_src / "pages"
         if pages_src.exists():
             for page_file in pages_src.rglob("*"):
                 if page_file.is_file():

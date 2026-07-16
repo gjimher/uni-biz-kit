@@ -6,9 +6,9 @@ from ...context import Context
 def generate(ctx: Context) -> str:
     authenticated_page_patterns = json.dumps(ctx.presentation_config["authenticated_pages"], indent=2)
     return r"""import React from 'react';
-import { Authenticated } from 'react-admin';
 import { Routes, Route, Link } from 'react-router-dom';
 import { model } from './model';
+import { useRequireSession, useProfileGateRedirect } from './lib';
 
 const authenticatedPagePatterns = __AUTHENTICATED_PAGE_PATTERNS__;
 const mdxPages = import.meta.glob('./pages/**/*.mdx', { eager: true });
@@ -95,20 +95,39 @@ function MdxPage({ Component, frontmatter }) {
   return Layout ? <Layout frontmatter={frontmatter}>{content}</Layout> : content;
 }
 
+// Guard for pages matching an authenticated_pages pattern: renders nothing
+// until the session is known and bounces signed-out visitors to the app's own
+// sign-in page, which returns them here after login. Built on the presentation
+// lib so protected pages never depend on react-admin.
+function RequireSession({ children }) {
+  const session = useRequireSession(); // redirects to /signin when signed out
+  if (!session) return null; // loading or redirecting
+  return children;
+}
+
 function PresentationPage({ Component, frontmatter, isMdx, requiresAuth, hasAuthProvider }) {
   const content = isMdx
     ? <MdxPage Component={Component} frontmatter={frontmatter} />
     : <Component />;
 
   if (requiresAuth && hasAuthProvider) {
-    return <Authenticated>{content}</Authenticated>;
+    return <RequireSession>{content}</RequireSession>;
   }
 
   return content;
 }
 
+// Mounts the global "ask_after_login" gate (see useProfileGateRedirect) for
+// every session that lands on the custom UI, however it was established.
+function ProfileGate() {
+  useProfileGateRedirect();
+  return null;
+}
+
 export function PresentationRouter({ hasAuthProvider = false }) {
   return (
+    <>
+    {hasAuthProvider && <ProfileGate />}
     <Routes>
       {Object.entries(routeMap).map(([path, { Component, frontmatter, requiresAuth, isMdx }]) => (
         <Route
@@ -126,6 +145,7 @@ export function PresentationRouter({ hasAuthProvider = false }) {
         />
       ))}
     </Routes>
+    </>
   );
 }
 """.replace("__AUTHENTICATED_PAGE_PATTERNS__", authenticated_page_patterns)

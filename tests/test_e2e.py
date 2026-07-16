@@ -9,7 +9,7 @@ import pytest
 import os
 import time
 import json
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Page, expect, TimeoutError as PlaywrightTimeoutError
 from xprocess import ProcessStarter
 from smtp_mock import smtp_emails as _smtp_emails, smtp_lock as _smtp_lock, extract_links as _extract_links
 
@@ -139,7 +139,8 @@ def test_b2c_storefront_purchase_with_payment(page: Page, secondary_app_server):
         pytest.skip(f"b2c Supabase backend not reachable at {backend}")
 
     with open(os.path.abspath(f"{SECONDARY_MODEL}/security_extended.json")) as f:
-        user1 = next(u for u in json.load(f)["users"] if "user" in u["roles"])
+        # Any non-admin seed user is a shopper (b2c names the role "buyer").
+        user1 = next(u for u in json.load(f)["users"] if "admin" not in u["roles"])
 
     page.set_default_timeout(15000)
     page.goto(secondary_app_server + "/b2c/#/")
@@ -149,6 +150,16 @@ def test_b2c_storefront_purchase_with_payment(page: Page, secondary_app_server):
     page.get_by_label("Email").fill(user1["email"])
     page.get_by_label("Password").fill(user1["password"])
     page.get_by_role("button", name="Sign in").click()
+
+    # First login of a seeded buyer: the post-login profile gate asks for the
+    # mandatory "ask_after_login" names before continuing to the storefront.
+    try:
+        page.get_by_text("Complete your profile").wait_for(state="visible", timeout=4000)
+        page.get_by_label("First name").fill("E2E")
+        page.get_by_label("Last name").fill("Buyer")
+        page.get_by_role("button", name="Save").click()
+    except PlaywrightTimeoutError:
+        pass  # profile already complete (gate skipped)
 
     # Back on the storefront with a session: catalog with Add to cart buttons.
     add_button = page.get_by_role("button", name="Add to cart").first
@@ -255,9 +266,12 @@ def test_create_product_as_user(page: Page, app_server):
 def test_profile_completion_dialog_asks_for_missing_fields(page: Page, app_server):
     """
     E2E test of the post-login profile gate: customer.first_name/last_name are
-    required "ask_after_login", so a user whose profile misses them gets a
-    blocking dialog right after login. Filling it saves the values and unblocks
-    the admin UI; the dialog must not reappear on reload.
+    required "ask_after_login", so a user whose profile misses them is asked
+    for them right after login — the sign-in page routes to /complete-profile
+    before continuing to /admin (the blocking dialog remains as backstop for
+    sessions established without the sign-in page, e.g. SSO). Filling the form
+    saves the values and lets the admin UI through; the gate must not reappear
+    on reload.
 
     Runs before the other user1 tests so they always find a completed profile.
     """
@@ -533,7 +547,7 @@ def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):
     4. Navigate the browser to the recovery link
     5. Set a new password via the set-password form
     6. Verify Products data is accessible immediately (no reload required)
-    7. Restore the original password via the in-app Change Password dialog
+    7. Restore the original password via the /change-password presentation page
     """
     with open(os.path.abspath("test-app/security_extended.json")) as f:
         admin_user = next(u for u in json.load(f)["users"] if "admin" in u["roles"])
@@ -627,7 +641,7 @@ def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):
         )
         print(f"Data accessible: {count} product row(s) visible after password reset.")
 
-        # -- 7. Restore original password via the in-app Change Password dialog.
+        # -- 7. Restore original password via the /change-password page.
         # The user is still logged in (with new_password). Use Profile → Change Password.
         page.wait_for_load_state("networkidle")
         # Try multiple common selectors for the User Menu button in React-Admin
@@ -640,7 +654,9 @@ def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):
         user_menu_btn.first.wait_for(state="visible", timeout=15000)
         user_menu_btn.first.click()
         page.get_by_role("menuitem", name="Profile").click()
-        page.get_by_role("button", name="Change Password").click()
+        # "Change Password" navigates to the customizable presentation page.
+        page.get_by_role("link", name="Change Password").click()
+        page.wait_for_url("**#/change-password**")
         page.get_by_label("Current Password").fill(new_password)
         page.get_by_label("New Password", exact=True).fill(original_password)
         page.get_by_label("Confirm New Password").fill(original_password)
@@ -672,3 +688,148 @@ def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):
                         json={"password": original_password}
                     )
                     print(f"Admin API: Password restoration heartbeat for {email}")
+
+
+def test_generated_auth_pages(page: Page, app_server):
+    """
+    E2E of the generated default presentation auth pages (react-admin-free):
+    0. a protected page without a session bounces to the app's own sign-in
+    1. /#/signin shows the lib error inline on bad credentials
+    2. and redirects to the home page on success
+    3. /#/change-password rejects a mismatched confirmation inline
+    """
+    with open(os.path.abspath("test-app/security_extended.json")) as f:
+        user1 = next(u for u in json.load(f)["users"] if "user" in u["roles"])
+
+    page.set_default_timeout(10000)
+
+    # -- 0. authenticated_pages guard: a signed-out visit to a priv page lands
+    # on the sign-in page (which links the register flow).
+    page.goto(app_server + "/#/priv/example-data")
+    page.wait_for_url("**#/signin**")
+    expect(page.get_by_role("button", name="Sign in")).to_be_visible()
+    expect(page.get_by_role("link", name="Create an account")).to_be_visible()
+
+    # Fresh navigation so the post-login redirect goes home, not to the priv page.
+    page.goto(app_server + "/#/signin")
+
+    # -- 1. Wrong password: the lib error must surface inline in the form.
+    page.get_by_label("Email").fill(user1["email"])
+    page.get_by_label("Password").fill("wrong-password")
+    page.get_by_role("button", name="Sign in").click()
+    expect(page.get_by_role("alert")).to_contain_text("Invalid login credentials")
+
+    # -- 2. Right password: the page redirects home once the session appears
+    # (completing the profile gate first if user1's names are still empty).
+    page.get_by_label("Password").fill(user1["password"])
+    page.get_by_role("button", name="Sign in").click()
+    try:
+        page.get_by_text("Complete your profile").wait_for(state="visible", timeout=3000)
+        page.get_by_label("First name").fill("Gate")
+        page.get_by_label("Last name").fill("Signin")
+        page.get_by_role("button", name="Save").click()
+    except PlaywrightTimeoutError:
+        pass  # profile already complete (gate skipped)
+    expect(page.get_by_text("Welcome to the management portal")).to_be_visible()
+
+    # -- 3. Change-password page: mismatched confirmation is rejected inline
+    # (before any credential is touched).
+    page.goto(app_server + "/#/change-password")
+    page.get_by_label("Current Password").fill(user1["password"])
+    page.get_by_label("New Password", exact=True).fill("newpassword123")
+    page.get_by_label("Confirm New Password").fill("different123")
+    page.get_by_role("button", name="Update Password").click()
+    expect(page.get_by_role("alert")).to_contain_text("New passwords do not match")
+
+
+def test_auth_errors_are_readable(page: Page, app_server):
+    """
+    Auth backend failures must surface as a human-readable message. supabase-js
+    turns gateway timeouts/5xx into an error whose message is literally "{}"
+    (seen in prod when the SMTP prerequisite was missing and signup returned a
+    Kong 504); the lib must normalize it before pages render it.
+    """
+    page.route("**/auth/v1/signup**", lambda route: route.fulfill(
+        status=504, content_type="application/json", body="{}",
+    ))
+    page.set_default_timeout(15000)
+    page.goto(app_server + "/#/register")
+    page.get_by_label("Email").fill("gateway-down@test.com")
+    page.get_by_label("Password", exact=True).fill("password123")
+    page.get_by_label("Confirm Password").fill("password123")
+    page.get_by_role("button", name="Register").click()
+
+    # supabase-js retries retryable 5xx a few times before giving up.
+    alert = page.get_by_role("alert")
+    expect(alert).to_be_visible(timeout=15000)
+    assert alert.inner_text().strip() != "{}", "Auth errors must not render as raw '{}'"
+    expect(alert).to_contain_text("try again")
+
+
+def test_register_confirmation_lands_on_profile_gate(page: Page, app_server, smtp_server):
+    """
+    A session established WITHOUT passing through the sign-in page (here: the
+    registration confirmation link; SSO is the other case) must still hit the
+    profile-completion gate — the presentation router redirects to
+    /complete-profile until the mandatory "ask_after_login" fields are filled.
+    """
+    import uuid
+    email = f"e2e_gate_{uuid.uuid4().hex[:8]}@test.com"
+    password = "RegisterGate123!"
+
+    # Supabase site_url points at the dev frontend port; rewrite to this server.
+    test_port = app_server.split(":")[-1].rstrip("/")
+    page.route(
+        f"http://localhost:{_FRONTEND_PORT}/**",
+        lambda route: route.continue_(url=route.request.url.replace(f"localhost:{_FRONTEND_PORT}", f"localhost:{test_port}"))
+    )
+
+    with _smtp_lock:
+        _smtp_emails.clear()
+
+    # -- 1. Register through the generated page
+    page.set_default_timeout(10000)
+    page.goto(app_server + "/#/register")
+    page.get_by_label("Email").fill(email)
+    page.get_by_label("Password", exact=True).fill(password)
+    page.get_by_label("Confirm Password").fill(password)
+    page.get_by_role("button", name="Register").click()
+    expect(page.get_by_text("Registration successful!")).to_be_visible()
+
+    try:
+        # -- 2. Wait for the confirmation email from the SMTP mock
+        deadline = time.time() + 10
+        email_received = None
+        while time.time() < deadline:
+            with _smtp_lock:
+                matching = [e for e in _smtp_emails if email in e["rcpt_tos"]]
+            if matching:
+                email_received = matching[-1]
+                break
+            time.sleep(0.5)
+        assert email_received, "Confirmation email not received via the SMTP mock"
+        links = [l for l in _extract_links(email_received["content"]) if "verify" in l or "confirm" in l]
+        assert links, f"No confirmation link found in the email: {_extract_links(email_received['content'])}"
+
+        # -- 3. The link logs the user in directly — the gate must intercept
+        # before they browse on, and completing it lands them on the home page.
+        page.goto(links[0])
+        expect(page.get_by_text("Complete your profile")).to_be_visible(timeout=15000)
+        page.get_by_label("First name").fill("Confirmed")
+        page.get_by_label("Last name").fill("ByEmail")
+        page.get_by_role("button", name="Save").click()
+        expect(page.get_by_text("Welcome to the management portal")).to_be_visible()
+    finally:
+        # Remove the throwaway account so reruns don't accumulate users.
+        import requests
+        from dotenv import load_dotenv
+        load_dotenv("test-app/backend/.env")
+        api_url = os.getenv("SUPABASE_URL")
+        service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        if api_url and service_role_key:
+            headers = {"Authorization": f"Bearer {service_role_key}", "apikey": service_role_key}
+            users_resp = requests.get(f"{api_url}/auth/v1/admin/users", headers=headers)
+            if users_resp.status_code == 200:
+                target = next((u for u in users_resp.json().get("users", []) if u["email"] == email), None)
+                if target:
+                    requests.delete(f"{api_url}/auth/v1/admin/users/{target['id']}", headers=headers)

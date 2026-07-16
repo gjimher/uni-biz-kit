@@ -340,6 +340,24 @@ def _restart_edge_runtime(config_path):
     sys.exit("Edge Runtime did not become ready after restart")
 
 
+def _ensure_init_migration():
+    """Create the initial migration file when none exists.
+
+    The reset script copies the generated schema into the first migration, so
+    the file just has to exist. It is normally created during cold init, but a
+    start that failed between `supabase init` and the migration step (e.g. an
+    invalid generated config) leaves config.toml behind without migrations —
+    heal that state on every run instead of only on cold init.
+    """
+    migrations_dir = supabase_dir / 'migrations'
+    if migrations_dir.exists() and any(migrations_dir.iterdir()):
+        return
+    migrations_dir.mkdir(parents=True, exist_ok=True)
+    migration = migrations_dir / f"{time.strftime('%Y%m%d%H%M%S')}_init_schema.sql"
+    migration.touch()
+    print(f"Created initial migration {migration.name}")
+
+
 delta_files = [delta_toml] + ([sso_delta_toml] if sso_delta_toml.exists() else [])
 functions_structure_signature_path = supabase_dir / '.functions_structure_signature'
 functions_code_signature_path = supabase_dir / '.functions_code_signature'
@@ -349,11 +367,30 @@ structure_changed = current_structure_signature != _stored_signature(functions_s
 code_changed = current_code_signature != _stored_signature(functions_code_signature_path)
 
 if config_toml.exists():
+    _ensure_init_migration()
+    # Converge backend/.env keys that environments created by older generators
+    # may miss — the full file is only written on cold init. The reset script
+    # seeds the DB-side scheduler secret from this value (see cold init below).
+    _upsert_env(backend_dir / '.env', {
+        'INTEGRATION_SCHEDULER_TOKEN': 'dev-integration-scheduler-token',
+    })
     config_changed = not _merged_deltas_applied(config_toml, delta_files)
     if config_changed or structure_changed:
         print("Config or Edge Functions structure changed.")
+        # Stop with the config the running stack was started with (its project
+        # id / ports), then merge the deltas.
         result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'stop'],
                                 stdout=sys.stdout, stderr=sys.stderr)
+        if result.returncode != 0 and config_changed:
+            # The CLI validates config.toml on every command, `stop` included,
+            # so a config.toml left behind by a buggy or older generator can
+            # brick the flow before the fixed deltas ever get applied. Merge
+            # them and retry the stop once with the repaired config.
+            print("supabase stop rejected the current config — applying config deltas and retrying...")
+            for d in delta_files:
+                _apply_delta(config_toml, d)
+            result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'stop'],
+                                    stdout=sys.stdout, stderr=sys.stderr)
         if result.returncode != 0:
             sys.exit(f"supabase stop failed with code {result.returncode}")
         if config_changed:
@@ -423,6 +460,11 @@ print("Applying config deltas to supabase/config.toml...")
 for d in delta_files:
     _apply_delta(config_toml, d)
 
+# Before starting: a start failure must not leave config.toml behind without
+# the migration (the reset script needs it, and only cold init created it).
+print("Creating initial migration...")
+_ensure_init_migration()
+
 print("Starting Supabase...")
 result = _supabase_start()
 if result.returncode != 0:
@@ -431,12 +473,6 @@ _write_function_signatures(
     functions_structure_signature_path, current_structure_signature,
     functions_code_signature_path, current_code_signature,
 )
-
-print("Creating initial migration...")
-result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'migration', 'new', 'init_schema'],
-                        stdout=sys.stdout, stderr=sys.stderr)
-if result.returncode != 0:
-    sys.exit(f"supabase migration new failed with code {result.returncode}")
 
 print("Getting Supabase status...")
 result = subprocess.run(['npx', f'supabase@{SUPABASE_CLI_VERSION}', 'status', '-o', 'json'],

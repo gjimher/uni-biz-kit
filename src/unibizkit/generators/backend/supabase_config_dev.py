@@ -89,6 +89,12 @@ host = "{smtp_host}"
 port = {smtp_port}
 admin_email = "{smtp_from}"
 sender_name = "App"
+# The supabase CLI requires user/pass whenever smtp is enabled, but generated
+# apps only target unauthenticated servers (see system_schema.json): these are
+# placeholders to satisfy the CLI validator. GoTrue only attempts AUTH when the
+# server advertises it, and the dev SMTP mock accepts any credentials anyway.
+user = "mock"
+pass = "mock"
 """ + (f"""
 [auth.external.keycloak]
 enabled = true

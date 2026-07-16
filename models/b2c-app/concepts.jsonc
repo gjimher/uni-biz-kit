@@ -81,7 +81,8 @@
       "id_presentation": { "fields": ["first_name", "last_name"] },
       "fields": [
         // required "ask_after_login": mandatory but nullable in the DB so the profile can be auto-created
-        // at login. default from_metadata: filled at creation from the register page's signUp metadata.
+        // at login; the post-login gate asks for whatever is still empty. default from_metadata: prefilled
+        // at creation when the auth user carries metadata (e.g. SSO claims or a custom register page).
         { "name": "first_name", "type": "string", "required": "ask_after_login", "default": "from_metadata(first_name, given_name)", "min_length": 1, "max_length": 50, "description": "First name" },
         { "name": "last_name", "type": "string", "required": "ask_after_login", "default": "from_metadata(last_name, family_name)", "min_length": 1, "max_length": 50, "description": "Last name" },
         { "name": "email", "type": "string", "calculated": "\"_user_email\"", "min_length": 5, "max_length": 100, "description": "Email — auto-set from the authenticated user at INSERT; read-only" },

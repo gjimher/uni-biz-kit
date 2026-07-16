@@ -70,6 +70,24 @@ class TestAppFrontend:
         lib_dir = frontend_dir / 'src' / 'presentation' / 'lib'
         for module in ('auth.js', 'profile.js', 'payment.js', 'validations.js', 'format.js', 'workflow.js', 'storage.js', 'index.js'):
             assert (lib_dir / module).exists(), f"Missing generated presentation lib module: {module}"
+        # Design decision: custom UIs must survive react-admin upgrades, so the
+        # generated auth pages and the presentation router serving them build
+        # only on React, react-router and the presentation lib.
+        pages_dir = frontend_dir / 'src' / 'presentation' / 'pages'
+        for page in ('signin.jsx', 'register.jsx', 'forgot-password.jsx',
+                     'set-password.jsx', 'change-password.jsx', 'complete-profile.jsx'):
+            assert (pages_dir / page).exists(), f"Missing generated default auth page: {page}"
+            page_source = (pages_dir / page).read_text()
+            assert "from 'react-admin'" not in page_source and "from '@mui" not in page_source, \
+                f"Default auth page {page} must not depend on react-admin/MUI"
+        router_jsx = (frontend_dir / 'src' / 'presentation' / 'PresentationRouter.jsx').read_text()
+        assert "from 'react-admin'" not in router_jsx
+
+        # Non-obvious trap: an exact top-level route would shadow the
+        # customizable presentation page serving the same path.
+        app_jsx = (frontend_dir / 'src' / 'App.jsx').read_text()
+        assert '<Route path="/set-password"' not in app_jsx
+        assert '<Route path="/forgot-password"' not in app_jsx
 
         # Validation logic must be deduplicated: resources import it from the shared lib.
         address_resource = (frontend_dir / 'src' / 'resources' / 'address' / 'address.jsx').read_text()
@@ -175,11 +193,19 @@ class TestAppFrontend:
         from conftest import generate_secondary_model
 
         output_dir = generate_secondary_model()
-        from conftest import SECONDARY_BASE
+        from conftest import SECONDARY_BASE, SECONDARY_MODEL
         dev_info_ports = (output_dir / 'bin' / 'dev-info-ports.py').read_text()
         assert f"BASE_PORT = {SECONDARY_BASE}" in dev_info_ports
 
         frontend_dir = output_dir / 'frontend'
+
+        # A model's presentation/style/ override must land in the generated
+        # output — otherwise the app silently loses its branding.
+        model_style = Path('models') / SECONDARY_MODEL / 'presentation' / 'style' / 'auth.jsx'
+        if model_style.exists():
+            generated_style = frontend_dir / 'src' / 'presentation' / 'style' / 'auth.jsx'
+            assert generated_style.read_text() == model_style.read_text(), \
+                "Model style/auth.jsx should replace the generated default"
         original_cwd = os.getcwd()
 
         try:

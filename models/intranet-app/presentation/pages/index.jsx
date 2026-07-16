@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import MDEditor from '@uiw/react-md-editor';
 import { supabaseClient } from '../../supabaseClient';
-import { useSession, getProfile, signedUrl, signOut } from '../lib';
+import { useRequireSession, getProfile, signedUrl, signOut } from '../lib';
 
 // ---------------------------------------------------------------------------
 // Intranet portal home. The whole portal is private: this page redirects to
@@ -28,9 +28,8 @@ export const STATE_COLORS = {
 };
 
 export default function PortalHome() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const session = useSession(); // undefined = loading, null = signed out
+  const session = useRequireSession(); // redirects to /signin when signed out
   const [me, setMe] = useState(null); // employee profile record (null while loading / no profile)
   const [openTickets, setOpenTickets] = useState(null);
   const [articles, setArticles] = useState(null);
@@ -48,10 +47,6 @@ export default function PortalHome() {
         .catch(() => {});
     });
   }, [articles]);
-
-  useEffect(() => {
-    if (session === null) navigate('/signin');
-  }, [session, navigate]);
 
   useEffect(() => {
     if (!session) return;
@@ -230,6 +225,10 @@ export function PortalHeader({ session, active }) {
               textDecoration: 'none', padding: '7px 12px', borderRadius: 8, fontWeight: 700, color: ACCENT,
             }}>Backoffice</a>
           )}
+          {/* Generated presentation page (customizable, see docs/Frontend.md). */}
+          <a href="#/change-password" style={{
+            textDecoration: 'none', padding: '7px 12px', color: MUTED, fontWeight: 600,
+          }}>Change password</a>
           <span onClick={() => signOut()} style={{
             cursor: 'pointer', color: MUTED, padding: '7px 12px', fontWeight: 600,
           }}>Sign out</span>

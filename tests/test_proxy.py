@@ -172,8 +172,12 @@ class TestProxyGeneration:
 
         dev_config = (output_dir / "backend" / "supabase_config_dev.toml").read_text()
         assert "[auth.email.smtp]" in dev_config
-        assert "\nuser =" not in dev_config
-        assert "\npass =" not in dev_config
+        # Generated apps only target unauthenticated SMTP servers (no real
+        # credentials anywhere), but the pinned supabase CLI rejects the dev
+        # config unless smtp user/pass exist: fixed placeholders, never values
+        # taken from the model.
+        assert 'user = "mock"' in dev_config
+        assert 'pass = "mock"' in dev_config
 
         publish_script = (output_dir / "bin" / "prod-dc-publish.py").read_text()
         up_script = (output_dir / "bin" / "prod-dc-up.py").read_text()

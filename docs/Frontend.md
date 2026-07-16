@@ -1,6 +1,6 @@
 # Frontend
 
-UniBizKit generates a **React-Admin** application (Vite) that talks directly to the app's Supabase instance.
+UniBizKit generates a **React-Admin** application that talks directly to the app's Supabase instance.
 
 **This layer is untrusted and provides no security.** It runs in the user's browser with the public anon key; anything it hides can be bypassed with `curl`. All access control is enforced by the [backend](Backend.md) through RLS policies, triggers and edge functions — see [Security.md](Security.md). The UI only *mirrors* those permissions for usability (hiding fields the role cannot read, disabling forms it cannot write).
 
@@ -139,7 +139,17 @@ Files under the model's `presentation/pages/` are copied into `src/presentation/
 * **MDX** — Markdown with JSX for content-centric pages; frontmatter can pick a layout (`layout: name` → `layouts/<name>.jsx`), and the generated `model` object is available for rendering data.
 * **JSX** — full React components for tailored pages (storefront, checkout, account).
 
-Pages matching an `authenticated_pages` pattern are wrapped in React-Admin's `<Authenticated>`; the rest are public and rely on [`_anon` read rules](Security.md#the-_anon-built-in-role) for their data. Custom pages use the same shared Supabase client and the CSV [validation helpers](Backend.md#validations-validationscsv) as the generated forms.
+Pages matching an `authenticated_pages` pattern are wrapped in a session guard built on the presentation lib: signed-out visitors are bounced to the app's `/signin` page and returned to the protected page after logging in (data is enforced server-side by RLS regardless). The rest are public and rely on [`_anon` read rules](Security.md#the-_anon-built-in-role) for their data. Custom pages use the same shared Supabase client and the CSV [validation helpers](Backend.md#validations-validationscsv) as the generated forms.
+
+### Default Auth Pages & the Presentation Lib
+
+Apps with `authentication_required` also get a set of default pages in `src/presentation/pages/` covering the account flows end to end: `signin.jsx`, `register.jsx` (when registration is allowed), `forgot-password.jsx`, `set-password.jsx` (the recovery-link landing), `change-password.jsx` and `complete-profile.jsx` (when a profile concept has `ask_after_login` fields). They are complete experiences — inline error/success messages, validation, redirects (including back to the page that required the login), test-user picker, SSO button when enabled — and they are the single implementation of those flows for the whole app: `signin.jsx` is also the `/login` route the admin backoffice redirects to, so overriding it rebrands every sign-in.
+
+Their look & feel lives in one overridable module, `presentation/style/auth.jsx` (design tokens plus the `Card`/`Field`/`Message`/`SubmitButton` primitives): a model **rebrands every auth page at once** by providing its own `presentation/style/auth.jsx` with the same exports — the pages themselves stay generated and keep receiving generator improvements (that is what `models/b2c-app` and `models/intranet-app` do). For structural redesigns beyond what the primitives allow, copy the page into the model's `presentation/pages/` under the same name: the model copy replaces the generated default. Pages are built only on React, react-router and the shared helper lib, so they keep working across react-admin/MUI upgrades.
+
+Registration stays minimal (email + password) on purpose: mandatory profile fields (`required: "ask_after_login"`) are collected by a single post-login gate. The presentation router redirects any session that still misses them to `/complete-profile` — however the session was established: password login, registration confirmation link or SSO — and the admin backoffice keeps its own blocking dialog.
+
+The lib (`import { ... } from './presentation/lib'`, generated in `src/presentation/lib/`) wraps the Supabase client for custom pages: sessions (`useSession`, `useRequireSession`, `signIn`, `signUp`, `signOut`, `signInWithSso`), passwords (`changePassword`, `requestPasswordReset`, `completePasswordReset`), profiles (`useProfile`, `updateProfile`, `getMissingProfileFields`, `completeProfileFields`), plus formatting, storage, workflow and CSV-validation helpers — each documented where it is generated. The convention throughout: helpers return data and throw `Error` with a user-displayable message, and each page decides where to render it (inline alert, status bar, ...).
 
 ## The Recommended Split
 

@@ -310,21 +310,14 @@ def test_supabase_config_generated():
     content = Path(config_file).read_text()
     assert "enable_confirmations = true" in content
     assert "enable_signup = true" in content
+    # The CLI (2.88.1) rejects the config when smtp is enabled without
+    # user/pass; the generator must emit the validator-only placeholders.
+    assert 'user = "mock"' in content
+    assert 'pass = "mock"' in content
     assert "[auth.rate_limit]" in content
     assert "email_sent = 120" in content
     assert 'max_frequency = "1s"' in content
     assert str(SMTP_PORT) in content
-
-
-def test_login_page_has_registration():
-    """Verify the generated MyLoginPage.jsx contains the registration form."""
-    login_file = os.path.abspath("test-app/frontend/src/layout/MyLoginPage.jsx")
-    assert os.path.exists(login_file), "MyLoginPage.jsx not found"
-
-    content = Path(login_file).read_text()
-    assert "RegisterForm" in content, "RegisterForm component not found in login page"
-    assert "Register" in content
-    assert "Confirm Password" in content
 
 
 def test_register_user_and_email_flow(smtp_server):
