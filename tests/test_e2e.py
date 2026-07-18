@@ -263,6 +263,174 @@ def test_create_product_as_user(page: Page, app_server):
     expect(page.get_by_role("combobox", name="Categories")).to_be_visible()
 
 
+def test_presentation_customization_as_admin(page: Page, app_server, request):
+    """Presentation customization overlays, admin side (production bundle):
+    the role-less overlay applies (renamed price column, order list title),
+    the user-scoped overlay must NOT leak (Test menu group present, delivered
+    state offered), and — designer 'production' — the design toggle ships in
+    the build as the per-user personalization editor.
+    """
+    if request.config.getoption("--variations"):
+        pytest.skip("designer=off variation has no presentation customization runtime")
+    with open(os.path.abspath("test-app/security_extended.json")) as f:
+        admin_user = next(u for u in json.load(f)["users"] if "admin" in u["roles"])
+
+    page.set_default_timeout(10000)
+    page.goto(app_server + "/#/admin")
+    page.wait_for_timeout(2000)
+
+    page.locator('input[name="email"]').fill(admin_user["email"])
+    page.locator('input[name="password"]').fill(admin_user["password"])
+    page.get_by_role("button", name="Sign in").click()
+    expect(page.get_by_text("Catalog")).to_be_visible()
+
+    # The user-scoped overlay (trimmed menu) must not apply to admins.
+    expect(page.get_by_text("Test", exact=True)).to_be_visible()
+
+    # designer 'production': the Design toggle ships in the build.
+    expect(page.locator("header").get_by_text("Design")).to_be_visible()
+
+    # Everyone-overlay: product price column renamed.
+    page.get_by_text("Catalog").click()
+    page.get_by_role("menuitem", name="Products").click()
+    expect(page.get_by_role("button", name="Unit price")).to_be_visible()
+
+    # Everyone-overlay: order list title renamed.
+    page.get_by_text("Sales").click()
+    page.get_by_role("menuitem", name="Orders").click()
+    expect(page.get_by_text("Sales orders")).to_be_visible()
+
+    # The user-scoped workflow_states hide must not apply to admins: the
+    # create form's workflow selector still offers every state.
+    page.get_by_label("Create").click()
+    expect(page.get_by_role("radio", name="delivered")).to_be_visible()
+
+
+def test_presentation_customization_as_user(page: Page, app_server, request):
+    """Presentation customization overlays, user side (roles: ["user"]):
+    trimmed menu without the Test group, customer.admin_field hidden in the
+    edit form, delivered workflow state hidden in the selector — all on the
+    same production bundle the admin test uses (runtime role scoping).
+    """
+    if request.config.getoption("--variations"):
+        pytest.skip("designer=off variation has no presentation customization runtime")
+    with open(os.path.abspath("test-app/security_extended.json")) as f:
+        user1 = next(u for u in json.load(f)["users"] if "user" in u["roles"])
+
+    page.set_default_timeout(10000)
+    page.goto(app_server + "/#/admin")
+    page.wait_for_timeout(2000)
+
+    page.locator('input[name="email"]').fill(user1["email"])
+    page.locator('input[name="password"]').fill(user1["password"])
+    page.get_by_role("button", name="Sign in").click()
+    expect(page.get_by_text("Sales")).to_be_visible()
+
+    # Menu replaced for users: the Test group is gone.
+    expect(page.get_by_text("Test", exact=True)).to_have_count(0)
+
+    # customer.admin_field is hidden in the user's forms (admins still see it).
+    page.get_by_text("Sales").click()
+    page.get_by_role("menuitem", name="Customers").click()
+    page.locator("tbody tr").first.click()
+    page.locator('input[name="phone"]').wait_for(state="visible")
+    expect(page.locator('input[name="admin_field"]')).to_have_count(0)
+
+    # forms.customer.move puts email first for users (runtime form reorder).
+    expect(page.locator("form input:not([type=hidden])").first).to_have_attribute("name", "email")
+
+    # delivered is hidden for users in the workflow selector (create form:
+    # no record, so no current-state exception applies).
+    page.get_by_text("Sales").click()
+    page.get_by_role("menuitem", name="Orders").click()
+    page.get_by_label("Create").click()
+    expect(page.get_by_role("radio", name="sent")).to_be_visible()
+    expect(page.get_by_role("radio", name="delivered")).to_have_count(0)
+
+
+def test_personal_designer_end_user(page: Page, app_server, request):
+    """designer 'production' per-user personalization on the production bundle:
+    a user edits and saves their own design (stored in the _design table), it
+    persists across logins, it never leaks to other users, and the
+    designer_admin_role reviews it through the Customization menu.
+    """
+    if request.config.getoption("--variations"):
+        pytest.skip("designer=off variation has no personal designer")
+    with open(os.path.abspath("test-app/security_extended.json")) as f:
+        users = json.load(f)["users"]
+    user1 = next(u for u in users if u["email"].startswith("user1"))
+    admin_user = next(u for u in users if "admin" in u["roles"])
+
+    page.set_default_timeout(10000)
+
+    def login(user):
+        page.goto(app_server + "/#/admin")
+        page.wait_for_timeout(2000)
+        user_menu = page.locator('header button[aria-label="Profile"]')
+        if user_menu.is_visible():
+            # Logging out lands on the public portal page; go back to the
+            # admin entry to reach the sign-in form.
+            user_menu.click()
+            page.get_by_role("menuitem", name="Logout").click()
+            page.wait_for_timeout(1000)
+            page.goto(app_server + "/#/admin")
+            page.wait_for_timeout(2000)
+        page.locator('input[name="email"]').fill(user["email"])
+        page.locator('input[name="password"]').fill(user["password"])
+        page.get_by_role("button", name="Sign in").click()
+        expect(page.get_by_text("Sales")).to_be_visible()
+
+    def reset_personalization():
+        # Idempotent cleanup: deleting the (possibly absent) _design row and
+        # reloading leaves this user on the application defaults.
+        page.locator("header").get_by_text("Design", exact=True).click()
+        expect(page.locator("header").get_by_text("My design")).to_be_visible()
+        page.locator("header").get_by_text("My design").click()
+        page.get_by_role("button", name="Reset personalization").click()
+        page.wait_for_timeout(2500)
+
+    # -- user1 personalizes: rename the product.name field label.
+    login(user1)
+    reset_personalization()
+    page.locator("header").get_by_text("Design", exact=True).click()
+    expect(page.locator("header").get_by_text("My design")).to_be_visible()
+    page.get_by_text("Catalog").click()
+    page.get_by_role("menuitem", name="Products").click()
+    page.locator("tbody tr").first.click()
+    page.get_by_label("Customize field product name").click()
+    page.get_by_label("Label override").fill("Nombre propio")
+    page.get_by_role("button", name="Apply to draft").click()
+    expect(page.get_by_label("Nombre propio")).to_be_visible()
+
+    # -- save to the _design table and verify it applies after the reload.
+    page.locator("header").get_by_text("My design").click()
+    page.get_by_role("button", name="Save my design").click()
+    page.wait_for_timeout(3000)
+    expect(page.get_by_label("Nombre propio")).to_be_visible()
+
+    # -- the personalization is user1's only: another user sees the default label.
+    login(admin_user)
+    page.get_by_text("Catalog").click()
+    page.get_by_role("menuitem", name="Products").click()
+    page.locator("tbody tr").first.click()
+    page.locator('input[name="name"]').wait_for(state="visible")
+    expect(page.get_by_label("Nombre propio")).to_have_count(0)
+
+    # -- the reviewer role sees every personalization in Customization/Designer.
+    page.get_by_text("Customization").click()
+    page.get_by_role("menuitem", name="Designer").click()
+    expect(page.get_by_role("cell", name=user1["email"])).to_be_visible()
+
+    # -- cleanup: user1 removes the personalization (keeps reruns deterministic).
+    login(user1)
+    reset_personalization()
+    page.get_by_text("Catalog").click()
+    page.get_by_role("menuitem", name="Products").click()
+    page.locator("tbody tr").first.click()
+    page.locator('input[name="name"]').wait_for(state="visible")
+    expect(page.get_by_label("Nombre propio")).to_have_count(0)
+
+
 def test_profile_completion_dialog_asks_for_missing_fields(page: Page, app_server):
     """
     E2E test of the post-login profile gate: customer.first_name/last_name are
@@ -833,3 +1001,107 @@ def test_register_confirmation_lands_on_profile_gate(page: Page, app_server, smt
                 target = next((u for u in users_resp.json().get("users", []) if u["email"] == email), None)
                 if target:
                     requests.delete(f"{api_url}/auth/v1/admin/users/{target['id']}", headers=headers)
+
+
+# ---------------------------------------------------------------------------
+# Design mode save endpoint (Vite dev server only)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def dev_server(xprocess, request):
+    """Vite dev server for endpoint contract tests (no browser rendering)."""
+    if not request.config.getoption("--slow"):
+        pytest.skip("need --slow option to run")
+
+    frontend_dir = os.path.abspath("test-app/frontend")
+
+    class Starter(ProcessStarter):
+        pattern = "Local:"
+        env = os.environ.copy()
+        args = ["npm", "--prefix", frontend_dir, "run", "start", "--", "--port", str(_FRONTEND_PORT)]
+        cwd = frontend_dir
+        timeout = 60
+
+    try:
+        xprocess.getinfo("dev_server_pure").terminate()
+    except Exception:
+        pass
+
+    xprocess.ensure("dev_server_pure", Starter)
+    yield f"http://localhost:{_FRONTEND_PORT}"
+    xprocess.getinfo("dev_server_pure").terminate()
+
+
+def test_presentation_custom_dev_endpoint(dev_server, request):
+    """Contract of the design-mode save endpoint (/__ubk/presentation-custom,
+    dev server only): GET lists the model's overlay files with parsed content,
+    PUT round-trips a new overlay into models/<app>/, and file names outside
+    the presentation-custom-NN.jsonc whitelist or unknown sections are
+    rejected with 400 without writing anything.
+    """
+    if request.config.getoption("--variations"):
+        pytest.skip("designer=off variation has no customization endpoint")
+    import urllib.request
+    import urllib.error
+
+    endpoint = dev_server + "/__ubk/presentation-custom"
+
+    def get():
+        with urllib.request.urlopen(endpoint, timeout=15) as resp:
+            return json.loads(resp.read())
+
+    def put(body):
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(body).encode("utf-8"),
+            method="PUT",
+            headers={"Content-Type": "application/json"},
+        )
+        return urllib.request.urlopen(request, timeout=15)
+
+    data = get()
+    assert "presentation-custom-00.jsonc" in data["files"]
+    assert any(
+        overlay["file"] == "presentation-custom-10.jsonc" and overlay["roles"] == ["user"]
+        for overlay in data["overlays"]
+    )
+
+    test_file = "presentation-custom-90.jsonc"
+    model_path = os.path.abspath("models/test-app/" + test_file)
+    content = json.dumps(
+        {"description": "e2e roundtrip", "labels": {"titles": {"product": "Products (e2e)"}}},
+        indent=2,
+    )
+    try:
+        with put({"file": test_file, "content": content}) as resp:
+            assert resp.status == 200
+        assert os.path.exists(model_path)
+        data = get()
+        saved = next(overlay for overlay in data["overlays"] if overlay["file"] == test_file)
+        assert saved["order"] == 90
+        assert saved["labels"]["titles"]["product"] == "Products (e2e)"
+
+        replacement = json.dumps({"description": "confirmed replacement"}, indent=2)
+        try:
+            put({"file": test_file, "content": replacement})
+            assert False, "an unconfirmed overwrite must be rejected"
+        except urllib.error.HTTPError as error:
+            assert error.code == 409
+        assert json.loads(Path(model_path).read_text())["description"] == "e2e roundtrip"
+        with put({"file": test_file, "content": replacement, "overwrite": True}) as resp:
+            assert resp.status == 200
+        assert json.loads(Path(model_path).read_text())["description"] == "confirmed replacement"
+
+        for bad in (
+            {"file": "../evil.jsonc", "content": "{}"},
+            {"file": "presentation-custom-91.jsonc", "content": json.dumps({"typo_section": {}})},
+        ):
+            try:
+                put(bad)
+                assert False, f"expected HTTP 400 for {bad}"
+            except urllib.error.HTTPError as error:
+                assert error.code == 400
+        assert not os.path.exists(os.path.abspath("models/test-app/presentation-custom-91.jsonc"))
+    finally:
+        if os.path.exists(model_path):
+            os.remove(model_path)

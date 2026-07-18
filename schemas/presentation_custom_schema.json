@@ -1,0 +1,246 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Presentation Customization Overlay",
+  "description": "Role-scoped, presentation-only overrides applied at runtime on top of presentation.jsonc. Files named presentation-custom-NN.jsonc (NN = two digits) in the model directory are applied in ascending NN order; later files win. A file applies to a user when 'roles' is empty or intersects the user's roles. Base model files are never modified by customizations.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path to the JSON schema"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human description of what this customization changes and for whom."
+    },
+    "roles": {
+      "type": "array",
+      "description": "Role names this overlay applies to. Empty or omitted means it applies to every user. Role scoping is a presentation convenience, not security: all overlays ship in the frontend bundle and data access is still enforced by the backend security rules.",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "menu": {
+      "type": "array",
+      "description": "Granular patch operations applied in order to the effective sidebar menu (the presentation.jsonc 'menu' after earlier overlays). Each operation addresses an entry through 'target'; an operation whose target does not resolve is skipped (warned in dev), so patches degrade gracefully as the base menu evolves instead of freezing a full copy of it.",
+      "items": {
+        "$ref": "#/definitions/menuOp"
+      }
+    },
+    "lists": {
+      "type": "object",
+      "description": "Per-concept list view overrides. Keys are concept names. Within a concept, each provided key ('columns', 'sort') replaces the effective value; the last applicable overlay wins per key.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "description": "Visible list columns, in display order. Column names are the concept's field names plus 'id_presentation' and (for workflow concepts) 'state'. Fields not listed remain available through the column selector but start hidden.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sort": {
+            "type": "string",
+            "description": "Default sort as '<field> ASC|DESC', like presentation.jsonc 'list_sort'.",
+            "pattern": "^\\w+ (ASC|DESC)$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "forms": {
+      "type": "object",
+      "description": "Per-concept form overrides for existing fields in create/edit/show views. Keys are concept names. 'hide'/'show' compose as set operations in file order; 'sizes' merges per key (last wins); 'move' patches accumulate in file order. Customizations never create fields.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "hide": {
+            "type": "array",
+            "description": "Field names to hide in forms and show views.",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "show": {
+            "type": "array",
+            "description": "Field names to remove from the hidden set accumulated by earlier overlays.",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "sizes": {
+            "type": "object",
+            "description": "Visual width overrides per field, as a fraction of the form row (mapped to grid columns). Fields not listed keep their generated width.",
+            "default": {},
+            "additionalProperties": {
+              "type": "string",
+              "enum": ["1/4", "1/3", "1/2", "2/3", "full"]
+            }
+          },
+          "move": {
+            "type": "array",
+            "description": "Granular reorder patches applied in order to the form's entry list. An entry is a field name or a composite block name (e.g. an address prefill group, which moves as a unit); entries never cross tab boundaries. Like menu targets, an entry name that does not resolve is skipped at runtime, so patches degrade gracefully as the model evolves.",
+            "default": [],
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "description": "Entry to move: a field name or a composite block name."
+                },
+                "position": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Zero-based index in the form's entry list."
+                }
+              },
+              "required": ["field", "position"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "labels": {
+      "type": "object",
+      "description": "Vocabulary overrides. Flat per-key merge: the last applicable overlay that sets a key wins.",
+      "properties": {
+        "fields": {
+          "type": "object",
+          "description": "Field label overrides keyed by '<concept>.<field>' (applies to forms, show views and list column headers).",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "titles": {
+          "type": "object",
+          "description": "Page title overrides keyed by concept name (applies to the concept's list/edit/create/show pages).",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "workflow_states": {
+      "type": "object",
+      "description": "Per-concept presentation-level visibility of workflow states. Keys are concept names with a workflow. Overlays compose as set operations in file order, like 'forms'. Hiding a state only removes it from the presentation (state selector, task grouping); the current state of a record is always shown, and transitions remain governed by the workflow rules.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "hide": {
+            "type": "array",
+            "description": "State names to hide.",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "show": {
+            "type": "array",
+            "description": "State names to remove from the hidden set accumulated by earlier overlays.",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [],
+  "additionalProperties": false,
+  "definitions": {
+    "menuOp": {
+      "type": "object",
+      "description": "One menu patch operation.",
+      "properties": {
+        "op": {
+          "type": "string",
+          "enum": ["rename", "move", "remove", "add"],
+          "description": "rename: set the target's label. move: reposition the target within its parent or into another group. remove: delete the target (with its children). add: insert 'item'."
+        },
+        "target": {
+          "type": "string",
+          "description": "Entry to operate on: a concept name or workflow page name for leaf entries (stable across label changes), a group's label, or a '/'-separated label path (e.g. 'Sales/Orders') to disambiguate. Resolved against the menu state at the time the operation applies; first match wins (breadth-first)."
+        },
+        "label": {
+          "type": "string",
+          "description": "New display label ('rename' only)."
+        },
+        "into": {
+          "type": "string",
+          "description": "Destination group for 'move'/'add', addressed like 'target'; empty string means the top level. Omitted on 'move' = stay in the current parent; omitted on 'add' = top level."
+        },
+        "position": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-based index inside the destination ('move'/'add'). Omitted = append at the end."
+        },
+        "item": {
+          "$ref": "#/definitions/menuItem",
+          "description": "Entry to insert ('add' only); groups may include 'children'."
+        }
+      },
+      "required": ["op"],
+      "allOf": [
+        {
+          "if": { "properties": { "op": { "const": "rename" } } },
+          "then": { "required": ["target", "label"] }
+        },
+        {
+          "if": { "properties": { "op": { "const": "move" } } },
+          "then": { "required": ["target"] }
+        },
+        {
+          "if": { "properties": { "op": { "const": "remove" } } },
+          "then": { "required": ["target"] }
+        },
+        {
+          "if": { "properties": { "op": { "const": "add" } } },
+          "then": { "required": ["item"] }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "menuItem": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "Display label for the menu item"
+        },
+        "concept": {
+          "type": "string",
+          "description": "Name of the concept (resource) to link to. Required for leaf nodes."
+        },
+        "workflow": {
+          "type": "string",
+          "enum": ["assignable_tasks", "my_tasks"],
+          "description": "Link to a built-in workflow task page: 'assignable_tasks' (unassigned records the user can claim or assign) or 'my_tasks' (records assigned to the user)."
+        },
+        "children": {
+          "type": "array",
+          "description": "Sub-menu items",
+          "items": {
+            "$ref": "#/definitions/menuItem"
+          }
+        }
+      },
+      "required": ["label"],
+      "oneOf": [
+        { "required": ["concept"] },
+        { "required": ["workflow"] },
+        { "required": ["children"] }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

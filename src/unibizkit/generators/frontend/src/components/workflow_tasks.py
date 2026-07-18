@@ -1,4 +1,4 @@
-def generate() -> str:
+def generate(customization: bool) -> str:
     """Admin task pages backed by the _workflow_tasks SQL view.
 
     Regular React-Admin lists (server-side filtering, sorting and pagination
@@ -7,7 +7,7 @@ def generate() -> str:
     toolbar matches the generated resource lists (add filter, configurable
     columns, reset, export).
     """
-    return """import * as React from 'react';
+    template = """import * as React from 'react';
 import {
     DatagridConfigurable,
     DateField,
@@ -27,27 +27,13 @@ import {
 } from 'react-admin';
 import { Button, Typography } from '@mui/material';
 import { RESET_COLUMNS_BUTTON } from './quick_edit';
-import { CONCEPT_WORKFLOWS } from '../workflowConfig';
+__CUSTOM_IMPORT__import { CONCEPT_WORKFLOWS } from '../workflowConfig';
 
 const conceptChoices = Object.keys(CONCEPT_WORKFLOWS).map(concept => ({
     id: concept,
     name: concept.replaceAll('_', ' '),
 }));
-const stateChoices = [...new Set(
-    Object.values(CONCEPT_WORKFLOWS).flatMap(workflow => workflow.states.map(state => state.name))
-)].map(state => ({ id: state, name: state }));
-
-const taskFilters = [
-    <SelectInput key="concept" source="concept" choices={conceptChoices} />,
-    <SelectInput key="state" source="state" choices={stateChoices} />,
-    <TextInput
-        key="search"
-        label="Search"
-        source="id_presentation@ilike"
-        parse={(value) => (value ? `%${value}%` : value)}
-        format={(value) => (value ? value.replaceAll('%', '') : value)}
-    />,
-];
+__FILTERS_BLOCK__
 
 const TaskListActions = ({ preferenceKey }) => (
     <TopToolbar>
@@ -95,7 +81,7 @@ const TakeButton = () => {
 
 export const WORKFLOW_ASSIGNABLE_TASKS = () => {
     const { data: identity, isLoading } = useGetIdentity();
-    if (isLoading) return null;
+__TASK_FILTERS_HOOK__    if (isLoading) return null;
     const roles = identity?.roles || [];
     if (roles.length === 0) {
         return (
@@ -129,7 +115,7 @@ export const WORKFLOW_ASSIGNABLE_TASKS = () => {
 
 export const WORKFLOW_MY_TASKS = () => {
     const { data: identity, isLoading } = useGetIdentity();
-    if (isLoading || !identity?.email) return null;
+__TASK_FILTERS_HOOK__    if (isLoading || !identity?.email) return null;
     const preferenceKey = 'workflow_tasks_mine.datagrid';
     return (
         <List
@@ -152,3 +138,63 @@ export const WORKFLOW_MY_TASKS = () => {
     );
 };
 """
+
+    _runtime_filters = (
+        "// The state filter choices honor the per-role hidden workflow states from the\n"
+        "// presentation customization overlays, so they must be computed at runtime.\n"
+        "const useTaskFilters = () => {\n"
+        "    const custom = useCustomization();\n"
+        "    return React.useMemo(() => {\n"
+        "        const stateChoices = [...new Set(\n"
+        "            Object.entries(CONCEPT_WORKFLOWS).flatMap(([concept, workflow]) => {\n"
+        "                const hidden = custom && custom.hiddenStates[concept];\n"
+        "                return workflow.states\n"
+        "                    .map(state => state.name)\n"
+        "                    .filter(name => !(hidden && hidden.has(name)));\n"
+        "            })\n"
+        "        )].map(state => ({ id: state, name: state }));\n"
+        "        return [\n"
+        "            <SelectInput key=\"concept\" source=\"concept\" choices={conceptChoices} />,\n"
+        "            <SelectInput key=\"state\" source=\"state\" choices={stateChoices} />,\n"
+        "            <TextInput\n"
+        "                key=\"search\"\n"
+        "                label=\"Search\"\n"
+        "                source=\"id_presentation@ilike\"\n"
+        "                parse={(value) => (value ? `%${value}%` : value)}\n"
+        "                format={(value) => (value ? value.replaceAll('%', '') : value)}\n"
+        "            />,\n"
+        "        ];\n"
+        "    }, [custom]);\n"
+        "};"
+    )
+    _static_filters = (
+        "const stateChoices = [...new Set(\n"
+        "    Object.values(CONCEPT_WORKFLOWS).flatMap(workflow => workflow.states.map(state => state.name))\n"
+        ")].map(state => ({ id: state, name: state }));\n"
+        "\n"
+        "const taskFilters = [\n"
+        "    <SelectInput key=\"concept\" source=\"concept\" choices={conceptChoices} />,\n"
+        "    <SelectInput key=\"state\" source=\"state\" choices={stateChoices} />,\n"
+        "    <TextInput\n"
+        "        key=\"search\"\n"
+        "        label=\"Search\"\n"
+        "        source=\"id_presentation@ilike\"\n"
+        "        parse={(value) => (value ? `%${value}%` : value)}\n"
+        "        format={(value) => (value ? value.replaceAll('%', '') : value)}\n"
+        "    />,\n"
+        "];"
+    )
+    if customization:
+        custom_import = "import { useCustomization } from './customization';\n"
+        filters_block = "\n" + _runtime_filters
+        task_filters_hook = "    const taskFilters = useTaskFilters();\n"
+    else:
+        custom_import = ""
+        filters_block = _static_filters
+        task_filters_hook = ""
+    return (
+        template
+        .replace("__CUSTOM_IMPORT__", custom_import)
+        .replace("__FILTERS_BLOCK__", filters_block)
+        .replace("__TASK_FILTERS_HOOK__", task_filters_hook)
+    )

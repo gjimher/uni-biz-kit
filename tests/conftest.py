@@ -78,9 +78,18 @@ def generate_secondary_model():
 def pytest_addoption(parser):
     parser.addoption("--slow", action="store_true", help="run slow tests")
     parser.addoption(
+        "--variations", action="store_true",
+        help="generate and test test-app with in-memory model variations (currently designer=off)",
+    )
+    parser.addoption(
         "--slow-prod", action="store_true",
         help="run destructive production deployment tests against ubk-prod",
     )
+
+
+def app_variation_args(request):
+    """CLI arguments applied to every primary test-app generation."""
+    return ["--designer", "off"] if request.config.getoption("--variations") else []
 
 
 def ensure_smtp_port_free(port=SMTP_PORT):

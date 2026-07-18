@@ -7,7 +7,8 @@ from .context import Context
 from . import eslintrc, index_html, package_json, vite_config
 from .src import (
     supabase_client, index, auth_provider, data_provider, app,
-    import_export_config, quick_edit_config, workflow_config, backend_actions_config
+    import_export_config, quick_edit_config, workflow_config, backend_actions_config,
+    customization_config
 )
 from .src.layout import (
     my_app_bar, my_layout, my_menu,
@@ -17,7 +18,11 @@ from .src.components import (
     title, reorderable_datagrid, recursive_parent_selector,
     custom_edit_toolbar, document_tab, workflow_selector, field_help_icon,
     markdown_input, import_export, quick_edit, workflow_tasks, deleted_snapshot_reference,
-    concept_actions, precision_datetime_input
+    concept_actions, precision_datetime_input, customization
+)
+from .src.devtools import (
+    api as devtools_api, design_badge, design_tools, editors as devtools_editors,
+    pending_changes_dialog, ui as devtools_ui
 )
 from .src.resources import resource
 from .src.presentation import model_js, router, custom_page
@@ -83,6 +88,7 @@ class ReactAdminGenerator:
             workflow_config=schema_loader.workflow_config,
             validations_config=getattr(schema_loader, 'validations_config', None) or {"validations": []},
             integrations_config=getattr(schema_loader, 'integrations_config', None) or {"roles": ["admin"], "integrations": []},
+            presentation_custom_config=getattr(schema_loader, 'presentation_custom_config', None) or {"overlays": []},
             output_dir=self.output_dir,
         )
 
@@ -94,7 +100,11 @@ class ReactAdminGenerator:
 
         # Root files
         _write(ctx.output_dir / "package.json", package_json.generate(ctx))
-        _write(ctx.output_dir / "vite.config.js", vite_config.generate(base_uri))
+        # The vite config embeds the model dir so the dev server can read/write
+        # the presentation-custom-NN.jsonc overlays for the design mode editor
+        # (designer 'off' generates no customization system, endpoint included).
+        custom_model_dir = str(model_dir.resolve()) if ctx.customization else ""
+        _write(ctx.output_dir / "vite.config.js", vite_config.generate(base_uri, custom_model_dir))
         _write(ctx.output_dir / ".eslintrc.json", eslintrc.generate())
         _write(ctx.output_dir / "index.html", index_html.generate(ctx))
         base_prefix = base_uri.rstrip("/")
@@ -120,7 +130,7 @@ class ReactAdminGenerator:
         has_auth_provider = False
         if ctx.security_config["authentication_required"]:
             _write(ctx.output_dir / "src" / "authProvider.js", auth_provider.generate(ctx))
-            _write(ctx.output_dir / "src" / "layout" / "MyAppBar.jsx", my_app_bar.generate())
+            _write(ctx.output_dir / "src" / "layout" / "MyAppBar.jsx", my_app_bar.generate(ctx.customization))
             _write(ctx.output_dir / "src" / "layout" / "UserProfileDialog.jsx", user_profile_dialog.generate())
             if lib_profile.gates(ctx):
                 _write(ctx.output_dir / "src" / "layout" / "ProfileCompletionDialog.jsx",
@@ -135,14 +145,29 @@ class ReactAdminGenerator:
 
         _write(ctx.output_dir / "src" / "App.jsx", app.generate(ctx, has_custom_menu, has_auth_provider))
 
+        # Presentation customization runtime (overlays merged per role) and the
+        # design mode editor. With designer 'off' none of it is emitted and the
+        # generated app matches the pre-customization output.
+        if ctx.customization:
+            _write(ctx.output_dir / "src" / "customizationConfig.js", customization_config.generate(ctx))
+            _write(ctx.output_dir / "src" / "components" / "customization.jsx", customization.generate(has_auth_provider))
+            schemas_dir = Path(__file__).parent.parent.parent.parent.parent / "schemas"
+            schema_ref = os.path.relpath(schemas_dir / "presentation_custom_schema.json", model_dir)
+            _write(ctx.output_dir / "src" / "devtools" / "api.js", devtools_api.generate(schema_ref))
+            _write(ctx.output_dir / "src" / "devtools" / "ui.jsx", devtools_ui.generate())
+            _write(ctx.output_dir / "src" / "devtools" / "DesignBadge.jsx", design_badge.generate())
+            _write(ctx.output_dir / "src" / "devtools" / "DesignTools.jsx", design_tools.generate(has_auth_provider))
+            _write(ctx.output_dir / "src" / "devtools" / "editors.jsx", devtools_editors.generate())
+            _write(ctx.output_dir / "src" / "devtools" / "PendingChangesDialog.jsx", pending_changes_dialog.generate(has_auth_provider))
+
         # Components
-        _write(ctx.output_dir / "src" / "components" / "title.jsx", title.generate())
+        _write(ctx.output_dir / "src" / "components" / "title.jsx", title.generate(ctx.customization))
         _write(ctx.output_dir / "src" / "components" / "reorderable_datagrid.jsx", reorderable_datagrid.generate())
         _write(ctx.output_dir / "src" / "components" / "recursive_parent_selector.jsx", recursive_parent_selector.generate())
         _write(ctx.output_dir / "src" / "components" / "custom_edit_toolbar.jsx", custom_edit_toolbar.generate())
-        _write(ctx.output_dir / "src" / "components" / "workflow_selector.jsx", workflow_selector.generate())
+        _write(ctx.output_dir / "src" / "components" / "workflow_selector.jsx", workflow_selector.generate(ctx.customization))
         _write(ctx.output_dir / "src" / "components" / "field_help_icon.jsx", field_help_icon.generate())
-        _write(ctx.output_dir / "src" / "components" / "import_export.jsx", import_export.generate())
+        _write(ctx.output_dir / "src" / "components" / "import_export.jsx", import_export.generate(ctx.customization))
         _write(ctx.output_dir / "src" / "components" / "quick_edit.jsx", quick_edit.generate())
         _write(ctx.output_dir / "src" / "components" / "concept_actions.jsx", concept_actions.generate())
         if any(f["type"] == "datetime" for c in ctx.concepts for f in c["fields"]):
@@ -151,7 +176,7 @@ class ReactAdminGenerator:
             _write(ctx.output_dir / "src" / "components" / "deleted_snapshot_reference.jsx", deleted_snapshot_reference.generate())
         if ctx.workflow_config["_concept_workflow"]:
             _write(ctx.output_dir / "src" / "workflowConfig.js", workflow_config.generate(ctx))
-            _write(ctx.output_dir / "src" / "components" / "workflow_tasks.jsx", workflow_tasks.generate())
+            _write(ctx.output_dir / "src" / "components" / "workflow_tasks.jsx", workflow_tasks.generate(ctx.customization))
         if any(c.get("documents") and c["documents"]["enabled"] for c in ctx.concepts):
             _write(ctx.output_dir / "src" / "components" / "document_tab.jsx", document_tab.generate())
         if any(f["type"] == "markdown" for c in ctx.concepts for f in c["fields"]):
@@ -266,6 +291,10 @@ class ReactAdminGenerator:
 
         (src_dir / "resources").mkdir(exist_ok=True)
         (src_dir / "components").mkdir(exist_ok=True)
+        if ctx.customization:
+            (src_dir / "devtools").mkdir(exist_ok=True)
+        elif (src_dir / "devtools").exists():
+            shutil.rmtree(src_dir / "devtools")
         (src_dir / "utils").mkdir(exist_ok=True)
         (src_dir / "layout").mkdir(exist_ok=True)
         (src_dir / "presentation").mkdir(exist_ok=True)

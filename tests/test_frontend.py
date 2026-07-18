@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 from unibizkit.cli import CLI
-from conftest import PRIMARY_BASE
+from conftest import PRIMARY_BASE, app_variation_args
 
 
 class TestAppFrontend:
@@ -21,7 +21,7 @@ class TestAppFrontend:
     
     @pytest.mark.integration
     @pytest.mark.timeout(600)  # 10 minutes timeout
-    def test_generate_app_frontend_and_compile(self):
+    def test_generate_app_frontend_and_compile(self, request):
         """Test generating a complete app app frontend and compiling it.
         
         This integration test:
@@ -42,6 +42,7 @@ class TestAppFrontend:
             'uni-biz-kit', 'models/test-app',
             '--output-dir', str(output_dir),
             '--dev-base-port', str(PRIMARY_BASE),
+            *app_variation_args(request),
         ]):
             # Should not raise an exception
             cli.run()
@@ -120,6 +121,34 @@ class TestAppFrontend:
         assert '"papaparse"' in package_json, \
             "CSV parsing dependency should be added for export/import"
 
+        if request.config.getoption("--variations"):
+            # The variation exercises the real test-app generation with the
+            # customization system completely absent, while leaving the model untouched.
+            assert not (frontend_dir / 'src' / 'customizationConfig.js').exists()
+            assert not (frontend_dir / 'src' / 'components' / 'customization.jsx').exists()
+            assert not (frontend_dir / 'src' / 'devtools').exists()
+            assert 'renderColumns(' not in product_resource
+            assert '<TextField source="name"' in product_resource
+            assert '__ubk' not in (frontend_dir / 'vite.config.js').read_text()
+        else:
+            # Presentation customization: overlays must be baked into the runtime
+            # engine artifact (the only path production builds ship them through).
+            customization_config = (frontend_dir / 'src' / 'customizationConfig.js').read_text()
+            assert '"Unit price"' in customization_config, \
+                "presentation-custom overlay content should reach the baked runtime config"
+            assert 'renderColumns(' in product_resource, \
+                "list columns should be resolved at runtime through the customization engine"
+            vite_config_js = (frontend_dir / 'vite.config.js').read_text()
+            assert "'/__ubk/presentation-custom'" in vite_config_js
+            assert str(Path('models/test-app').resolve()) in vite_config_js
+            assert '"production"' in customization_config.split('DESIGNER =')[1].split(';')[0]
+            customization_jsx = (frontend_dir / 'src' / 'components' / 'customization.jsx').read_text()
+            assert "DESIGNER === 'production' || (DESIGNER === 'dev' && import.meta.env.DEV)" in customization_jsx
+            assert 'window.sessionStorage' in customization_jsx
+            assert 'ubk.design.activeUser' in customization_jsx
+            design_tools = (frontend_dir / 'src' / 'devtools' / 'DesignTools.jsx').read_text()
+            assert "useStore('ubk.design" not in design_tools
+
         # Inline quick-edit: list views use configurable columns (defaults kept
         # through `omit`) and the quick-edit dialog is driven by its own config.
         assert '<DatagridConfigurable rowClick="edit" omit={' in product_resource
@@ -176,6 +205,17 @@ class TestAppFrontend:
                 timeout=600  # 10 minutes timeout
             )
             assert build_result.returncode == 0, f"Lint failed or warnings found. {build_result=}"
+
+            if request.config.getoption("--variations"):
+                print("Building designer=off variation: executing 'npm run build'")
+                variation_build = subprocess.run(
+                    ['npm', 'run', 'build'],
+                    stdout=sys.stdout,
+                    stderr=sys.stderr,
+                    timeout=600,
+                )
+                assert variation_build.returncode == 0, \
+                    f"designer=off build failed. {variation_build=}"
                         
             print("✓ App frontend generated and compiled successfully!")
             
@@ -281,3 +321,38 @@ class TestAppFrontend:
         assert l3 == ['e', 'id_presentation', 'a', 'b', 'd']
 
     
+
+
+def test_designer_off_emits_no_customization_system(tmp_path):
+    """designer 'off' must emit the pre-customization app: no runtime merge
+    engine, no design tools, no dev endpoint, no overlay IR. This generation is
+    the only gate for the 'off' variant — test-app pins designer 'production'
+    (covered by lint/build/e2e), so without this test the 'off' emission could
+    silently rot.
+    """
+    model_dir = tmp_path / "model"
+    shutil.copytree("models/test-app", model_dir)
+
+    out = tmp_path / "out"
+    cli = CLI()
+    with patch('sys.argv', [
+        'uni-biz-kit', str(model_dir),
+        '--output-dir', str(out),
+        '--dev-base-port', str(PRIMARY_BASE),
+        '--designer', 'off',
+    ]):
+        cli.run()
+
+    src = out / "frontend" / "src"
+    assert not (src / "customizationConfig.js").exists()
+    assert not (src / "components" / "customization.jsx").exists()
+    assert not (src / "devtools").exists()
+    assert not (out / "presentation_custom_extended.json").exists()
+    assert "CustomizationProvider" not in (src / "App.jsx").read_text()
+    assert "__ubk" not in (out / "frontend" / "vite.config.js").read_text()
+    # Resources fall back to generation-time inlining (no runtime engine).
+    product = (src / "resources" / "product" / "product.jsx").read_text()
+    assert "useCustomization" not in product
+    assert "<CGrid" not in product and "renderColumns" not in product
+    assert '<TextField source="name"' in product
+    assert "DesignBadge" not in (src / "layout" / "MyMenu.jsx").read_text()

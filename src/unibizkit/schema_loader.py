@@ -7,6 +7,7 @@ Handles loading and validating business concept schemas against the JSON schema 
 import json
 import jsonschema
 import csv
+import re
 from jsoncomment import JsonComment
 from jsonschema import Draft7Validator, validators
 from pathlib import Path
@@ -49,14 +50,16 @@ def _load_jsonc_file(path) -> Dict[str, Any]:
         return _jsonc.load(f)
 
 class SchemaLoader:
-    def __init__(self, schema_path: str = None):
+    def __init__(self, schema_path: str = None, designer_override: str = None):
         """
         Initialize the schema loader.
 
         Args:
             schema_path: Path to the business schema JSON file
+            designer_override: In-memory override for presentation.designer
         """
         self.schema_path = schema_path
+        self.designer_override = designer_override
         self.business_schema = None
         self.presentation_config = None
         self.security_config = None
@@ -68,8 +71,10 @@ class SchemaLoader:
         self.deployed_data_config = None
         self.integrations_config = None
         self.validations_config = {"validations": []}
+        self.presentation_custom_config = {"overlays": []}
         self.validation_schema = self._load_validation_schema("concepts_schema.json")
         self.presentation_validation_schema = self._load_validation_schema("presentation_schema.json")
+        self.presentation_custom_validation_schema = self._load_validation_schema("presentation_custom_schema.json")
         self.security_validation_schema = self._load_validation_schema("security_schema.json")
         self.workflow_validation_schema = self._load_validation_schema("workflow_schema.json")
         self.system_validation_schema = self._load_validation_schema("system_schema.json")
@@ -115,6 +120,7 @@ class SchemaLoader:
             if not presentation_path.exists():
                 raise FileNotFoundError(f"'presentation.jsonc' is mandatory. Please provide it in {parent} (it can be an empty object '{{}}' if you want defaults).")
             self.load_presentation(str(presentation_path))
+            self.load_presentation_custom(parent)
 
             security_path = parent / "security.jsonc"
             if not security_path.exists():
@@ -200,6 +206,8 @@ class SchemaLoader:
                         )
 
             self._validate_reserved_field_names(business_schema)
+            self._validate_presentation_custom(business_schema)
+            self._validate_designer()
             self._validate_backend_action_sources(business_schema, parent)
             self._validate_seed_data_against_business_schema(business_schema)
             self._inject_internal_concepts(business_schema)
@@ -234,10 +242,154 @@ class SchemaLoader:
         # We MUST use the custom validator that injects defaults
         validator = extend_with_default(Draft7Validator)(self.presentation_validation_schema)
         validator.validate(presentation_config)
+
+        if self.designer_override:
+            presentation_config["designer"] = self.designer_override
+            if self.designer_override != "production":
+                presentation_config.pop("designer_admin_role", None)
         
         self.presentation_config = presentation_config
         logger.info(f"Successfully loaded and validated presentation settings: {presentation_path}")
-    
+
+    def load_presentation_custom(self, parent: Path):
+        """
+        Load presentation-custom-NN.jsonc overlay files, validated and ordered by NN.
+        With designer 'off' the customization system is not generated at all, so
+        overlay files are rejected instead of silently ignored.
+        """
+        overlays = []
+        if self.presentation_config["designer"] == "off":
+            if self.designer_override == "off":
+                self.presentation_custom_config = {"overlays": []}
+                return
+            stray = sorted(path.name for path in parent.glob("presentation-custom-*.jsonc"))
+            if stray:
+                raise SchemaValidationError(
+                    f"presentation designer 'off' does not allow presentation customization "
+                    f"overlays, found: {', '.join(stray)}"
+                )
+            self.presentation_custom_config = {"overlays": []}
+            return
+        for path in sorted(parent.glob("presentation-custom-*.jsonc")):
+            match = re.fullmatch(r"presentation-custom-(\d{2})\.jsonc", path.name)
+            if not match:
+                raise SchemaValidationError(
+                    f"Presentation customization file '{path.name}' must be named "
+                    "presentation-custom-NN.jsonc (NN = exactly two digits)"
+                )
+            config = _load_jsonc_file(path)
+            DefaultValidatingDraft7Validator(self.presentation_custom_validation_schema).validate(config)
+            config.pop("$schema", None)
+            overlays.append({"file": path.name, "order": int(match.group(1)), **config})
+        self.presentation_custom_config = {"overlays": overlays}
+        if overlays:
+            logger.info(f"Successfully loaded {len(overlays)} presentation customization overlay(s) from: {parent}")
+
+    def _validate_presentation_custom(self, business_schema: Dict[str, Any]):
+        """
+        Cross-check overlay references against concepts, fields, roles and workflow states.
+        Runs before internal '_' concepts are injected: generated internals are not customizable.
+        """
+        overlays = self.presentation_custom_config["overlays"]
+        if not overlays:
+            return
+        concept_map = {concept["name"]: concept for concept in business_schema["concepts"]}
+        configured_roles = self.security_config.get("roles")
+        known_roles = {role["name"] for role in configured_roles} if configured_roles else {"admin", "user"}
+
+        def concept_or_error(file_name, concept_name):
+            concept = concept_map.get(concept_name)
+            if concept is None:
+                raise SchemaValidationError(f"{file_name}: unknown concept '{concept_name}'")
+            return concept
+
+        def workflow_states_for(concept_name):
+            for rule in self.workflow_config["workflow_rules"]:
+                concepts = [name.strip() for name in rule["concepts"].split(",")]
+                if rule["concepts"] == "*" or concept_name in concepts:
+                    return {state["name"] for state in rule["states"]}
+            return None
+
+        def check_menu_items(file_name, items):
+            for item in items:
+                if "concept" in item:
+                    concept_or_error(file_name, item["concept"])
+                check_menu_items(file_name, item.get("children", []))
+
+        def check_menu_ops(file_name, ops):
+            # Op shapes (op enum, required fields) are enforced by the meta-schema;
+            # 'target'/'into' resolve against the runtime menu state and cannot be
+            # checked statically — unresolved targets are skipped at runtime.
+            for op in ops:
+                if op["op"] == "add":
+                    check_menu_items(file_name, [op["item"]])
+
+        for overlay in overlays:
+            file_name = overlay["file"]
+            unknown_roles = sorted(set(overlay["roles"]) - known_roles)
+            if unknown_roles:
+                raise SchemaValidationError(f"{file_name}: unknown roles: {unknown_roles}")
+
+            check_menu_ops(file_name, overlay.get("menu", []))
+
+            for concept_name, list_config in overlay.get("lists", {}).items():
+                concept = concept_or_error(file_name, concept_name)
+                # The list column pool also contains the generated 'id_presentation'
+                # and, for workflow concepts, the injected 'state' column.
+                columns = {field["name"] for field in concept["fields"]} | {"id_presentation"}
+                if workflow_states_for(concept_name) is not None:
+                    columns.add("state")
+                for column in list_config.get("columns", []):
+                    if column not in columns:
+                        raise SchemaValidationError(
+                            f"{file_name}: unknown list column '{concept_name}.{column}'"
+                        )
+                sort = list_config.get("sort")
+                if sort and sort.split(" ")[0] not in columns | {"id"}:
+                    raise SchemaValidationError(
+                        f"{file_name}: unknown sort field '{concept_name}.{sort.split(' ')[0]}'"
+                    )
+
+            for concept_name, form_config in overlay.get("forms", {}).items():
+                concept = concept_or_error(file_name, concept_name)
+                field_names = {field["name"] for field in concept["fields"]}
+                for name in form_config["hide"] + form_config["show"] + list(form_config["sizes"]):
+                    if name not in field_names:
+                        raise SchemaValidationError(
+                            f"{file_name}: unknown form field '{concept_name}.{name}'"
+                        )
+                # 'move' entries may name composite blocks (prefill groups) that
+                # only exist after enrichment: like menu targets, they resolve at
+                # runtime and unresolved names are skipped.
+
+            labels = overlay.get("labels", {})
+            for key in labels.get("fields", {}):
+                concept_name, _, field_name = key.partition(".")
+                if not field_name:
+                    raise SchemaValidationError(
+                        f"{file_name}: label key '{key}' must be '<concept>.<field>'"
+                    )
+                concept = concept_or_error(file_name, concept_name)
+                if field_name not in {field["name"] for field in concept["fields"]}:
+                    raise SchemaValidationError(
+                        f"{file_name}: label references unknown field '{key}'"
+                    )
+            for concept_name in labels.get("titles", {}):
+                concept_or_error(file_name, concept_name)
+
+            for concept_name, states_config in overlay.get("workflow_states", {}).items():
+                concept_or_error(file_name, concept_name)
+                states = workflow_states_for(concept_name)
+                if states is None:
+                    raise SchemaValidationError(
+                        f"{file_name}: concept '{concept_name}' has no workflow, cannot customize workflow_states"
+                    )
+                for name in states_config["hide"] + states_config["show"]:
+                    if name not in states:
+                        raise SchemaValidationError(
+                            f"{file_name}: unknown workflow state '{concept_name}.{name}'"
+                        )
+
     def load_security(self, security_path: str):
         """
         Load and validate the security settings.
@@ -518,6 +670,31 @@ class SchemaLoader:
                         f"Field '{concept['name']}.{field['name']}' uses reserved '_' prefix"
                     )
 
+    def _validate_designer(self):
+        """
+        Cross-checks for the presentation 'designer' setting: per-user
+        personalization needs an authenticated user, and the reviewer role must
+        exist and only makes sense when personalization is on.
+        """
+        designer = self.presentation_config["designer"]
+        admin_role = self.presentation_config.get("designer_admin_role")
+        if designer == "production" and not self.security_config["authentication_required"]:
+            raise SchemaValidationError(
+                "presentation designer 'production' requires security authentication_required: "
+                "personalizations are stored per authenticated user"
+            )
+        if admin_role:
+            if designer != "production":
+                raise SchemaValidationError(
+                    "presentation designer_admin_role requires designer 'production'"
+                )
+            configured_roles = self.security_config.get("roles")
+            known_roles = {role["name"] for role in configured_roles} if configured_roles else {"admin", "user"}
+            if admin_role not in known_roles:
+                raise SchemaValidationError(
+                    f"presentation designer_admin_role references unknown role '{admin_role}'"
+                )
+
     def _inject_internal_concepts(self, business_schema: Dict[str, Any]):
         """Add generated operational tables/views before the extended IR is built."""
         def field(name, type_, description, **values):
@@ -600,6 +777,31 @@ class SchemaLoader:
                 level3.append({"concept": "_integration", "role": role, "access": "write", "field": "operational_status"})
                 level3.extend({"concept": "_integration", "role": role, "access": "read", "field": name} for name in readonly)
                 level3.append({"concept": "_integration_run", "role": role, "access": "read", "field": "*"})
+
+        if self.presentation_config["designer"] == "production":
+            design_fields = [
+                field("user_email", "string", "Email of the user who owns this personalization", required=True),
+                field("design", "json", "Personal presentation customization (same sections as presentation-custom-NN.jsonc)", size="l"),
+                # Declared explicitly (instead of the automatic owner_write
+                # injection) to make it unique: one design per user, and the
+                # client can upsert on it.
+                field("_security_owner_id", "string", "Auth user id owning this personalization", unique=True, size="l"),
+            ]
+            design_concept = internal_concept(
+                "_design", "designs", "Per-user presentation personalizations made in design mode",
+                ["user_email"], design_fields, "table",
+            )
+            # The reviewer role may delete a personalization (reset it to defaults).
+            design_concept["_fe_allow_delete"] = True
+            concepts.append(design_concept)
+            self.presentation_config.setdefault("list_field_rules_level_3", {})["_design"] = "!*,user_email"
+            # Every user manages their own row; the reviewer role (if any) has
+            # full access to all rows through the Customization menu.
+            admin_role = self.presentation_config.get("designer_admin_role")
+            level2 = security.setdefault("rules_level_2", [])
+            for role in all_roles:
+                access = "write" if role == admin_role else "owner_write"
+                level2.append({"concept": "_design", "role": role, "access": access})
 
         if self.workflow_config.get("workflow_rules") and security["authentication_required"]:
             directory_fields = [

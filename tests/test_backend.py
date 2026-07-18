@@ -19,7 +19,10 @@ from unittest.mock import patch
 import psycopg2
 from dotenv import load_dotenv, dotenv_values
 from unibizkit.cli import CLI
-from conftest import HAS_SECONDARY_MODEL, PRIMARY_BASE, assert_secondary_model_is_normal_app
+from conftest import (
+    HAS_SECONDARY_MODEL, PRIMARY_BASE, assert_secondary_model_is_normal_app,
+    app_variation_args,
+)
 
 
 def _run(cmd, timeout=600, input=None):
@@ -160,6 +163,7 @@ class TestAppBackend:
             'uni-biz-kit', 'models/test-app',
             '--output-dir', str(output_dir),
             '--dev-base-port', str(PRIMARY_BASE),
+            *app_variation_args(request),
         ]):
             cli.run()
 

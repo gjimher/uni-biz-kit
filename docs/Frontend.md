@@ -103,6 +103,67 @@ Example from [`models/test-app/presentation.jsonc`](../models/test-app/presentat
 
 List views open with the default columns computed by the field rules above, but the user can adjust them: the **Columns** button opens a panel to show or hide any non-internal field, and **Reset columns** returns to the defaults. The selection persists per concept in the browser's local storage (namespaced per app), so it survives reloads without affecting other users. The **Add filter** menu covers the same full field set, so any column a user adds can also be filtered on.
 
+### Presentation customization overlays (`presentation-custom-NN.jsonc`)
+
+Presentation can be customized per role without touching the base model files: each `models/<app>/presentation-custom-NN.jsonc` (NN = exactly two digits) is an overlay applied **at runtime** on top of the generated presentation. Files apply in ascending NN order (later wins) and each one applies only to users holding at least one of its `roles` (empty or omitted = everyone). Overlays are validated at generation time against [`schemas/presentation_custom_schema.json`](../schemas/presentation_custom_schema.json) — unknown concepts, fields, roles or workflow states are rejected — and the loaded set is dumped as `presentation_custom_extended.json`.
+
+Example ([`models/test-app/presentation-custom-10.jsonc`](../models/test-app/presentation-custom-10.jsonc)):
+
+```jsonc
+{
+  "$schema": "../../schemas/presentation_custom_schema.json",
+  "description": "Simplified UI for standard users",
+  "roles": ["user"],
+  "menu": [ // granular patch ops applied to the effective menu, in order
+    { "op": "remove", "target": "Test" },
+    { "op": "rename", "target": "Catalog", "label": "Catálogo" },
+    { "op": "move", "target": "product", "into": "Sales", "position": 0 },
+    { "op": "add", "into": "Sales", "item": { "label": "Invoices", "concept": "invoice" } }
+  ],
+  "lists": { "product": { "columns": ["name", "price", "sku"], "sort": "name ASC" } },
+  "forms": {
+    "customer": {
+      "hide": ["admin_field"],
+      "sizes": { "email": "full" },                     // 1/4, 1/3, 1/2, 2/3, full
+      "move": [{ "field": "email", "position": 0 }]     // reorder patches, in order
+    }
+  },
+  "labels": {
+    "fields": { "product.price": "Unit price" },   // "<concept>.<field>"
+    "titles": { "order": "Sales orders" }          // concept page titles
+  },
+  "workflow_states": { "order": { "hide": ["delivered"] } }
+}
+```
+
+Merge semantics per section:
+
+| Section | Semantics |
+|---------|-----------|
+| `menu` | Granular patch ops (`rename`/`move`/`remove`/`add`) applied in file order to the effective menu. A `target` is a concept/workflow name (leaf entries), a group label, or a `/`-separated label path; an unresolved target skips the op (warned in dev), so patches degrade gracefully as the base menu evolves |
+| `lists.<concept>` | Per-key replacement (`columns`, `sort`); the last applicable file wins per key |
+| `forms.<concept>` | `hide`/`show`: set operations in file order. `sizes`: per-key merge of field widths (fractions of the form row). `move`: reorder patches accumulated in file order over the form's *entries* — a field, or a composite block (address prefill group) that moves as a unit; entries never cross tab boundaries and unresolved names are skipped |
+| `labels.fields` / `labels.titles` | Flat per-key merge, last applicable file wins |
+| `workflow_states.<concept>` | Set operations like `forms`; a record's *current* state is always shown |
+
+Role scoping is a **presentation convenience, not security**: every overlay ships in the frontend bundle and data access is still enforced by the [security rules](Security.md). Current limitations: renaming a field label replaces its help icon with the plain label; child datagrids inside edit tabs, quick edit columns and list filters keep the generation-time configuration.
+
+### Design mode
+
+Where design mode is available is set by `presentation.jsonc` `designer`: `"off"` (the whole customization system — overlay runtime included — is not generated, and `presentation-custom-NN.jsonc` files are rejected; the emitted app matches the pre-customization output), `"dev"` (default — editor on the dev server only, production builds tree-shake the design tools away while the overlay runtime always ships) or `"production"` (editor also shipped in builds, as per-user personalization; see below). The editor needs `authentication_required` and a custom `menu` (the toggle lives in the app bar).
+
+On the **dev server** (`npm run dev`), design mode edits the model's overlay files. Workflow:
+
+1. Toggle **Design** in the app bar. A dialog shows the customization file being created (next free NN, editable — or pick an existing file to continue) and the target roles, defaulting to your own. While designing, the app is previewed exactly as those roles will see it.
+2. Designable elements show a **D** badge: form fields (visibility, label, width, position — a field inside an address block moves the whole block), lists (columns, order, default sort), each menu entry and group (rename/reorder/remove, with an "Add entry" row per menu level) and workflow state selectors (state visibility). Every change lands in a pending draft, persisted in local storage so it survives navigation.
+3. The app-bar chip (`custom-NN · roles`) opens the pending-changes dialog: edit the target NN, roles, description and a per-change summary with per-change deletion (raw JSON behind an "Edit as JSON" toggle); **Download** the `.jsonc`; or **Save to model**, which writes the file into `models/<app>/` through a dev-server endpoint (`/__ubk/presentation-custom`, dev server only, file names strictly whitelisted) and reloads. Saved files apply on reload without regenerating the app; the next generation validates them fully.
+
+### End-user personalization (`designer: "production"`)
+
+With `designer: "production"`, production builds show the same **Design** toggle to every authenticated user as a personal UI editor: same badges and editors, but no file/roles dialog — the draft starts from the user's saved design and **Save my design** stores it (as the same overlay sections) in the generated internal `_design` table, one row per user. The personal design is fetched after login and applied **last**, on top of every model overlay. Pending drafts live in browser `sessionStorage`, scoped by authenticated user; logout discards them, while reloads in the same session can resume them. Saving or **Reset personalization** clears the session draft and reloads the database value. Ownership is enforced by `owner_write` row-level security — users only ever see and edit their own row.
+
+`designer_admin_role` names a reviewer role: it gets full access to `_design` plus a **Customization → Designer** menu section (like the integrations Operations menu) listing every user's personalization, with the design JSON editable and rows deletable. Like role scoping, a personal design is presentation only — data access is still enforced by the security rules.
+
 ### Inline quick edit
 
 The **Quick edit** button (shown to users with `write` access) opens the rows currently loaded in the list — same page, filters and sort — as an editable table in a fullscreen dialog, for spreadsheet-style editing of many records at once. The list does the navigating: filter and page there, quick-edit one page, save, move on.

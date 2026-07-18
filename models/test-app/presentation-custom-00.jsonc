@@ -1,0 +1,13 @@
+{
+  "$schema": "../../schemas/presentation_custom_schema.json",
+  "description": "Vocabulary adjustments shared by every role",
+  // No roles: applies to everyone. Later presentation-custom-NN files win.
+  "labels": {
+    "fields": {
+      "product.price": "Unit price"
+    },
+    "titles": {
+      "order": "Sales orders"
+    }
+  }
+}

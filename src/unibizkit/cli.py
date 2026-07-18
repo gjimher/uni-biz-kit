@@ -80,6 +80,14 @@ Examples:
             action='store_true',
             help='Skip Supabase backend generation'
         )
+        parser.add_argument(
+            '--designer',
+            choices=['off', 'dev', 'production'],
+            help=(
+                "Override presentation.designer for this run without changing the model. "
+                "With 'off', customization overlays and designer_admin_role are ignored."
+            ),
+        )
         
         return parser
     
@@ -319,6 +327,63 @@ Examples:
             json.dump(base_schema, f, indent=2)
 
         return base_schema
+
+    def _generate_presentation_custom_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
+        """
+        Wrap the presentation_custom meta-schema into the extended shape: an ordered
+        'overlays' list where each overlay is annotated with its source 'file' and 'order'.
+        """
+        schemas_dir = Path(__file__).parent.parent.parent / "schemas"
+        with open(schemas_dir / "presentation_custom_schema.json", 'r', encoding='utf-8') as f:
+            base_schema = json.load(f)
+
+        overlay_schema = {
+            "type": "object",
+            "properties": {
+                "file": {"type": "string", "description": "Source overlay file name"},
+                "order": {"type": "integer", "description": "Application order (the NN in the file name)"},
+                **{key: value for key, value in base_schema["properties"].items() if key != "$schema"},
+            },
+            "required": ["file", "order"],
+            "additionalProperties": False,
+        }
+        extended = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "Extended Presentation Customization Schema",
+            "description": "Dynamically generated extended presentation customization schema.",
+            "type": "object",
+            "properties": {
+                "$schema": {"type": "string"},
+                "overlays": {"type": "array", "items": overlay_schema},
+            },
+            "required": ["overlays"],
+            "additionalProperties": False,
+            "definitions": base_schema["definitions"],
+        }
+
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / "presentation_custom_extended_schema.json"
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(extended, f, indent=2)
+        return extended
+
+    def _dump_presentation_custom_extended(self, schema_loader, output_dir: Path):
+        # designer 'off' generates no customization system at all: no IR either.
+        if schema_loader.presentation_config["designer"] == "off":
+            for name in (
+                "presentation_custom_extended.json",
+                "presentation_custom_extended_schema.json",
+            ):
+                (output_dir / name).unlink(missing_ok=True)
+            return
+        """Save and validate the ordered presentation customization overlays."""
+        config = {"$schema": "./presentation_custom_extended_schema.json", **schema_loader.presentation_custom_config}
+        extended_schema_def = self._generate_presentation_custom_extended_schema_def(output_dir)
+        self._validate_extended_schema(config, extended_schema_def, "presentation_custom")
+        dump_path = output_dir / "presentation_custom_extended.json"
+        with open(dump_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2)
+        logger.info(f"Presentation customization extended saved to: {dump_path}")
 
     def _generate_seed_data_extended_schema_def(self, output_dir: Path) -> Dict[str, Any]:
         schemas_dir = Path(__file__).parent.parent.parent / "schemas"
@@ -576,7 +641,7 @@ Examples:
             raise FileNotFoundError(f"Schema file not found: {schema_path}")
         
         # Load and validate schema
-        schema_loader = SchemaLoader(str(schema_path))
+        schema_loader = SchemaLoader(str(schema_path), designer_override=args.designer)
         business_schema = schema_loader.load_and_validate()
         
         # Enrich Schema (Intermediate Representation)
@@ -650,6 +715,9 @@ Examples:
 
         # Update loader with enriched configs for generators
         schema_loader.presentation_config = processor.presentation_extended
+
+        # Save Presentation Customization Extended (overlays pass through un-enriched)
+        self._dump_presentation_custom_extended(schema_loader, output_dir)
 
         # Save Security Extended
         sec_dump_path = output_dir / "security_extended.json"
@@ -841,7 +909,7 @@ Examples:
             raise FileNotFoundError(f"Schema file not found: {schema_path}")
         
         # Load and validate schema
-        schema_loader = SchemaLoader(str(schema_path))
+        schema_loader = SchemaLoader(str(schema_path), designer_override=args.designer)
         business_schema = schema_loader.load_and_validate()
         
         logger.info(f"Schema is valid: {business_schema["name"]}")
@@ -919,6 +987,9 @@ Examples:
 
         # Update loader with enriched configs for generators
         schema_loader.presentation_config = processor.presentation_extended
+
+        # Save Presentation Customization Extended (overlays pass through un-enriched)
+        self._dump_presentation_custom_extended(schema_loader, output_dir)
 
         # Save Security Extended
         sec_dump_path = output_dir / "security_extended.json"

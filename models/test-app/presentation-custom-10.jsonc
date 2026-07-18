@@ -1,0 +1,25 @@
+{
+  "$schema": "../../schemas/presentation_custom_schema.json",
+  "description": "Simplified UI for standard users",
+  "roles": ["user"],
+  // Granular menu patch: standard users do not see the "Test" group. The rest
+  // of the menu keeps following the base model as it evolves.
+  "menu": [
+    { "op": "remove", "target": "Test" }
+  ],
+  "forms": {
+    // admin_field is read-only for users anyway (rules_level_3); hide it from
+    // their forms and show views entirely. Standard users care about the email
+    // first (moved to the front, full row width).
+    "customer": {
+      "hide": ["admin_field"],
+      "sizes": { "email": "full" },
+      "move": [{ "field": "email", "position": 0 }]
+    }
+  },
+  "workflow_states": {
+    // Users never operate the accepted step; presentation-only hiding
+    // (the state still exists and is shown when it is the record's current state).
+    "order": { "hide": ["accepted"] }
+  }
+}

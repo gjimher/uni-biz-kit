@@ -71,7 +71,8 @@ def _generate_recursive_dialogs(
         ctx.presentation_config,
         ctx.security_config,
         owned_children=my_children,
-        exclude_fields=[fk_field_name]
+        exclude_fields=[fk_field_name],
+        customization=ctx.customization,
     )
 
     create_fields = fields_res["create_fields"]
@@ -447,6 +448,7 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         owned_children=owned_children,
         many_to_many_links=many_to_many_links,
         parent_workflow=concept_workflow,
+        customization=ctx.customization,
     )
 
     react_admin_imports = get_optimized_react_admin_imports(
@@ -454,13 +456,6 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     )
 
     has_prefill = bool(concept.get("_prefill_groups"))
-
-    list_sort = ctx.presentation_config["list_sort"].get(resource_name)
-    if list_sort:
-        sort_field, sort_order = list_sort.split(" ")
-        list_sort_prop = f" sort={{{{ field: '{sort_field}', order: '{sort_order}' }}}}"
-    else:
-        list_sort_prop = ""
 
     mui_imports = ["Grid"]
     if owned_children or many_to_many_links:
@@ -537,9 +532,11 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         component_imports.append(f"import {{ ReorderableDatagrid }} from '../../components/reorderable_datagrid';")
     if "RecursiveParentSelector" in field_components["create_fields"] or "RecursiveParentSelector" in field_components["edit_fields"]:
         component_imports.append(f"import {{ RecursiveParentSelector }} from '../../components/recursive_parent_selector';")
+    list_columns_html = "\n".join(html for _, html in field_components["list_column_entries"])
+    show_fields_html = "\n".join(html for _, html in field_components["show_field_entries"])
     markdown_scan = "".join([
         field_components["create_fields"], field_components["edit_fields"],
-        field_components["list_fields"], field_components["show_fields"],
+        list_columns_html, show_fields_html,
         field_components["child_tabs"], child_dialog_components,
     ])
     snapshot_imports = [
@@ -557,9 +554,15 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         component_imports.append("import { PrecisionDateTimeInput } from '../../components/precision_datetime_input';")
     if "FIELD_HELP_ICON" in field_components["create_fields"] or "FIELD_HELP_ICON" in field_components["edit_fields"] or "FIELD_HELP_ICON" in child_dialog_components:
         component_imports.append(f"import {{ FIELD_HELP_ICON }} from '../../components/field_help_icon';")
+    if ctx.customization:
+        customization_imports = ["useCustomization", "renderColumns", "renderFormEntries", "renderShowFields"]
+        if "<CGrid" in field_components["create_fields"] + field_components["edit_fields"] + child_dialog_components:
+            customization_imports.append("CGrid")
+        component_imports.append(
+            f"import {{ {', '.join(customization_imports)} }} from '../../components/customization';"
+        )
     component_imports_str = "\n".join(component_imports)
 
-    id_field_show = ""
     id_field_edit = ""
 
     relations_tab = ""
@@ -583,16 +586,54 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         show_actions = f"const {resource_name.upper()}_SHOW_ACTIONS = () => <TopToolbar><ConceptActions placement=\"show\" /></TopToolbar>;"
         show_actions_prop = f" actions={{<{resource_name.upper()}_SHOW_ACTIONS />}}"
     validate_prop = f" validate={{validate_{resource_name}_related_fields}}" if _has_validations(ctx, concept) else ""
+
+    # Form entries are emitted as functions (not consts): the field JSX contains
+    # expressions like `permissions?.[...]` that must evaluate at render time
+    # inside the component, never at module load.
+    def _form_entries_fn(fn_name: str, entries: List[Any]) -> tuple:
+        rows = "\n".join(
+            f"  ['{entry_name}', (<>\n{html}\n  </>)]," for entry_name, html in entries
+        )
+        param = "permissions" if any("permissions" in html for _, html in entries) else ""
+        return f"const {fn_name} = ({param}) => [\n{rows}\n];", f"{fn_name}({param})"
+
+    # With customization, the effective column/field order is resolved at
+    # runtime from the presentation overlays; with designer 'off' everything is
+    # inlined at generation time, matching the pre-customization output.
+    if ctx.customization:
+        create_form_const, create_form_call = _form_entries_fn(
+            f"{resource_name.upper()}_CREATE_FORM", field_components["create_form_entries"]
+        )
+        edit_form_const, edit_form_call = _form_entries_fn(
+            f"{resource_name.upper()}_EDIT_FORM", field_components["edit_form_entries"]
+        )
+        edit_entries_render = f"{{renderFormEntries('{resource_name}', {edit_form_call}, custom)}}"
+        create_body = f"{{renderFormEntries('{resource_name}', {create_form_call}, custom)}}"
+        create_custom_decl = "  const custom = useCustomization();\n"
+        inner_custom_decl = "    const custom = useCustomization();\n"
+        edit_needs_custom = True
+    else:
+        create_form_const = ""
+        edit_form_const = ""
+        edit_entries_render = field_components["edit_fields"]
+        create_body = field_components["create_fields"]
+        create_custom_decl = ""
+        inner_custom_decl = ""
+        edit_needs_custom = False
+    edit_custom_decl = ""
     if concept_workflow:
         wf_json = json.dumps(concept_workflow)
-        inner_comp_name = f"{resource_name.upper()}_EDIT_FORM"
+        # The suffix avoids colliding with the {NAME}_EDIT_FORM entries const
+        # that only exists with customization.
+        inner_comp_name = f"{resource_name.upper()}_EDIT_FORM_VIEW" if ctx.customization \
+            else f"{resource_name.upper()}_EDIT_FORM"
         if owned_children or many_to_many_links or has_documents:
             form_content = f"""<TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} workflowCanAssign={{canAssign}} />}}{validate_prop}>
       <FormTab label="Summary">
         <WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" canEdit={{canEdit}} canAssign={{canAssign}} />
         <Box sx={{{{ pointerEvents: canEdit ? 'auto' : 'none', opacity: canEdit ? 1 : 0.6 }}}}>
           <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
-            {field_components["edit_fields"]}
+            {edit_entries_render}
           </Grid>
         </Box>
       </FormTab>
@@ -605,7 +646,7 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
       <WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" canEdit={{canEdit}} canAssign={{canAssign}} />
       <Box sx={{{{ pointerEvents: canEdit ? 'auto' : 'none', opacity: canEdit ? 1 : 0.6 }}}}>
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
-          {field_components["edit_fields"]}
+          {edit_entries_render}
         </Grid>
       </Box>
     </SimpleForm>"""
@@ -613,7 +654,7 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
 const {inner_comp_name} = () => {{
     const record = useRecordContext();
     const {{ permissions }} = usePermissions();
-    const {{ data: identity, isLoading: identityLoading }} = useGetIdentity();
+{inner_custom_decl}    const {{ data: identity, isLoading: identityLoading }} = useGetIdentity();
     const canEdit = useWorkflowCanEdit({wf_json}, record, identity, identityLoading);
     const canAssign = useWorkflowCanAssign({wf_json}, record, identity, identityLoading);
     return (
@@ -624,11 +665,12 @@ const {inner_comp_name} = () => {{
     <{inner_comp_name} />
   </Edit>"""
     elif owned_children or many_to_many_links or has_documents:
+        edit_custom_decl = "  const custom = useCustomization();\n" if edit_needs_custom else ""
         edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}}{edit_actions_prop} {{...props}}>
     <TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}"{allow_delete_prop} />}}{validate_prop}>
       <FormTab label="Summary">
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
-          {field_components["edit_fields"]}
+          {edit_entries_render}
         </Grid>
       </FormTab>
       {field_components["child_tabs"]}
@@ -637,13 +679,95 @@ const {inner_comp_name} = () => {{
     </TabbedForm>
   </Edit>"""
     else:
+        edit_custom_decl = "  const custom = useCustomization();\n" if edit_needs_custom else ""
         edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}}{edit_actions_prop} {{...props}}>
     <SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}"{allow_delete_prop} />}}{validate_prop}>
       <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
-        {field_components["edit_fields"]}
+        {edit_entries_render}
       </Grid>
     </SimpleForm>
   </Edit>"""
+
+    bulk_actions_prop = (
+        ' bulkActionButtons={<ConceptBulkActions' + allow_delete_prop + ' />}'
+        if any('list' in action['placement'] for action in concept.get('actions', [])) else ''
+    )
+    if ctx.customization:
+        columns_map_entries = ",\n".join(
+            f"  '{name}': {html.strip()}" for name, html in field_components["list_column_entries"]
+        )
+        show_field_entries = ",\n".join(
+            f"  ['{name}', {html.strip()}]" for name, html in field_components["show_field_entries"]
+        )
+        runtime_consts = f"""// Full column pool by name; the effective order/visibility is resolved at
+// runtime from the presentation customization overlays (see customizationConfig.js).
+const {resource_name.upper()}_COLUMNS = {{
+{columns_map_entries}
+}};
+
+// Create/edit form entries (field or composite block, in generated order); the
+// effective order comes from the overlays at runtime (renderFormEntries).
+{create_form_const}
+
+{edit_form_const}
+
+"""
+        list_component = f"""export const {resource_name.upper()}_LIST = (props) => {{
+  const {{ permissions }} = usePermissions();
+  const custom = useCustomization();
+  const cfg = custom.lists['{resource_name}'];
+  return (
+    <List {{...props}} title={{custom.labels.titles['{resource_name}']}} filters={{{resource_name}_filters}} sort={{cfg.sort || undefined}} actions={{<ImportExportActions />}}>
+      <DatagridConfigurable rowClick="edit" omit={{cfg.omit}} preferenceKey={{cfg.prefKey}}{bulk_actions_prop}>
+        {{renderColumns('{resource_name}', {resource_name.upper()}_COLUMNS, custom)}}
+      </DatagridConfigurable>
+    </List>
+  );
+}};"""
+        show_component = f"""const {resource_name.upper()}_SHOW_FIELDS = [
+{show_field_entries}
+];
+
+export const {resource_name.upper()}_SHOW = (props) => {{
+  const custom = useCustomization();
+  return (
+    <Show title={{<Title name="{resource_name}"{title_desc_prop} />}}{show_actions_prop} {{...props}}>
+      <SimpleShowLayout>
+        {{renderShowFields('{resource_name}', {resource_name.upper()}_SHOW_FIELDS, custom)}}
+      </SimpleShowLayout>
+    </Show>
+  );
+}};"""
+    else:
+        # designer 'off': columns, sort and show fields inlined at generation
+        # time, matching the pre-customization emission.
+        runtime_consts = ""
+        list_sort = ctx.presentation_config["list_sort"].get(resource_name)
+        if list_sort:
+            sort_field, sort_order = list_sort.split(" ")
+            list_sort_prop = f" sort={{{{ field: '{sort_field}', order: '{sort_order}' }}}}"
+        else:
+            list_sort_prop = ""
+        list_component = f"""export const {resource_name.upper()}_LIST = (props) => {{
+  const {{ permissions }} = usePermissions();
+  return (
+    <List {{...props}} filters={{{resource_name}_filters}}{list_sort_prop} actions={{<ImportExportActions />}}>
+      <DatagridConfigurable rowClick="edit" omit={{{field_components["list_omit_json"]}}}{bulk_actions_prop}>
+        {field_components["list_fields_inline"]}
+      </DatagridConfigurable>
+    </List>
+  );
+}};"""
+        id_field_show = ""
+        show_component = f"""export const {resource_name.upper()}_SHOW = (props) => (
+  <Show title={{<Title name="{resource_name}"{title_desc_prop} />}}{show_actions_prop} {{...props}}>
+    <SimpleShowLayout>
+      {id_field_show}
+      {field_components["show_fields_inline"]}
+    </SimpleShowLayout>
+  </Show>
+);"""
+
 
     return f"""import * as React from 'react';
 import {{ {react_admin_imports} }} from 'react-admin';
@@ -662,25 +786,16 @@ const {resource_name}_filters = [
 {field_components["filter_fields"]}
 ];
 
-export const {resource_name.upper()}_LIST = (props) => {{
-  const {{ permissions }} = usePermissions();
-  return (
-    <List {{...props}} filters={{{resource_name}_filters}}{list_sort_prop} actions={{<ImportExportActions />}}>
-      <DatagridConfigurable rowClick="edit" omit={{{field_components["list_omit_json"]}}}{' bulkActionButtons={<ConceptBulkActions' + allow_delete_prop + ' />}' if any('list' in action['placement'] for action in concept.get('actions', [])) else ''}>
-        {field_components["list_fields"]}
-      </DatagridConfigurable>
-    </List>
-  );
-}};
+{runtime_consts}{list_component}
 
 export const {resource_name.upper()}_CREATE = (props) => {{
   const {{ permissions }} = usePermissions();
-  return (
+{create_custom_decl}  return (
     <Create {{...props}}>
       <SimpleForm{validate_prop}>
         {create_workflow_ui}
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>
-          {field_components["create_fields"]}
+          {create_body}
         </Grid>
       </SimpleForm>
     </Create>
@@ -689,17 +804,10 @@ export const {resource_name.upper()}_CREATE = (props) => {{
 
 export const {resource_name.upper()}_EDIT = (props) => {{
   const {{ permissions }} = usePermissions();
-  return (
+{edit_custom_decl}  return (
     {edit_component}
   );
 }};
 
-export const {resource_name.upper()}_SHOW = (props) => (
-  <Show title={{<Title name="{resource_name}"{title_desc_prop} />}}{show_actions_prop} {{...props}}>
-    <SimpleShowLayout>
-      {id_field_show}
-      {field_components["show_fields"]}
-    </SimpleShowLayout>
-  </Show>
-);
+{show_component}
 """

@@ -1,11 +1,12 @@
-def generate() -> str:
-    return """import * as React from 'react';
+def generate(customization: bool) -> str:
+    template = """import * as React from 'react';
 import {
   CreateButton, FilterButton, SelectColumnsButton, TopToolbar, downloadCSV,
   useDataProvider, useListContext, useNotify, usePermissions,
   useRefresh, useResourceDefinition
 } from 'react-admin';
 import { QuickEditButton, RESET_COLUMNS_BUTTON } from './quick_edit';
+__CUSTOM_IMPORT__
 import Papa from 'papaparse';
 import {
   Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent,
@@ -750,7 +751,7 @@ export const ImportExportActions = () => {
   const { resource, filterValues, sort } = useListContext();
   const { hasCreate } = useResourceDefinition();
   const { permissions } = usePermissions();
-  const config = IMPORT_EXPORT_CONFIG[resource];
+__CUSTOM_PREF__  const config = IMPORT_EXPORT_CONFIG[resource];
   const canWrite = permissions?.[resource]?.includes('write')
     || permissions?.['*']?.includes('write');
   const canEdit = canWrite || permissions?.[resource]?.includes('edit');
@@ -760,9 +761,9 @@ export const ImportExportActions = () => {
     || permissions?.['*']?.includes('write');
   return (
     <TopToolbar>
-      <FilterButton />
-      <SelectColumnsButton />
-      <RESET_COLUMNS_BUTTON />
+__DESIGN_BADGE__      <FilterButton />
+      <SelectColumnsButton__PREF_PROP__ />
+      <RESET_COLUMNS_BUTTON__PREF_PROP__ />
       {hasCreate && <CreateButton />}
       {canEdit && <QuickEditButton />}
       {config && (
@@ -774,3 +775,28 @@ export const ImportExportActions = () => {
   );
 };
 """
+
+    if customization:
+        custom_import = "import { useCustomization, DesignBadge } from './customization';\n"
+        custom_pref = (
+            "  const custom = useCustomization();\n"
+            "  // Customized column sets live in their own preference bucket (see\n"
+            "  // customizationConfig.js); the column selector and reset buttons must target\n"
+            "  // the same key as the DatagridConfigurable of this list.\n"
+            "  const listCfg = custom && custom.lists[resource];\n"
+            "  const preferenceKey = listCfg ? listCfg.prefKey : undefined;\n"
+        )
+        design_badge = "      <DesignBadge target={{ kind: 'list', concept: resource }} />\n"
+        pref_prop = " preferenceKey={preferenceKey}"
+    else:
+        custom_import = ""
+        custom_pref = ""
+        design_badge = ""
+        pref_prop = ""
+    return (
+        template
+        .replace("__CUSTOM_IMPORT__\n", custom_import)
+        .replace("__CUSTOM_PREF__", custom_pref)
+        .replace("__DESIGN_BADGE__", design_badge)
+        .replace("__PREF_PROP__", pref_prop)
+    )

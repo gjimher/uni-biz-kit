@@ -4,6 +4,10 @@
   "currency": "USD",
   "locale": "en-US",
   "number_locale": "en-US",
+  // Design mode also ships in production builds: authenticated users keep a
+  // personal design in the generated _design table; admins review them all.
+  "designer": "production",
+  "designer_admin_role": "admin",
   "menu": [
     {
       "label": "Catalog",

@@ -283,15 +283,22 @@ def generate_field_components(
     exclude_fields: List[str] = None,
     many_to_many_links: List[Dict[str, Any]] = None,
     parent_workflow: Dict[str, Any] = None,
+    customization: bool = True,
 ) -> Dict[str, str]:
     imports = []
     list_fields = []
-    create_fields = []
-    edit_fields = []
+    # Create/edit forms are built as named entries: a field name, or a composite
+    # block name (prefill group) whose lines accumulate under one entry. The
+    # runtime reorders whole entries (renderFormEntries), so blocks move as units.
+    create_entries: Dict[str, List[str]] = {}
+    edit_entries: Dict[str, List[str]] = {}
     show_fields = []
     child_tabs = []
     filter_fields = []
     m2m_edit_fields = []
+
+    def _entry(entries: Dict[str, List[str]], name: str) -> List[str]:
+        return entries.setdefault(name, [])
 
     exclude_fields = exclude_fields or []
 
@@ -300,7 +307,7 @@ def generate_field_components(
     m2m_grid_pos = 0
 
     list_fields.append(("id_presentation", '<TextField source="id_presentation" label="Id" />'))
-    show_fields.append('<TextField source="id_presentation" label="Id" />')
+    show_fields.append(("id_presentation", '<TextField source="id_presentation" label="Id" />'))
 
     # Track which prefill group headers have been inserted
     added_prefill_headers = set()
@@ -404,8 +411,8 @@ def generate_field_components(
         if prefill_group_name and prefill_group_name not in added_prefill_headers:
             comp_name = f"PREFILL_{prefill_group_name.upper()}_FOR_{concept['name'].upper()}"
             header_item = f"        <Grid item xs={{12}}><{comp_name} /></Grid>"
-            create_fields.append(header_item)
-            edit_fields.append(header_item)
+            _entry(create_entries, prefill_group_name).append(header_item)
+            _entry(edit_entries, prefill_group_name).append(header_item)
             create_grid_pos = 0
             edit_grid_pos = 0
             added_prefill_headers.add(prefill_group_name)
@@ -505,7 +512,11 @@ def generate_field_components(
 
         elif field["type"] == "json":
             json_layout = " multiline rows={4}" if field["size"] == "l" else ""
-            input_html = f'          <TextInput source="{field_name}" format={{value => value == null ? "" : JSON.stringify(value, null, 2)}} parse={{value => value ? JSON.parse(value) : null}}{json_layout} fullWidth margin="none" size="small" disabled{label_prop} />'
+            # Editability follows field permissions (e.g. the designer reviewer
+            # role edits _design.design); without auth (or without the
+            # customization system) json stays read-only as before.
+            json_disabled = disabled_prop if (customization and security_config["authentication_required"]) else " disabled"
+            input_html = f'          <TextInput source="{field_name}" format={{value => value == null ? "" : JSON.stringify(value, null, 2)}} parse={{value => value ? JSON.parse(value) : null}}{json_layout} fullWidth margin="none" size="small"{json_disabled}{label_prop} />'
 
         elif field["type"] == "enum":
             enum_values = field["enum_values"]
@@ -562,31 +573,47 @@ def generate_field_components(
         if list_html and (visibility != "internal" or field_name == "state"):
             list_fields.append((field_name, list_html))
         if show_html and visibility != "internal":
-            show_fields.append(show_html)
+            show_fields.append((field_name, show_html))
 
         if visibility != "internal":
             if input_html:
+                # CGrid (components/customization.jsx) applies the runtime
+                # presentation customizations: per-role field hiding, label and
+                # width overrides from presentation-custom-NN.jsonc. `entry` is
+                # the reorder unit the field belongs to (its prefill block).
+                # With designer 'off' no customization system exists and the
+                # field is a plain grid cell, as before the feature.
+                entry_name = prefill_group_name or field_name
+                if customization:
+                    entry_prop = f' entry="{entry_name}"' if prefill_group_name else ''
+                    cgrid_open = f'        <CGrid concept="{concept["name"]}" field="{field_name}"{entry_prop} {grid_props}>'
+                    cgrid_close = "        </CGrid>"
+                else:
+                    cgrid_open = f'        <Grid item {grid_props}>'
+                    cgrid_close = "        </Grid>"
                 if visibility == "editable":
-                    create_grid_pos = update_grid(create_grid_pos, width_units, create_fields)
-                    create_fields.append(f"        <Grid item {grid_props}>")
-                    create_fields.append(input_html)
-                    create_fields.append(f"        </Grid>")
+                    create_lines = _entry(create_entries, entry_name)
+                    create_grid_pos = update_grid(create_grid_pos, width_units, create_lines)
+                    create_lines.append(cgrid_open)
+                    create_lines.append(input_html)
+                    create_lines.append(cgrid_close)
 
                     if concept["_type"] == "recursive_part_of" and field.get("subtype") == "part_of":
                         remaining = 12 - (create_grid_pos % 12)
                         if remaining < 12 and remaining > 0:
-                            create_fields.append(f'        <Grid item xs={{12}} sm={{{remaining}}} />')
+                            create_lines.append(f'        <Grid item xs={{12}} sm={{{remaining}}} />')
                             create_grid_pos += remaining
 
-                edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
-                edit_fields.append(f"        <Grid item {grid_props}>")
-                edit_fields.append(input_html)
-                edit_fields.append(f"        </Grid>")
+                edit_lines = _entry(edit_entries, entry_name)
+                edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_lines)
+                edit_lines.append(cgrid_open)
+                edit_lines.append(input_html)
+                edit_lines.append(cgrid_close)
 
                 if concept["_type"] == "recursive_part_of" and field.get("subtype") == "part_of":
                     remaining = 12 - (edit_grid_pos % 12)
                     if remaining < 12 and remaining > 0:
-                        edit_fields.append(f'        <Grid item xs={{12}} sm={{{remaining}}} />')
+                        edit_lines.append(f'        <Grid item xs={{12}} sm={{{remaining}}} />')
                         edit_grid_pos += remaining
 
         if field["type"] == "relation_to_many":
@@ -609,8 +636,9 @@ def generate_field_components(
             </Datagrid>
           </ReferenceManyField>
         </Grid>"""
-                edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_fields)
-                edit_fields.append(ref_many)
+                edit_lines = _entry(edit_entries, field["name"])
+                edit_grid_pos = update_grid(edit_grid_pos, width_units, edit_lines)
+                edit_lines.append(ref_many)
 
     if many_to_many_links:
         for link_info in many_to_many_links:
@@ -637,19 +665,18 @@ def generate_field_components(
           <ChipField source="id_presentation" />
         </SingleFieldList>
       </ReferenceArrayField>"""
-            show_fields.append(show_block)
+            show_fields.append((field_name, show_block))
 
     concept_name = concept["name"]
     all_names = [f[0] for f in list_fields]
     result_names = presentation_config.get("_list_fields", {}).get(concept_name, all_names)
-
     html_map = {name: html for name, html in list_fields}
-    # Emit the default columns first (their order defines the default view),
-    # then every remaining column; the extras are hidden through the
-    # DatagridConfigurable `omit` prop until the user selects them.
+    # Default (visible) columns from the evaluated list_field_rules DSL; the
+    # remaining pool columns stay available through the column selector. The
+    # runtime split into order/omit happens in customizationConfig.js so
+    # presentation-custom overlays can change it per role.
+    default_names = [name for name in result_names if name in html_map]
     extra_names = [name for name in all_names if name not in result_names]
-    final_list_fields = [html_map[name] for name in result_names if name in html_map] \
-                      + [html_map[name] for name in extra_names]
 
     # Filters follow the full column set, so a user-added column can be filtered
     # too. The id_presentation search keeps alwaysOn only when it is a default
@@ -658,14 +685,27 @@ def generate_field_components(
     final_filter_fields = [filter_html_map[name] for name in result_names if name in filter_html_map] \
                         + [filter_html_map[name].replace(' alwaysOn', '') for name in extra_names if name in filter_html_map]
 
+    # Old-style inline outputs, used by the designer-'off' emission (columns
+    # and show fields baked into the resource, defaults first then the extras
+    # hidden through DatagridConfigurable `omit`).
+    inline_extra_names = [name for name in all_names if name not in default_names]
+    inline_list_fields = [html_map[name] for name in default_names] \
+                       + [html_map[name] for name in inline_extra_names]
+
     return {
         'imports': '\n'.join(imports),
-        'list_fields': '\n'.join(final_list_fields),
-        'create_fields': '\n'.join(create_fields),
-        'edit_fields': '\n'.join(edit_fields),
+        'list_column_entries': list_fields,
+        'list_names': all_names,
+        'list_default_names': default_names,
+        'list_fields_inline': '\n'.join(inline_list_fields),
+        'list_omit_json': json.dumps(inline_extra_names),
+        'show_fields_inline': '\n'.join(html for _, html in show_fields),
+        'create_fields': '\n'.join(line for lines in create_entries.values() for line in lines),
+        'edit_fields': '\n'.join(line for lines in edit_entries.values() for line in lines),
+        'create_form_entries': [(name, '\n'.join(lines)) for name, lines in create_entries.items()],
+        'edit_form_entries': [(name, '\n'.join(lines)) for name, lines in edit_entries.items()],
         'm2m_edit_fields': '\n'.join(m2m_edit_fields),
-        'show_fields': '\n'.join(show_fields),
+        'show_field_entries': show_fields,
         'child_tabs': '\n'.join(child_tabs),
         'filter_fields': ',\n'.join(final_filter_fields),
-        'list_omit_json': json.dumps(extra_names),
     }

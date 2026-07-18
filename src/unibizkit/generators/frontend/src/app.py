@@ -5,6 +5,14 @@ from .presentation.lib import profile as lib_profile
 
 
 def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: bool = False) -> str:
+    if ctx.customization:
+        customization_import = "import { CustomizationProvider } from './components/customization';\n"
+        customization_open = "      <CustomizationProvider>\n"
+        customization_close = "      </CustomizationProvider>\n"
+    else:
+        customization_import = ""
+        customization_open = ""
+        customization_close = ""
     import_statements = []
     resource_components = []
     has_workflows = bool(ctx.workflow_config["_concept_workflow"])
@@ -171,7 +179,7 @@ import {{
   useNavigate as rrUseNavigate,
 }} from 'react-router-dom';
 import {{ dataProvider }} from './dataProvider';
-{layout_import}
+{customization_import}{layout_import}
 {auth_import}
 {sso_redirect_import}
 import {{ PresentationRouter }} from './presentation/PresentationRouter';
@@ -233,7 +241,7 @@ const App = () => (
       routerProvider={{adminRouterProvider}}
       store={{store}}
     >
-      <Routes>
+{customization_open}      <Routes>
 {auth_routes_block}
         <Route path="/admin/*" element={{<>{profile_gate_element}
           <AdminUI{layout_prop}{login_prop}>
@@ -247,7 +255,7 @@ const App = () => (
         </>}} />
         <Route path="/*" element={{<PresentationRouter hasAuthProvider={{{str(has_auth_provider).lower()}}} />}} />
       </Routes>
-    </AdminContext>
+{customization_close}    </AdminContext>
   </HashRouter>
 );
 

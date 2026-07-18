@@ -1,5 +1,5 @@
-def generate() -> str:
-    return """import * as React from 'react';
+def generate(customization: bool) -> str:
+    template = """import * as React from 'react';
 import {
     useRecordContext,
     useNotify,
@@ -25,7 +25,7 @@ import {
 } from '@mui/material';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { useFormContext, useController } from 'react-hook-form';
-
+__CUSTOM_IMPORT__
 // Pure per-record check, also used by the quick-edit table (one call per row).
 export const workflowCanEditRecord = (workflow, record, identity) => {
     if (!workflow || !record) return true;
@@ -134,7 +134,7 @@ export const WorkflowSelector = ({ workflow, resource, canEdit, canAssign = fals
     const record = useRecordContext();
     const notify = useNotify();
     const refresh = useRefresh();
-    const formContext = useFormContext();
+__CUSTOM_HOOK__    const formContext = useFormContext();
     const isDirty = !!formContext?.formState?.isDirty;
     const [pendingState, setPendingState] = React.useState(null);
     const [transitionText, setTransitionText] = React.useState('');
@@ -164,9 +164,7 @@ ${t.text}` : '';
 
     if (!workflow) return null;
 
-    const states = workflow.states;
-    const currentStateName = record?.state || states[0].name;
-
+__STATES_BLOCK__
     const handleRadioClick = (stateName) => {
         if (!canEdit || stateName === currentStateName) return;
         if (isDirty) {
@@ -219,7 +217,7 @@ ${t.text}` : '';
                         <HelpOutlineIcon sx={{ fontSize: 16, cursor: 'help', color: 'text.secondary' }} />
                     </Tooltip>
                 )}
-            </Typography>
+__DESIGN_BADGE__            </Typography>
             <FormControl component="fieldset">
                 <RadioGroup row value={currentStateName} onChange={() => {}}>
                     {states.map(s => {
@@ -280,3 +278,32 @@ ${t.text}` : '';
     );
 };
 """
+
+    if customization:
+        custom_import = "import { useCustomization, DesignBadge } from './customization';\n"
+        custom_hook = "    const custom = useCustomization();\n"
+        states_block = (
+            "    const currentStateName = record?.state || workflow.states[0].name;\n"
+            "    // Presentation customization overlays can hide states per role; the\n"
+            "    // record's current state is always shown so the radio group has a value.\n"
+            "    const hiddenStates = custom && custom.hiddenStates[resource];\n"
+            "    const states = workflow.states.filter(\n"
+            "        s => s.name === currentStateName || !(hiddenStates && hiddenStates.has(s.name))\n"
+            "    );\n"
+        )
+        design_badge = "                <DesignBadge target={{ kind: 'workflow', concept: resource }} />\n"
+    else:
+        custom_import = ""
+        custom_hook = ""
+        states_block = (
+            "    const states = workflow.states;\n"
+            "    const currentStateName = record?.state || states[0].name;\n"
+        )
+        design_badge = ""
+    return (
+        template
+        .replace("__CUSTOM_IMPORT__", custom_import)
+        .replace("__CUSTOM_HOOK__", custom_hook)
+        .replace("__STATES_BLOCK__", states_block)
+        .replace("__DESIGN_BADGE__", design_badge)
+    )

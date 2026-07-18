@@ -11,6 +11,16 @@ and verifies **both** models, each on its own ports (see
 [below](#second-dev-environment-ubk_dev_model)). If `UBK_DEV_MODEL` is not set,
 pytest only works with `models/test-app`.
 
+While the dev server runs, the admin UI offers a [design mode](Frontend.md#design-mode)
+that edits role-scoped presentation overlays visually and saves them back to
+`models/<app>/presentation-custom-NN.jsonc` through a dev-server-only endpoint
+(`/__ubk/presentation-custom`); saved overlays apply on reload without regenerating.
+
+Run `pytest --variations` to execute the suite with the primary `test-app`
+generated using the in-memory CLI override `--designer off`. The model files are
+not modified, and the generated `test-app/` is intentionally left in that mode
+for inspection; a later plain `pytest` regenerates the normal model configuration.
+
 ## One Supabase instance per model
 
 Each model gets its own Supabase instance, in dev and in production. This avoids monoliths, keeps models decoupled and makes deployment straightforward (see [Architecture.md](Architecture.md#one-supabase-instance-per-model)). The `bin/dev-*` scripts below operate the instance of the app they live in.

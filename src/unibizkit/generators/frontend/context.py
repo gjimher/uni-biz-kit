@@ -15,4 +15,14 @@ class Context:
     workflow_config: Dict[str, Any]
     validations_config: Dict[str, Any]
     integrations_config: Dict[str, Any]
+    presentation_custom_config: Dict[str, Any]
     output_dir: Path
+
+    @property
+    def customization(self) -> bool:
+        """Whether the presentation customization system is generated at all.
+
+        designer 'off' removes it entirely: the emitted app matches the
+        pre-customization output (no runtime merge engine, no design tools).
+        """
+        return self.presentation_config["designer"] != "off"

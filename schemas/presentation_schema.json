@@ -28,6 +28,16 @@
       "description": "The ISO 4217 currency code to be used in the application. Examples: 'EUR' for Euro (€), 'USD' for US Dollar ($), 'GBP' for British Pound (£).",
       "default": "EUR"
     },
+    "designer": {
+      "type": "string",
+      "enum": ["off", "dev", "production"],
+      "default": "dev",
+      "description": "Where the presentation design mode is available. 'off': the customization system is not generated at all — the emitted app matches the pre-customization output and presentation-custom-NN.jsonc files are rejected. 'dev': design mode on the Vite dev server only, editing the model's presentation-custom-NN.jsonc overlay files (the design tools are excluded from builds; the overlay runtime always ships). 'production': additionally ships the design tools in production builds as per-user personalization — each authenticated user edits their own design, stored in the generated '_design' table and applied on top of the model overlays. Requires 'authentication_required'."
+    },
+    "designer_admin_role": {
+      "type": "string",
+      "description": "Role that reviews end-user personalizations: it gets full access to the '_design' table plus a 'Customization' menu section listing every user's design (editable and deletable). Requires designer 'production' and must be a role defined in security.jsonc."
+    },
     "menu": {
       "type": "array",
       "description": "Custom left menu structure. If not provided, a flat list of all resources is shown.",
