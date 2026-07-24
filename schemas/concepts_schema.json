@@ -21,6 +21,19 @@
       "type": "string",
       "description": "Application description"
     },
+    "versioning": {
+      "type": "object",
+      "description": "Record history configuration. When admin_role is set, that role can inspect the global _version audit resource.",
+      "properties": {
+        "admin_role": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional role allowed to inspect all version events from Operations > Versions."
+        }
+      },
+      "additionalProperties": false,
+      "default": {}
+    },
     "concepts": {
       "type": "array",
       "description": "List of business concepts",
@@ -51,6 +64,11 @@
             "description": "Expected data volume (s: <100, m: <10000, l: >10000)",
             "enum": ["s", "m", "l"],
             "default": "s"
+          },
+          "versioned": {
+            "type": "boolean",
+            "description": "Whether changes to this concept are recorded. Defaults to false. A non-recursive part_of concept inherits this value from its parent and must not declare it.",
+            "default": false
           },
           "id_presentation": {
             "type": "object",

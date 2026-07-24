@@ -98,14 +98,32 @@ export const dataProvider = {{
             const {{ resource: joinResource, linkField, targetField }} = config[field];
             const newIds = m2mIds[field];
 
-                            // Delete existing links
-                            await supabaseClient.from(joinResource).delete().eq(`"${{linkField}}"`, id);
-                            // Insert new links
-                            if (newIds && newIds.length > 0) {{                const rows = newIds.map(targetId => ({{
+            // Diff the join rows instead of delete+reinsert. Besides avoiding
+            // unnecessary writes, this keeps relation history limited to links
+            // the user actually added or removed.
+            const {{ data: existingRows, error: existingError }} = await supabaseClient
+                .from(joinResource)
+                .select(`"${{targetField}}"`)
+                .eq(`"${{linkField}}"`, id);
+            if (existingError) throw existingError;
+            const existingIds = (existingRows || []).map(row => row[targetField]);
+            const wantedIds = newIds || [];
+            const removedIds = existingIds.filter(existingId => !wantedIds.some(wantedId => String(wantedId) === String(existingId)));
+            const addedIds = wantedIds.filter(wantedId => !existingIds.some(existingId => String(existingId) === String(wantedId)));
+            if (removedIds.length > 0) {{
+                const {{ error }} = await supabaseClient.from(joinResource)
+                    .delete()
+                    .eq(`"${{linkField}}"`, id)
+                    .in(`"${{targetField}}"`, removedIds);
+                if (error) throw error;
+            }}
+            if (addedIds.length > 0) {{
+                const rows = addedIds.map(targetId => ({{
                     [linkField]: id,
                     [targetField]: targetId
                 }}));
-                await supabaseClient.from(joinResource).insert(rows);
+                const {{ error }} = await supabaseClient.from(joinResource).insert(rows);
+                if (error) throw error;
             }}
         }}));
         Object.assign(result.data, m2mIds);

@@ -122,6 +122,71 @@ def test_special_required_default():
             pass
 
 
+@pytest.mark.parametrize("parent_versioned", [False, True])
+def test_part_of_concepts_inherit_versioning(parent_versioned):
+    schema_content = {
+        "version": "1.0.0",
+        "name": "Versioning inheritance",
+        "concepts": [
+            {
+                "name": "parent",
+                "versioned": parent_versioned,
+                "fields": [{"name": "name", "type": "string"}],
+                "id_presentation": {"fields": ["name"]},
+            },
+            {
+                "name": "child",
+                "fields": [{
+                    "name": "parent", "type": "relation_to_one",
+                    "subtype": "part_of", "target": "parent",
+                }],
+                "id_presentation": {"fields": ["parent"]},
+            },
+        ],
+    }
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        (root / "concepts.jsonc").write_text(json.dumps(schema_content))
+        (root / "presentation.jsonc").write_text("{}")
+        (root / "security.jsonc").write_text('{"authentication_required":false}')
+        _write_deployment(root)
+        loader = SchemaLoader()
+        loaded = loader.load_and_validate(str(root / "concepts.jsonc"))
+        concepts = {concept["name"]: concept for concept in loaded["concepts"]}
+        assert concepts["parent"]["versioned"] is parent_versioned
+        assert concepts["child"]["versioned"] is parent_versioned
+
+
+def test_part_of_concept_cannot_override_parent_versioning():
+    schema_content = {
+        "version": "1.0.0",
+        "name": "Invalid versioning override",
+        "concepts": [
+            {
+                "name": "parent", "versioned": True,
+                "fields": [{"name": "name", "type": "string"}],
+                "id_presentation": {"fields": ["name"]},
+            },
+            {
+                "name": "child", "versioned": False,
+                "fields": [{
+                    "name": "parent", "type": "relation_to_one",
+                    "subtype": "part_of", "target": "parent",
+                }],
+                "id_presentation": {"fields": ["parent"]},
+            },
+        ],
+    }
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        (root / "concepts.jsonc").write_text(json.dumps(schema_content))
+        (root / "presentation.jsonc").write_text("{}")
+        (root / "security.jsonc").write_text('{"authentication_required":false}')
+        _write_deployment(root)
+        with pytest.raises(SchemaValidationError, match="must inherit 'versioned'"):
+            SchemaLoader().load_and_validate(str(root / "concepts.jsonc"))
+
+
 def test_optional_relation_defaults_to_set_null():
     schema_content = {
         "version": "1.0.0",

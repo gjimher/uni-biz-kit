@@ -215,6 +215,8 @@ class SchemaProcessor:
             # state_info (workflow history JSON) is never a useful list column
             # or filter; state stays in the pool so rules can position it.
             pool = ["id_presentation"] + [f["name"] for f in concept["fields"] if f.get("_fe_visibility", "visible") != "internal" and f["name"] != "state_info"]
+            if concept.get("_be_version_history"):
+                pool.append("_updated_at")
             
             # Level 1
             rule1 = get_matched_rule(c_name, l1_rules) or "*"
@@ -1326,7 +1328,8 @@ class SchemaProcessor:
                             'my_fk': f"{concept_name}_id",
                             'other_fk': f"{target_name}_id",
                             'field_name': field["name"],
-                            'is_source': True
+                            'is_source': True,
+                            'versioned': concept["versioned"] or target_concept["versioned"],
                         })
 
 
@@ -1356,7 +1359,8 @@ class SchemaProcessor:
                             'my_fk': f"{concept_name}_id",
                             'other_fk': f"{other_name}_id",
                             'field_name': other_concept["plural_name"],
-                            'is_source': False
+                            'is_source': False,
+                            'versioned': concept["versioned"] or other_concept["versioned"],
                         })
 
 

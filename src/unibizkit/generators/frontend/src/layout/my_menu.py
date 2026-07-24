@@ -137,6 +137,14 @@ def generate(ctx: Context) -> str:
     concept_descriptions_json = json.dumps(concept_descriptions)
     integration_roles_json = json.dumps(ctx.integrations_config["roles"])
     has_integrations = str(bool(ctx.integrations_config["integrations"])).lower()
+    version_resource = next((
+        concept["name"] for concept in ctx.concepts
+        if concept.get("_be_version_history")
+    ), None)
+    version_admin_role = (
+        ctx.business_schema["versioning"].get("admin_role")
+        if version_resource else None
+    )
     designer_admin_role = (
         ctx.presentation_config.get("designer_admin_role")
         if ctx.presentation_config["designer"] == "production" else None
@@ -183,6 +191,7 @@ import {{
     AssignmentTurnedIn as MyTasksIcon,
     Settings as OperationsIcon,
     Sync as IntegrationsIcon,
+    History as VersionsIcon,
 {custom_icons}}} from '@mui/icons-material';
 
 const WORKFLOW_PAGE_ROUTES = {{
@@ -194,6 +203,8 @@ const menuItems = {menu_items_json};
 const conceptDescriptions = {concept_descriptions_json};
 const integrationRoles = new Set({integration_roles_json});
 const hasIntegrations = {has_integrations};
+const versionResource = {json.dumps(version_resource)};
+const versionAdminRole = {json.dumps(version_admin_role)};
 {designer_admin_const}
 const SubMenu = ({{ handleToggle, isOpen, name, icon{submenu_badge_param}, children, dense }}) => {{
     const translate = useTranslate();
@@ -237,6 +248,7 @@ export const MyMenu = () => {{
         setState(state => ({{ ...state, [menu]: !state[menu] }}));
     }};
     const canOperateIntegrations = hasIntegrations && (identity?.roles || []).some(role => integrationRoles.has(role));
+    const canOperateVersions = versionAdminRole && (identity?.roles || []).includes(versionAdminRole);
 {items_setup}
     return (
         <Menu>
@@ -247,14 +259,15 @@ export const MyMenu = () => {{
                 <ListItemText primary="Home" />
             </ListItemButton>
              <RenderMenu items={{{render_items}}} state={{state}} handleToggle={{handleToggle}} />{root_add_badge}
-             {{canOperateIntegrations && <SubMenu
+             {{(canOperateIntegrations || canOperateVersions) && <SubMenu
                 name="Operations"
                 icon={{<OperationsIcon />}}
                 isOpen={{state.Operations}}
                 handleToggle={{() => handleToggle('Operations')}}
              >
-                <Menu.Item to="/_integration" primaryText="Integrations" leftIcon={{<IntegrationsIcon />}} />
-                <Menu.Item to="/_integration_run" primaryText="Integration runs" leftIcon={{<IntegrationsIcon />}} />
+                {{canOperateIntegrations && <Menu.Item to="/_integration" primaryText="Integrations" leftIcon={{<IntegrationsIcon />}} />}}
+                {{canOperateIntegrations && <Menu.Item to="/_integration_run" primaryText="Integration runs" leftIcon={{<IntegrationsIcon />}} />}}
+                {{canOperateVersions && <Menu.Item to={{`/${{versionResource}}`}} primaryText="Versions" leftIcon={{<VersionsIcon />}} />}}
              </SubMenu>}}{customization_submenu}
         </Menu>
     );

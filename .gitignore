@@ -50,6 +50,7 @@ final-test-output/
 # Test coverage
 .coverage
 htmlcov/
+.playwright-mcp/
 
 # Python cache
 .pytest_cache/

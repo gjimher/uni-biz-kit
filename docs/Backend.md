@@ -51,12 +51,13 @@ Each concept becomes a table plus its CRUD UI. Example (from `models/b2c-app/con
 
 * `id_presentation` — how records are labelled and referenced across the UI (see [Frontend.md](Frontend.md#record-labels-id_presentation)).
 * `documents` — enables file/image attachments per record, stored in Supabase Storage buckets. `tags` names the attachment slots; `versioned: true` keeps historical versions per tag instead of replacing them.
+* `versioned` — records inserts, updates and deletes in the generated `_version` audit table. It defaults to `false`. A `part_of` child inherits the effective value from its parent and cannot declare it independently.
 * `checks` — SQL check constraints at concept level.
 * `data_size` — expected volume hint.
 
 ### Field types
 
-`string`, `markdown`, `integer`, `decimal`, `enum`, `boolean`, `date`, `datetime`, `relation_to_one`, `relation_to_many`, `prefill`.
+`string`, `markdown`, `integer`, `decimal`, `enum`, `boolean`, `date`, `datetime`, `json`, `relation_to_one`, `relation_to_many`, `prefill`.
 
 Relations declare their `target` concept. A `relation_to_one` also declares a `subtype`:
 
@@ -96,6 +97,48 @@ A `calculated` field is read-only in the UI; its value is produced by one of the
 | `by_rules` | The field is written by the [business rule](#business-rules-rulesjsonc) whose `update` action targets it — a FEEL rule that runs in an edge function, sees the whole record, and computes what SQL cannot | `order.shipping_costs` from the order total |
 
 A SQL expression is any PostgreSQL expression, so it can also reference a column by quoted identifier — including the internal columns injected on [profile concepts](Security.md#profile-concepts). The `customer.email` field uses `"_user_email"` to expose the logged-in user's auth email as a read-only column.
+
+### Record history and versioning
+
+Set `"versioned": true` on an aggregate root to audit it and every concept
+owned through `part_of`. A non-recursive child must not declare the property:
+its value always follows its parent. A self-referential `part_of` concept may
+declare it because it is its own aggregate root.
+
+PostgreSQL triggers append immutable `_version` rows for `INSERT`, `UPDATE` and
+`DELETE`. Each row stores `concept`, its integer `concept_id`, a snapshot of its
+human-readable `concept_id_presentation`, the aggregate `root_concept` with its
+integer `root_concept_id` and presentation snapshot, change type (`fields`,
+`relations` or `documents`), operation, authenticated user, `txid_current()`,
+the complete previous JSON value and a JSON object with only the new changed
+values. The inherited `_updated_at` column is the event timestamp. Presentation
+values are deliberately historical snapshots; record lookup and restoration
+always use the integer ids. Changes to m:n join tables are included when either
+endpoint is versioned. Those tables receive their own serial `id` while keeping
+the endpoint pair unique. Document metadata is included when both the concept
+and its `documents` configuration are versioned; document binaries remain in
+Storage.
+
+Edit and show views expose the aggregate history in a filtered popup. Its
+detail compares the old value (grey and struck through) with the new value and
+also exposes the JSON snapshots for manual recovery. From an edit form an
+update can copy the previous values back into the form for review; saving is
+always explicit. Calculated/backend-managed fields, `status*`/`state*`,
+`part_of` links, inserted or deleted rows and documents are informational only.
+An update to an existing `part_of` child opens that child's edit form; if the
+row no longer exists it cannot be restored automatically.
+
+An optional application-level administrator enables the global audit browser:
+
+```json
+"versioning": { "admin_role": "admin" }
+```
+
+That role sees **Operations → Versions** and can filter all audit rows by
+transaction, user, concept, date, type and operation. Other authenticated users
+can only read history whose aggregate root is visible to them through the
+root concept's RLS policies. Clients never receive insert, update or delete
+access to `_version`.
 
 ## Validations (`validations/*.csv`)
 

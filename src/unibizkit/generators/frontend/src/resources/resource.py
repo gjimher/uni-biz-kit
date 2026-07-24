@@ -88,6 +88,29 @@ def _generate_recursive_dialogs(
     create_comp_name = f"CREATE_{resource_name.upper()}_FOR_{parent_name.upper()}"
     edit_comp_name = f"EDIT_{resource_name.upper()}_FOR_{parent_name.upper()}"
     validate_prop = f" validate={{validate_{resource_name}_related_fields}}" if _has_validations(ctx, concept) else ""
+    supports_part_of_revert = concept.get("versioned", False)
+    dialog_record = "editRecord" if supports_part_of_revert else "record"
+    revert_state = f"""
+  const [revertValues, setRevertValues] = React.useState(null);
+  React.useEffect(() => {{
+    const applyPendingRevert = () => {{
+      const pending = consumePendingPartOfRevert('{resource_name}', record?.id);
+      if (!pending) return;
+      setRevertValues(pending.values);
+      setOpen(true);
+      const skipped = pending.skipped?.length ? ` ${{pending.skipped.join('. ')}}` : '';
+      const message = `Previous values copied to the popup. Review and save them.${{skipped}}`;
+      notify(message, {{ type: pending.skipped?.length ? 'warning' : 'info', messageArgs: {{ _: message }} }});
+    }};
+    applyPendingRevert();
+    window.addEventListener('ubk:part-of-revert', applyPendingRevert);
+    return () => window.removeEventListener('ubk:part-of-revert', applyPendingRevert);
+  }}, [notify, record?.id]);
+  const editRecord = revertValues ? {{ ...record, ...revertValues }} : record;
+""" if supports_part_of_revert else ""
+    clear_revert = "\n          setRevertValues(null);" if supports_part_of_revert else ""
+    handle_close = "{ setOpen(false); setRevertValues(null); }" if supports_part_of_revert else "setOpen(false)"
+    revert_save_prop = " alwaysEnable={Boolean(revertValues)}" if supports_part_of_revert else ""
 
     create_comp = f"""
 const {create_comp_name} = ({{ canEditParent = true }}) => {{
@@ -104,7 +127,7 @@ const {create_comp_name} = ({{ canEditParent = true }}) => {{
   const handleClose = () => setOpen(false);
 
   const onSuccess = () => {{
-    notify('{resource_name} created', {{ type: 'info', messageArgs: {{ smart_count: 1 }} }});
+    notify('{resource_name} created', {{ type: 'info', messageArgs: {{ _: '{resource_name} created', smart_count: 1 }} }});
     setOpen(false);
     refresh();
   }};
@@ -132,7 +155,7 @@ const {create_comp_name} = ({{ canEditParent = true }}) => {{
 
     form_content = ""
     if my_children:
-        form_content = f"""<TabbedForm record={{record}} onSubmit={{onSubmit}} syncWithLocation={{false}} toolbar={{<EditToolbar />}}{validate_prop}>
+        form_content = f"""<TabbedForm record={{{dialog_record}}} onSubmit={{onSubmit}} syncWithLocation={{false}} toolbar={{<EditToolbar />}}{validate_prop}>
               <FormTab label="Summary">
                 {workflow_ui}
                 <Grid container rowSpacing={{0}} columnSpacing={{2}}>
@@ -142,7 +165,7 @@ const {create_comp_name} = ({{ canEditParent = true }}) => {{
 {child_tabs}
             </TabbedForm>"""
     else:
-        form_content = f"""<SimpleForm record={{record}} onSubmit={{onSubmit}} toolbar={{<EditToolbar />}}{validate_prop}>
+        form_content = f"""<SimpleForm record={{{dialog_record}}} onSubmit={{onSubmit}} toolbar={{<EditToolbar />}}{validate_prop}>
               {workflow_ui}
               <Grid container rowSpacing={{0}} columnSpacing={{2}}>
 {edit_fields}
@@ -158,13 +181,14 @@ const {edit_comp_name} = ({{ canEditParent = true }}) => {{
   const [update] = useUpdate();
   const {{ permissions }} = usePermissions();
   const canWrite = (permissions?.['{resource_name}']?.includes('edit') || permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write')) && canEditParent;
+{revert_state}
 
   const handleClick = (e) => {{
     e.stopPropagation();
     setOpen(true);
   }};
 
-  const handleClose = () => setOpen(false);
+  const handleClose = () => {handle_close};
 
   const onSubmit = (data) => {{
     update(
@@ -172,12 +196,14 @@ const {edit_comp_name} = ({{ canEditParent = true }}) => {{
       {{ id: record.id, data: data, previousData: record }},
       {{
         onSuccess: () => {{
-          notify('{resource_name} updated', {{ type: 'info', messageArgs: {{ smart_count: 1 }} }});
+          notify('{resource_name} updated', {{ type: 'info', messageArgs: {{ _: '{resource_name} updated', smart_count: 1 }} }});
           setOpen(false);
+{clear_revert}
           refresh();
         }},
         onError: (error) => {{
-          notify('Error: ' + error.message, {{ type: 'warning' }});
+          const message = 'Error: ' + error.message;
+          notify(message, {{ type: 'warning', messageArgs: {{ _: message }} }});
         }},
         mutationMode: 'pessimistic'
       }}
@@ -186,7 +212,7 @@ const {edit_comp_name} = ({{ canEditParent = true }}) => {{
 
   const EditToolbar = props => (
     <Toolbar {{...props}}>
-      <SaveButton disabled={{!canWrite}} />
+      <SaveButton disabled={{!canWrite}}{revert_save_prop} />
       {{canWrite && <DeleteButton mutationMode="pessimistic" redirect={{false}} mutationOptions={{{{ onSuccess: () => {{ setOpen(false); refresh(); }} }}}} />}}
     </Toolbar>
   );
@@ -490,7 +516,7 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
             "Autocomplete as MuiValidationAutocomplete",
             "TextField as MuiValidationTextField",
         ])
-    mui_imports_str = ", ".join(mui_imports)
+    mui_imports_str = ", ".join(dict.fromkeys(mui_imports))
 
     child_dialog_components_list = []
     visited_dialogs = set()
@@ -548,6 +574,17 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         component_imports.append("import { useQueryClient } from '@tanstack/react-query';")
     if has_documents:
         component_imports.append(f"import {{ DocumentTab }} from '../../components/document_tab';")
+    if is_versioned:
+        history_imports = ["RecordHistoryButton"]
+        if owned_children:
+            history_imports.append("consumePendingPartOfRevert")
+        component_imports.append(
+            f"import {{ {', '.join(history_imports)} }} from '../../components/record_history';"
+        )
+        component_imports.append(
+            f"import {{ {history_list_component} }} from "
+            f"'../{history_resource}/{history_resource}';"
+        )
     if "ReorderableDatagrid" in field_components["child_tabs"] or "ReorderableDatagrid" in child_dialog_components:
         component_imports.append(f"import {{ ReorderableDatagrid }} from '../../components/reorderable_datagrid';")
     if "RecursiveParentSelector" in field_components["create_fields"] or "RecursiveParentSelector" in field_components["edit_fields"]:
@@ -584,6 +621,11 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     component_imports_str = "\n".join(component_imports)
 
     id_field_edit = ""
+    history_target_id = f"{resource_name}-versions-action"
+    history_edit_bridge = (
+        f'<RecordHistoryButton concept="{resource_name}" canRevert ListComponent={{{history_list_component}}} buttonTargetId="{history_target_id}" />'
+        if is_versioned else ""
+    )
 
     relations_tab = ""
     if field_components.get("m2m_edit_fields"):
@@ -597,13 +639,23 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     edit_inner_component = ""
     edit_actions = ""
     edit_actions_prop = ""
-    if any("edit" in action["placement"] for action in concept.get("actions", [])):
-        edit_actions = f"const {resource_name.upper()}_EDIT_ACTIONS = () => <TopToolbar><ConceptActions placement=\"edit\" /><ShowButton /></TopToolbar>;"
+    has_edit_actions = any("edit" in action["placement"] for action in concept.get("actions", []))
+    if has_edit_actions or is_versioned:
+        concept_actions = '<ConceptActions placement="edit" />' if has_edit_actions else ''
+        history_target = f'<span id="{history_target_id}" />' if is_versioned else ''
+        edit_actions = f"const {resource_name.upper()}_EDIT_ACTIONS = () => <TopToolbar>{concept_actions}<ShowButton />{history_target}</TopToolbar>;"
         edit_actions_prop = f" actions={{<{resource_name.upper()}_EDIT_ACTIONS />}}"
     show_actions = ""
     show_actions_prop = ""
-    if any("show" in action["placement"] for action in concept.get("actions", [])):
-        show_actions = f"const {resource_name.upper()}_SHOW_ACTIONS = () => <TopToolbar><ConceptActions placement=\"show\" /></TopToolbar>;"
+    has_show_actions = any("show" in action["placement"] for action in concept.get("actions", []))
+    if has_show_actions or is_versioned:
+        concept_actions = '<ConceptActions placement="show" />' if has_show_actions else ''
+        edit_action = '<EditButton />' if is_versioned else ''
+        history_action = (
+            f'<RecordHistoryButton concept="{resource_name}" ListComponent={{{history_list_component}}} />'
+            if is_versioned else ''
+        )
+        show_actions = f"const {resource_name.upper()}_SHOW_ACTIONS = () => <TopToolbar>{concept_actions}{edit_action}{history_action}</TopToolbar>;"
         show_actions_prop = f" actions={{<{resource_name.upper()}_SHOW_ACTIONS />}}"
     validate_prop = f" validate={{validate_{resource_name}_related_fields}}" if _has_validations(ctx, concept) else ""
 
@@ -650,6 +702,7 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         if owned_children or many_to_many_links or has_documents:
             form_content = f"""<TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} workflowCanAssign={{canAssign}} />}}{validate_prop}>
       <FormTab label="Summary">
+        {history_edit_bridge}
         <WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" canEdit={{canEdit}} canAssign={{canAssign}} />
         <Box sx={{{{ pointerEvents: canEdit ? 'auto' : 'none', opacity: canEdit ? 1 : 0.6 }}}}>
           <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
@@ -663,6 +716,7 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     </TabbedForm>"""
         else:
             form_content = f"""<SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}" workflowCanEdit={{canEdit}} workflowCanAssign={{canAssign}} />}}{validate_prop}>
+      {history_edit_bridge}
       <WorkflowSelector workflow={{{wf_json}}} resource="{resource_name}" canEdit={{canEdit}} canAssign={{canAssign}} />
       <Box sx={{{{ pointerEvents: canEdit ? 'auto' : 'none', opacity: canEdit ? 1 : 0.6 }}}}>
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
@@ -689,6 +743,7 @@ const {inner_comp_name} = () => {{
         edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}}{edit_actions_prop} {{...props}}>
     <TabbedForm toolbar={{<CustomEditToolbar resource="{resource_name}"{allow_delete_prop} />}}{validate_prop}>
       <FormTab label="Summary">
+        {history_edit_bridge}
         <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
           {edit_entries_render}
         </Grid>

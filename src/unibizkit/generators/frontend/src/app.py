@@ -32,6 +32,10 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
             f"{{(permissions?.['{resource_name}']?.includes('write') || permissions?.['*']?.includes('write')) ? {resource_name.upper()}_CREATE : null}}"
             if concept.get("_fe_allow_create", True) else "{null}"
         )
+        edit_component = (
+            f"{{ {resource_name.upper()}_EDIT }}"
+            if concept.get("_fe_allow_edit", True) else "{null}"
+        )
         import_statements.append(
             f"import {{ {resource_name.upper()}_LIST, {resource_name.upper()}_CREATE, "
             f"{resource_name.upper()}_EDIT, {resource_name.upper()}_SHOW }} "
@@ -42,7 +46,7 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
               <Resource name="{resource_name}"
                   list={{ {resource_name.upper()}_LIST }}
                   create={create_component}
-                  edit={{ {resource_name.upper()}_EDIT }}
+                  edit={edit_component}
                   show={{ {resource_name.upper()}_SHOW }}
               />
           ) : null}}"""
@@ -234,7 +238,7 @@ const store = localStorageStore(undefined, '{store_prefix}');
 {sso_redirect_helpers}
 
 const App = () => (
-  <HashRouter>{sso_redirect_element}
+  <HashRouter future={{{{ v7_startTransition: true, v7_relativeSplatPath: true }}}}>{sso_redirect_element}
     <AdminContext
       dataProvider={{dataProvider}}{auth_prop}{i18n_prop}
       basename="/admin"

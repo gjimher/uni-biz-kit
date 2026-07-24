@@ -35,11 +35,12 @@ def generate_join_tables(concepts: List[Dict[str, Any]], concept_map: Dict[str, 
     for join_table_name, table1, table2 in _join_table_pairs(concepts, concept_map):
         join_tables.append(f"""
 CREATE TABLE "{join_table_name}" (
+  "id" SERIAL PRIMARY KEY,
   "{table1}_id" INTEGER NOT NULL,
   "{table2}_id" INTEGER NOT NULL,
   "_created_at" TIMESTAMP WITH TIME ZONE,
   "_updated_at" TIMESTAMP WITH TIME ZONE,
-  PRIMARY KEY ("{table1}_id", "{table2}_id"),
+  UNIQUE ("{table1}_id", "{table2}_id"),
   FOREIGN KEY ("{table1}_id") REFERENCES "{table1}"("id") ON DELETE CASCADE,
   FOREIGN KEY ("{table2}_id") REFERENCES "{table2}"("id") ON DELETE CASCADE
 );

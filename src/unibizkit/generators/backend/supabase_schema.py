@@ -10,6 +10,7 @@ from .schema_parts.workflow_tasks import (
     generate_task_assignment_email_triggers,
     generate_workflow_tasks_view,
 )
+from .schema_parts.versioning import generate_versioning_access_sql, generate_versioning_sql
 from . import integrations, rules
 
 
@@ -70,12 +71,14 @@ def generate(ctx: Context) -> str:
     sql_parts.extend(generate_workflow_tasks_view(ctx.workflow_config, ctx.security_config))
     sql_parts.extend(generate_task_assignment_email_triggers(ctx.workflow_config, ctx.security_config))
     sql_parts.extend(integrations.generate_integration_sql(ctx))
+    sql_parts.extend(generate_versioning_sql(ctx.concepts, ctx.concept_map))
 
     if ctx.security_config["authentication_required"]:
         table_concepts = [c for c in ctx.concepts if c.get("_be_storage", "table") == "table"]
         sql_parts.extend(generate_security_policies(
             table_concepts, ctx.concept_map, ctx.security_config, ctx.workflow_config
         ))
+        sql_parts.extend(generate_versioning_access_sql(ctx.concepts, ctx.concept_map))
 
     # Supabase grants table-level INSERT by default. Narrow that existing grant
     # last, after all generated tables exist, so API roles cannot choose SERIAL ids.

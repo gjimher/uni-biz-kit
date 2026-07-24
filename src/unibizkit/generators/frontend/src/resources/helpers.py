@@ -216,6 +216,8 @@ def get_optimized_react_admin_imports(
         'TextField', 'TextInput', 'required', 'useRecordContext', 'usePermissions',
         'useGetIdentity'
     }
+    if concept.get("_be_version_history"):
+        needed_components.add("DateField")
 
     all_descendants = []
     if owned_children:
@@ -265,7 +267,9 @@ def get_optimized_react_admin_imports(
     presentation_config = concept["id_presentation"]
     if presentation_config["show"]:
         needed_components.update(['TextField', 'TextInput'])
-    if any("show" in action["placement"] for action in concept.get("actions", [])):
+    if concept.get("versioned"):
+        needed_components.update(["TopToolbar", "ShowButton", "EditButton"])
+    elif any("show" in action["placement"] for action in concept.get("actions", [])):
         needed_components.add("TopToolbar")
     if any("edit" in action["placement"] for action in concept.get("actions", [])):
         needed_components.update(["TopToolbar", "ShowButton"])
@@ -308,6 +312,9 @@ def generate_field_components(
 
     list_fields.append(("id_presentation", '<TextField source="id_presentation" label="Id" />'))
     show_fields.append(("id_presentation", '<TextField source="id_presentation" label="Id" />'))
+    if concept.get("_be_version_history"):
+        list_fields.append(("_updated_at", '<DateField source="_updated_at" showTime />'))
+        show_fields.append(("_updated_at", '<DateField source="_updated_at" showTime />'))
 
     # Track which prefill group headers have been inserted
     added_prefill_headers = set()
@@ -328,6 +335,9 @@ def generate_field_components(
         return current_pos
 
     filter_fields.append(("id_presentation", f'  <TextInput label="Search" source="id_presentation@ilike" alwaysOn />'))
+    if concept.get("_be_version_history"):
+        filter_fields.append(("_updated_at_from", '  <TextInput source="_updated_at@gte" type="datetime-local" label="Date from" />'))
+        filter_fields.append(("_updated_at_to", '  <TextInput source="_updated_at@lte" type="datetime-local" label="Date to" />'))
 
     if owned_children:
         for child_info in owned_children:

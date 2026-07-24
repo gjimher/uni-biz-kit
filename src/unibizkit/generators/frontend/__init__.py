@@ -18,7 +18,7 @@ from .src.components import (
     title, reorderable_datagrid, recursive_parent_selector,
     custom_edit_toolbar, document_tab, workflow_selector, field_help_icon,
     markdown_input, import_export, quick_edit, workflow_tasks, deleted_snapshot_reference,
-    concept_actions, precision_datetime_input, customization, list_row_actions
+    concept_actions, precision_datetime_input, customization, record_history, list_row_actions
 )
 from .src.devtools import (
     api as devtools_api, design_badge, design_tools, editors as devtools_editors,
@@ -138,7 +138,11 @@ class ReactAdminGenerator:
             has_auth_provider = True
 
         has_custom_menu = False
-        if ctx.presentation_config.get("menu"):
+        has_operations_menu = bool(ctx.integrations_config["integrations"]) or (
+            any(concept.get("versioned") for concept in ctx.concepts)
+            and bool(ctx.business_schema["versioning"].get("admin_role"))
+        )
+        if ctx.presentation_config.get("menu") or has_operations_menu:
             _write(ctx.output_dir / "src" / "layout" / "MyMenu.jsx", my_menu.generate(ctx))
             _write(ctx.output_dir / "src" / "layout" / "MyLayout.jsx", my_layout.generate(has_auth_provider))
             has_custom_menu = True
@@ -172,6 +176,8 @@ class ReactAdminGenerator:
         _write(ctx.output_dir / "src" / "components" / "concept_actions.jsx", concept_actions.generate())
         if any(ctx.presentation_config["list_row_actions"].values()):
             _write(ctx.output_dir / "src" / "components" / "list_row_actions.jsx", list_row_actions.generate())
+        if any(c.get("versioned") for c in ctx.concepts):
+            _write(ctx.output_dir / "src" / "components" / "record_history.jsx", record_history.generate(ctx))
         if any(f["type"] == "datetime" for c in ctx.concepts for f in c["fields"]):
             _write(ctx.output_dir / "src" / "components" / "precision_datetime_input.jsx", precision_datetime_input.generate())
         if any(f.get("on_delete") == "snapshot_data" for c in ctx.concepts for f in c["fields"]):

@@ -54,14 +54,14 @@ const ReorderableDatagridRow = ({ record, id, index, isReorderable, children, ..
     </Draggable>
 );
 
-const ReorderableDatagridBody = ({ children, localData, isReorderable, ...rest }) => {
+const ReorderableDatagridBody = ({ children, localData, isReorderable }) => {
     const { isPending } = useListContext();
     if (isPending || !localData) return null;
 
     return (
         <Droppable droppableId="datagrid-body" isDropDisabled={!isReorderable}>
             {(provided) => (
-                <tbody ref={provided.innerRef} {...provided.droppableProps} {...rest}>
+                <tbody ref={provided.innerRef} {...provided.droppableProps}>
                     {localData.map((record, index) => (
                         <ReorderableDatagridRow
                             key={record.id}

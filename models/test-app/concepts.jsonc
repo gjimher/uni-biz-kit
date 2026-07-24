@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "name": "Test App",
   "description": "A complete e-commerce business application with products, customers, orders, and categories",
+  "versioning": { "admin_role": "admin" },
   "concepts": [
     {
       "name": "product",
       "plural_name": "products",
       "description": "A product available for sale in the e-commerce platform",
+      "versioned": true,
       "id_presentation": { "fields": ["name"] },
       // documents.versioned: keeps historical versions per tag instead of replacing them
       "documents": { "enabled": true, "versioned": true, "tags": ["img_s", "img_m", "datasheet"] },
@@ -30,6 +32,7 @@
       "name": "category",
       "plural_name": "categories",
       "description": "Product categories",
+      "versioned": true,
       // id_presentation resolves parent.id_presentation recursively (e.g. "Electronics / Keyboards");
       // show:true renders the label as a visible list column.
       "id_presentation": { "fields": ["parent.id_presentation", "name"], "separator": "/", "show": true },
@@ -86,8 +89,9 @@
       "name": "order",
       "plural_name": "orders",
       "description": "Customer orders containing products",
+      "versioned": true,
       "id_presentation": { "fields": ["id"] },
-      "documents": { "enabled": true, "tags": ["invoice", "receipt"] },
+      "documents": { "enabled": true, "versioned": true, "tags": ["invoice", "receipt"] },
       "fields": [
         // related_to: loose reference; deleting a customer does NOT cascade to orders.
         // calculated copy_logged_on_insert(customer): set to the logged-in user's customer record at insert time, then locked (not user-editable).
@@ -133,6 +137,7 @@
       "name": "field_checker",
       "plural_name": "field_checkers",
       "description": "One field of each type, for exercising the generated UI",
+      "versioned": true,
       "id_presentation": { "fields": ["a_string"] },
       "fields": [
         { "name": "a_string", "type": "string", "required": true, "max_length": 100, "description": "Plain short string" },

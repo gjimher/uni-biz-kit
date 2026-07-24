@@ -2334,3 +2334,113 @@ def test_profile_survives_auth_user_deletion():
         """)
         fk_count = cur.fetchone()[0]
         assert fk_count == 0, "customer._user must NOT have a FK to auth.users (federation support)"
+
+
+@pytest.mark.integration
+def test_version_history_is_scoped_by_root_and_client_immutable():
+    """A user sees versions of readable roots; the version admin sees every root."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = False
+
+    def claims(user_id, email, role):
+        return json.dumps({
+            "sub": str(user_id),
+            "email": email,
+            "role": "authenticated",
+            "app_metadata": {"roles": [role]},
+        })
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, email FROM auth.users "
+                "WHERE email IN ('user1@test.com', 'user2@test.com', 'admin@test.com')"
+            )
+            user_ids = {email: user_id for user_id, email in cur.fetchall()}
+            if len(user_ids) != 3:
+                pytest.skip(f"Required users not found. Found: {user_ids}")
+
+            cur.execute("SET LOCAL ROLE authenticated")
+
+            order_ids = {}
+            for email in ("user1@test.com", "user2@test.com"):
+                cur.execute(
+                    "SELECT set_config('request.jwt.claims', %s, true)",
+                    (claims(user_ids[email], email, "user"),),
+                )
+                cur.execute("""
+                    INSERT INTO "order" (
+                        order_date, state, shipping_address_street,
+                        shipping_address_city, shipping_address_province,
+                        shipping_address_country
+                    )
+                    VALUES (
+                        CURRENT_TIMESTAMP, 'initial', 'Version RLS test',
+                        'Bilbao', 'Bizkaia', 'Spain'
+                    )
+                    RETURNING id
+                """)
+                order_ids[email] = cur.fetchone()[0]
+
+            for email in ("user1@test.com", "user2@test.com"):
+                cur.execute(
+                    "SELECT set_config('request.jwt.claims', %s, true)",
+                    (claims(user_ids[email], email, "user"),),
+                )
+                cur.execute(
+                    'SELECT root_concept_id FROM "_version" '
+                    "WHERE root_concept = 'order' AND root_concept_id = ANY(%s) "
+                    "ORDER BY root_concept_id",
+                    (list(order_ids.values()),),
+                )
+                assert [row[0] for row in cur.fetchall()] == [order_ids[email]]
+
+            cur.execute(
+                "SELECT set_config('request.jwt.claims', %s, true)",
+                (claims(user_ids["admin@test.com"], "admin@test.com", "admin"),),
+            )
+            cur.execute(
+                'SELECT root_concept_id FROM "_version" '
+                "WHERE root_concept = 'order' AND root_concept_id = ANY(%s) "
+                "ORDER BY root_concept_id",
+                (list(order_ids.values()),),
+            )
+            assert [row[0] for row in cur.fetchall()] == sorted(order_ids.values())
+
+            version_id = None
+            cur.execute(
+                'SELECT id FROM "_version" WHERE root_concept = \'order\' '
+                "AND root_concept_id = %s LIMIT 1",
+                (order_ids["user1@test.com"],),
+            )
+            version_id = cur.fetchone()[0]
+
+            cur.execute("SAVEPOINT client_insert")
+            with pytest.raises(psycopg2.Error):
+                cur.execute(
+                    'INSERT INTO "_version" '
+                    "(concept, concept_id, concept_id_presentation, root_concept, "
+                    "root_concept_id, root_concept_id_presentation, change_type, "
+                    "operation, transaction_id, changed) "
+                    "VALUES ('order', 1, '#1', 'order', 1, '#1', 'fields', "
+                    "'insert', 'client-write', '{}'::jsonb)"
+                )
+            cur.execute("ROLLBACK TO SAVEPOINT client_insert")
+
+            # RLS deliberately represents blocked UPDATE/DELETE as zero visible
+            # target rows instead of revealing that a history row exists.
+            cur.execute(
+                'UPDATE "_version" SET changed_by = %s WHERE id = %s',
+                ("tampered", version_id),
+            )
+            assert cur.rowcount == 0
+            cur.execute('DELETE FROM "_version" WHERE id = %s', (version_id,))
+            assert cur.rowcount == 0
+    finally:
+        conn.rollback()
+        conn.close()

@@ -9,6 +9,7 @@ import pytest
 import os
 import time
 import json
+from pathlib import Path
 from playwright.sync_api import Page, expect, TimeoutError as PlaywrightTimeoutError
 from xprocess import ProcessStarter
 from smtp_mock import smtp_emails as _smtp_emails, smtp_lock as _smtp_lock, extract_links as _extract_links
@@ -46,15 +47,20 @@ def app_server(xprocess, request):
 
     # `vite preview` serves the production build and proxies /api -> Kong (preview.proxy
     # in vite.config.js). The app resolves VITE_SUPABASE_URL against this same origin,
-    # so a single server is enough — no separate dev server needed.
+    # so a single server is enough — no separate dev server needed. strictPort prevents
+    # Vite from silently serving elsewhere while the fixture returns the stale port.
     class Starter(ProcessStarter):
         pattern = "Local:"
         env = os.environ.copy()
-        args = ["npm", "--prefix", frontend_dir, "run", "preview", "--", "--port", str(_PREVIEW_PORT)]
+        args = [
+            "npm", "--prefix", frontend_dir, "run", "preview", "--",
+            "--port", str(_PREVIEW_PORT), "--strictPort",
+        ]
         cwd = frontend_dir
         timeout = 30
 
-    # Always restart so the freshly built bundle is served
+    # Always restart so the freshly built bundle is served. With strictPort,
+    # an unrelated process occupying the configured port fails the fixture.
     try:
         xprocess.getinfo("app_server_pure").terminate()
     except Exception:
@@ -86,7 +92,10 @@ def secondary_app_server(xprocess, request):
     class Starter(ProcessStarter):
         pattern = "Local:"
         env = os.environ.copy()
-        args = ["npm", "--prefix", frontend_dir, "run", "preview", "--", "--port", str(_DUMMY_PREVIEW_PORT)]
+        args = [
+            "npm", "--prefix", frontend_dir, "run", "preview", "--",
+            "--port", str(_DUMMY_PREVIEW_PORT), "--strictPort",
+        ]
         cwd = frontend_dir
         timeout = 30
 
@@ -306,131 +315,6 @@ def test_presentation_customization_as_admin(page: Page, app_server, request):
     expect(page.get_by_role("radio", name="delivered")).to_be_visible()
 
 
-def test_presentation_customization_as_user(page: Page, app_server, request):
-    """Presentation customization overlays, user side (roles: ["user"]):
-    trimmed menu without the Test group, customer.admin_field hidden in the
-    edit form, delivered workflow state hidden in the selector — all on the
-    same production bundle the admin test uses (runtime role scoping).
-    """
-    if request.config.getoption("--variations"):
-        pytest.skip("designer=off variation has no presentation customization runtime")
-    with open(os.path.abspath("test-app/security_extended.json")) as f:
-        user1 = next(u for u in json.load(f)["users"] if "user" in u["roles"])
-
-    page.set_default_timeout(10000)
-    page.goto(app_server + "/#/admin")
-    page.wait_for_timeout(2000)
-
-    page.locator('input[name="email"]').fill(user1["email"])
-    page.locator('input[name="password"]').fill(user1["password"])
-    page.get_by_role("button", name="Sign in").click()
-    expect(page.get_by_text("Sales")).to_be_visible()
-
-    # Menu replaced for users: the Test group is gone.
-    expect(page.get_by_text("Test", exact=True)).to_have_count(0)
-
-    # customer.admin_field is hidden in the user's forms (admins still see it).
-    page.get_by_text("Sales").click()
-    page.get_by_role("menuitem", name="Customers").click()
-    page.locator("tbody tr").first.click()
-    page.locator('input[name="phone"]').wait_for(state="visible")
-    expect(page.locator('input[name="admin_field"]')).to_have_count(0)
-
-    # forms.customer.move puts email first for users (runtime form reorder).
-    expect(page.locator("form input:not([type=hidden])").first).to_have_attribute("name", "email")
-
-    # delivered is hidden for users in the workflow selector (create form:
-    # no record, so no current-state exception applies).
-    page.get_by_text("Sales").click()
-    page.get_by_role("menuitem", name="Orders").click()
-    page.get_by_label("Create").click()
-    expect(page.get_by_role("radio", name="sent")).to_be_visible()
-    expect(page.get_by_role("radio", name="delivered")).to_have_count(0)
-
-
-def test_personal_designer_end_user(page: Page, app_server, request):
-    """designer 'production' per-user personalization on the production bundle:
-    a user edits and saves their own design (stored in the _design table), it
-    persists across logins, it never leaks to other users, and the
-    designer_admin_role reviews it through the Customization menu.
-    """
-    if request.config.getoption("--variations"):
-        pytest.skip("designer=off variation has no personal designer")
-    with open(os.path.abspath("test-app/security_extended.json")) as f:
-        users = json.load(f)["users"]
-    user1 = next(u for u in users if u["email"].startswith("user1"))
-    admin_user = next(u for u in users if "admin" in u["roles"])
-
-    page.set_default_timeout(10000)
-
-    def login(user):
-        page.goto(app_server + "/#/admin")
-        page.wait_for_timeout(2000)
-        user_menu = page.locator('header button[aria-label="Profile"]')
-        if user_menu.is_visible():
-            # Logging out lands on the public portal page; go back to the
-            # admin entry to reach the sign-in form.
-            user_menu.click()
-            page.get_by_role("menuitem", name="Logout").click()
-            page.wait_for_timeout(1000)
-            page.goto(app_server + "/#/admin")
-            page.wait_for_timeout(2000)
-        page.locator('input[name="email"]').fill(user["email"])
-        page.locator('input[name="password"]').fill(user["password"])
-        page.get_by_role("button", name="Sign in").click()
-        expect(page.get_by_text("Sales")).to_be_visible()
-
-    def reset_personalization():
-        # Idempotent cleanup: deleting the (possibly absent) _design row and
-        # reloading leaves this user on the application defaults.
-        page.locator("header").get_by_text("Design", exact=True).click()
-        expect(page.locator("header").get_by_text("My design")).to_be_visible()
-        page.locator("header").get_by_text("My design").click()
-        page.get_by_role("button", name="Reset personalization").click()
-        page.wait_for_timeout(2500)
-
-    # -- user1 personalizes: rename the product.name field label.
-    login(user1)
-    reset_personalization()
-    page.locator("header").get_by_text("Design", exact=True).click()
-    expect(page.locator("header").get_by_text("My design")).to_be_visible()
-    page.get_by_text("Catalog").click()
-    page.get_by_role("menuitem", name="Products").click()
-    page.locator("tbody tr").first.click()
-    page.get_by_label("Customize field product name").click()
-    page.get_by_label("Label override").fill("Nombre propio")
-    page.get_by_role("button", name="Apply to draft").click()
-    expect(page.get_by_label("Nombre propio")).to_be_visible()
-
-    # -- save to the _design table and verify it applies after the reload.
-    page.locator("header").get_by_text("My design").click()
-    page.get_by_role("button", name="Save my design").click()
-    page.wait_for_timeout(3000)
-    expect(page.get_by_label("Nombre propio")).to_be_visible()
-
-    # -- the personalization is user1's only: another user sees the default label.
-    login(admin_user)
-    page.get_by_text("Catalog").click()
-    page.get_by_role("menuitem", name="Products").click()
-    page.locator("tbody tr").first.click()
-    page.locator('input[name="name"]').wait_for(state="visible")
-    expect(page.get_by_label("Nombre propio")).to_have_count(0)
-
-    # -- the reviewer role sees every personalization in Customization/Designer.
-    page.get_by_text("Customization").click()
-    page.get_by_role("menuitem", name="Designer").click()
-    expect(page.get_by_role("cell", name=user1["email"])).to_be_visible()
-
-    # -- cleanup: user1 removes the personalization (keeps reruns deterministic).
-    login(user1)
-    reset_personalization()
-    page.get_by_text("Catalog").click()
-    page.get_by_role("menuitem", name="Products").click()
-    page.locator("tbody tr").first.click()
-    page.locator('input[name="name"]').wait_for(state="visible")
-    expect(page.get_by_label("Nombre propio")).to_have_count(0)
-
-
 def test_profile_completion_dialog_asks_for_missing_fields(page: Page, app_server):
     """
     E2E test of the post-login profile gate: customer.first_name/last_name are
@@ -493,6 +377,133 @@ def test_profile_completion_dialog_asks_for_missing_fields(page: Page, app_serve
         expect(page.get_by_text("Complete your profile")).not_to_be_visible()
     finally:
         conn.close()
+
+
+def test_presentation_customization_as_user(page: Page, app_server, request):
+    """Presentation customization overlays, user side (roles: ["user"]):
+    trimmed menu without the Test group, customer.admin_field hidden in the
+    edit form, delivered workflow state hidden in the selector — all on the
+    same production bundle the admin test uses (runtime role scoping).
+    """
+    if request.config.getoption("--variations"):
+        pytest.skip("designer=off variation has no presentation customization runtime")
+    with open(os.path.abspath("test-app/security_extended.json")) as f:
+        user1 = next(u for u in json.load(f)["users"] if "user" in u["roles"])
+
+    page.set_default_timeout(10000)
+    page.goto(app_server + "/#/admin")
+    page.wait_for_timeout(2000)
+
+    page.locator('input[name="email"]').fill(user1["email"])
+    page.locator('input[name="password"]').fill(user1["password"])
+    page.get_by_role("button", name="Sign in").click()
+    expect(page.get_by_text("Sales")).to_be_visible()
+
+    # Menu replaced for users: the Test group is gone.
+    expect(page.get_by_text("Test", exact=True)).to_have_count(0)
+
+    # customer.admin_field is hidden in the user's forms (admins still see it).
+    page.get_by_text("Sales").click()
+    page.get_by_role("menuitem", name="Customers").click()
+    page.locator("tbody tr").first.click()
+    page.locator('input[name="phone"]').wait_for(state="visible")
+    expect(page.locator('input[name="admin_field"]')).to_have_count(0)
+
+    # forms.customer.move puts email first for users (runtime form reorder).
+    expect(page.locator("form input:not([type=hidden])").first).to_have_attribute("name", "email")
+
+    # accepted is hidden for users in the workflow selector (create form:
+    # no record, so no current-state exception applies).
+    page.get_by_text("Sales").click()
+    page.get_by_role("menuitem", name="Orders").click()
+    page.get_by_label("Create").click()
+    expect(page.get_by_role("radio", name="sent")).to_be_visible()
+    expect(page.get_by_role("radio", name="accepted")).to_have_count(0)
+
+
+def test_personal_designer_end_user(page: Page, app_server, request):
+    """designer 'production' per-user personalization on the production bundle:
+    a user edits and saves their own design (stored in the _design table), it
+    persists across logins, it never leaks to other users, and the
+    designer_admin_role reviews it through the Customization menu.
+    """
+    if request.config.getoption("--variations"):
+        pytest.skip("designer=off variation has no personal designer")
+    with open(os.path.abspath("test-app/security_extended.json")) as f:
+        users = json.load(f)["users"]
+    user1 = next(u for u in users if u["email"].startswith("user1"))
+    admin_user = next(u for u in users if "admin" in u["roles"])
+
+    page.set_default_timeout(10000)
+
+    def login(user):
+        page.goto(app_server + "/#/admin")
+        page.wait_for_timeout(2000)
+        user_menu = page.locator('header button[aria-label="Profile"]')
+        if user_menu.is_visible():
+            # Logging out lands on the public portal page; go back to the
+            # admin entry to reach the sign-in form.
+            user_menu.click()
+            page.get_by_role("menuitem", name="Logout").click()
+            page.wait_for_timeout(1000)
+            page.goto(app_server + "/#/admin")
+            page.wait_for_timeout(2000)
+        page.locator('input[name="email"]').fill(user["email"])
+        page.locator('input[name="password"]').fill(user["password"])
+        page.get_by_role("button", name="Sign in").click()
+        expect(page.get_by_text("Sales")).to_be_visible()
+
+    def reset_personalization():
+        # Idempotent cleanup: deleting the (possibly absent) _design row and
+        # reloading leaves this user on the application defaults.
+        design_switch = page.locator("header").get_by_role("checkbox")
+        if not design_switch.is_checked():
+            page.locator("header").get_by_text("Design", exact=True).click()
+        expect(page.locator("header").get_by_text("My design")).to_be_visible()
+        page.locator("header").get_by_text("My design").click()
+        page.get_by_role("button", name="Reset personalization").click()
+        page.wait_for_timeout(2500)
+
+    # -- user1 personalizes: rename the product.name field label.
+    login(user1)
+    reset_personalization()
+    page.locator("header").get_by_text("Design", exact=True).click()
+    expect(page.locator("header").get_by_text("My design")).to_be_visible()
+    page.get_by_text("Catalog").click()
+    page.get_by_role("menuitem", name="Products").click()
+    page.locator("tbody tr").first.click()
+    page.get_by_label("Customize field product name").click()
+    page.get_by_label("Label override").fill("Nombre propio")
+    page.get_by_role("button", name="Apply to draft").click()
+    expect(page.get_by_label("Nombre propio")).to_be_visible()
+
+    # -- save to the _design table and verify it applies after the reload.
+    page.locator("header").get_by_text("My design").click()
+    page.get_by_role("button", name="Save my design").click()
+    page.wait_for_timeout(3000)
+    expect(page.get_by_label("Nombre propio")).to_be_visible()
+
+    # -- the personalization is user1's only: another user sees the default label.
+    login(admin_user)
+    page.get_by_text("Catalog").click()
+    page.get_by_role("menuitem", name="Products").click()
+    page.locator("tbody tr").first.click()
+    page.locator('input[name="name"]').wait_for(state="visible")
+    expect(page.get_by_label("Nombre propio")).to_have_count(0)
+
+    # -- the reviewer role sees every personalization in Customization/Designer.
+    page.get_by_text("Customization").click()
+    page.get_by_role("menuitem", name="Designer").click()
+    expect(page.get_by_role("cell", name=user1["email"])).to_be_visible()
+
+    # -- cleanup: user1 removes the personalization (keeps reruns deterministic).
+    login(user1)
+    reset_personalization()
+    page.get_by_text("Catalog").click()
+    page.get_by_role("menuitem", name="Products").click()
+    page.locator("tbody tr").first.click()
+    page.locator('input[name="name"]').wait_for(state="visible")
+    expect(page.get_by_label("Nombre propio")).to_have_count(0)
 
 
 def test_create_order_and_upload_document_as_user(page: Page, app_server):
@@ -562,6 +573,61 @@ def _login_admin(page: Page, app_server):
     page.locator('input[name="password"]').fill(admin_user["password"])
     page.get_by_role("button", name="Sign in").click()
     expect(page.get_by_text("Catalog")).to_be_visible()
+
+
+def test_record_history_details_and_revert(page: Page, app_server):
+    """An editor can inspect a field change and copy its old value into the form."""
+    import psycopg2
+    import uuid
+    from dotenv import dotenv_values
+
+    db_url = dotenv_values("test-app/backend/.env").get("DB_URL")
+    assert db_url, "DB_URL not found in test-app/backend/.env"
+    before = f"History before {uuid.uuid4().hex[:8]}"
+    after = f"History after {uuid.uuid4().hex[:8]}"
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    record_id = None
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id FROM product ORDER BY id LIMIT 1")
+            product_id = cur.fetchone()[0]
+            cur.execute(
+                "INSERT INTO field_checker (a_string, a_product) "
+                "VALUES (%s, %s) RETURNING id",
+                (before, product_id),
+            )
+            record_id = cur.fetchone()[0]
+            cur.execute(
+                "UPDATE field_checker SET a_string = %s WHERE id = %s",
+                (after, record_id),
+            )
+
+        _login_admin(page, app_server)
+        page.goto(f"{app_server}/#/admin/field_checker/{record_id}")
+        string_input = page.get_by_label("A string")
+        expect(string_input).to_have_value(after)
+
+        page.get_by_role("button", name="Versions").click()
+        history_dialog = page.get_by_role("dialog").filter(has_text="Record history")
+        expect(history_dialog.get_by_text("Record history")).to_be_visible()
+
+        history_dialog.get_by_label("Show details").first.click()
+        detail_dialog = page.get_by_role("dialog").last
+        expect(detail_dialog.get_by_text(before, exact=True)).to_be_visible()
+        expect(detail_dialog.get_by_text(after, exact=True)).to_be_visible()
+        detail_dialog.get_by_role("button", name="Close").click()
+        expect(history_dialog.get_by_text("Record history")).to_be_visible()
+
+        history_dialog.get_by_label("Revert").first.click()
+        expect(history_dialog).not_to_be_visible()
+        expect(string_input).to_have_value(before)
+    finally:
+        if record_id is not None:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM field_checker WHERE id = %s", (record_id,))
+        conn.close()
 
 
 def test_csv_export_import_roundtrip(page: Page, app_server, tmp_path):
@@ -1009,7 +1075,7 @@ def test_register_confirmation_lands_on_profile_gate(page: Page, app_server, smt
 
 @pytest.fixture(scope="module")
 def dev_server(xprocess, request):
-    """Vite dev server for endpoint contract tests (no browser rendering)."""
+    """Replace the E2E preview with Vite dev for endpoint contract tests."""
     if not request.config.getoption("--slow"):
         pytest.skip("need --slow option to run")
 
@@ -1018,18 +1084,19 @@ def dev_server(xprocess, request):
     class Starter(ProcessStarter):
         pattern = "Local:"
         env = os.environ.copy()
-        args = ["npm", "--prefix", frontend_dir, "run", "start", "--", "--port", str(_FRONTEND_PORT)]
+        args = [
+            "npm", "--prefix", frontend_dir, "run", "start", "--",
+            "--port", str(_PREVIEW_PORT), "--strictPort",
+        ]
         cwd = frontend_dir
         timeout = 60
 
-    try:
-        xprocess.getinfo("dev_server_pure").terminate()
-    except Exception:
-        pass
-
-    xprocess.ensure("dev_server_pure", Starter)
-    yield f"http://localhost:{_FRONTEND_PORT}"
-    xprocess.getinfo("dev_server_pure").terminate()
+    # This is the final test in the module. Replace the production preview with
+    # the development server on the same test-owned port because only Vite dev
+    # exposes the presentation-custom endpoint.
+    xprocess.ensure("app_server_pure", Starter, restart=True)
+    yield f"http://localhost:{_PREVIEW_PORT}"
+    xprocess.getinfo("app_server_pure").terminate()
 
 
 def test_presentation_custom_dev_endpoint(dev_server, request):

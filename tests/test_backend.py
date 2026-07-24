@@ -467,6 +467,37 @@ class TestAppBackend:
         )
         assert status == 201, f"Order item creation failed: {status} {created_items}"
 
+        version_filter = urllib.parse.urlencode({
+            "root_concept": "eq.order",
+            "root_concept_id": f"eq.{order_id}",
+            "select": "concept,concept_id,concept_id_presentation,root_concept,root_concept_id,root_concept_id_presentation,change_type,operation,_updated_at",
+            "order": "_updated_at.desc",
+        })
+        status, own_versions = _http_json(
+            "GET",
+            f"{api_url}/rest/v1/_version?{version_filter}",
+            headers={"apikey": anon_key, "Authorization": f"Bearer {user1_token}"},
+        )
+        assert status == 200
+        assert {row["concept"] for row in own_versions} >= {"order", "order_item"}
+        assert all(
+            row["root_concept_id"] == order_id
+            and row["concept_id"]
+            and row["concept_id_presentation"]
+            and row["root_concept_id_presentation"]
+            and row["_updated_at"]
+            for row in own_versions
+        )
+
+        user2_token = _login(api_url, anon_key, "user2@test.com")
+        status, hidden_versions = _http_json(
+            "GET",
+            f"{api_url}/rest/v1/_version?{version_filter}",
+            headers={"apikey": anon_key, "Authorization": f"Bearer {user2_token}"},
+        )
+        assert status == 200
+        assert hidden_versions == []
+
         _wait_for_order_values(
             api_url,
             anon_key,
@@ -731,6 +762,176 @@ class TestAppBackend:
                 assert snapshot["id_presentation"] == id_presentation
                 assert snapshot["name"] == product_name
                 assert snapshot["sku"] == sku
+
+            conn.rollback()
+        finally:
+            conn.close()
+
+    @pytest.mark.integration
+    @pytest.mark.timeout(60)
+    def test_version_history_groups_part_of_relations_and_documents(self):
+        """Version history is a user-facing audit contract across aggregate boundaries."""
+        load_dotenv(Path('test-app/backend/.env'))
+        db_url = os.getenv("DB_URL")
+        assert db_url
+
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM product WHERE sku = 'SEED-KBD-001'")
+                product_id = cur.fetchone()[0]
+                cur.execute(
+                    "INSERT INTO category (name, slug) VALUES ('Version category', 'version-category') RETURNING id"
+                )
+                category_id = cur.fetchone()[0]
+                cur.execute(
+                    '''INSERT INTO "order" (
+                           "order_date", "shipping_address_street", "shipping_address_city",
+                           "shipping_address_province", "shipping_address_country", "state"
+                       ) VALUES (NOW(), 'Version Street', 'Bilbao', 'Bizkaia', 'Spain', 'initial')
+                       RETURNING id;'''
+                )
+                order_id = cur.fetchone()[0]
+                cur.execute(
+                    'INSERT INTO order_item ("order", product, quantity) VALUES (%s, %s, 1) RETURNING id;',
+                    (order_id, product_id),
+                )
+                item_id = cur.fetchone()[0]
+                cur.execute('UPDATE order_item SET quantity = 2 WHERE id = %s;', (item_id,))
+                cur.execute(
+                    '''INSERT INTO order_document (order_id, tag, storage_path)
+                       VALUES (%s, 'invoice', %s) RETURNING id;''',
+                    (order_id, f'{order_id}/invoice/version-test.pdf'),
+                )
+                document_id = cur.fetchone()[0]
+                cur.execute(
+                    'INSERT INTO category_product (category_id, product_id) VALUES (%s, %s);',
+                    (category_id, product_id),
+                )
+
+                cur.execute(
+                    '''SELECT concept, root_concept, root_concept_id, change_type, operation,
+                              transaction_id, before, changed, _updated_at
+                       FROM _version
+                       WHERE transaction_id = txid_current()::text
+                       ORDER BY id;'''
+                )
+                versions = cur.fetchall()
+                assert versions
+                assert all(row[5] == versions[0][5] for row in versions)
+                assert all(row[8] is not None for row in versions)
+
+                item_update = next(
+                    row for row in versions
+                    if row[0] == 'order_item' and row[4] == 'update' and 'quantity' in row[7]
+                )
+                assert item_update[1:3] == ('order', order_id)
+                assert item_update[6]['quantity'] == 1
+                assert item_update[7]['quantity'] == 2
+
+                document_insert = next(
+                    row for row in versions
+                    if row[0] == 'order_document' and row[4] == 'insert'
+                )
+                assert document_insert[1:5] == ('order', order_id, 'documents', 'insert')
+                assert document_insert[7].get('id') is None
+                assert document_insert[6] is None
+
+                relation_inserts = [
+                    row for row in versions
+                    if row[0] == 'category_product' and row[3] == 'relations'
+                ]
+                assert {(row[1], row[2]) for row in relation_inserts} == {
+                    ('category', category_id), ('product', product_id),
+                }
+                assert all(row[7]['category_id'] == category_id for row in relation_inserts)
+
+                # A regular related_to field is versioned against its own record,
+                # unlike the part_of order_item case above. This is the data the
+                # edit form uses to restore the previous selector value.
+                cur.execute(
+                    "INSERT INTO product (name, sku, price) "
+                    "VALUES ('Version alternative', 'VERSION-RELATED-TO-001', 15.00) "
+                    "RETURNING id"
+                )
+                alternative_product_id = cur.fetchone()[0]
+                cur.execute(
+                    "INSERT INTO field_checker (a_string, a_product) "
+                    "VALUES ('Version relation checker', %s) RETURNING id",
+                    (product_id,),
+                )
+                field_checker_id = cur.fetchone()[0]
+                cur.execute(
+                    "UPDATE field_checker SET a_product = %s WHERE id = %s",
+                    (alternative_product_id, field_checker_id),
+                )
+                cur.execute(
+                    '''SELECT root_concept, root_concept_id, change_type, operation,
+                              before, changed
+                       FROM _version
+                       WHERE concept = 'field_checker' AND concept_id = %s
+                         AND operation = 'update'
+                       ORDER BY id DESC LIMIT 1;''',
+                    (field_checker_id,),
+                )
+                related_to_update = cur.fetchone()
+                assert related_to_update[:4] == (
+                    'field_checker', field_checker_id, 'fields', 'update',
+                )
+                assert related_to_update[4]['a_product'] == product_id
+                assert related_to_update[5]['a_product'] == alternative_product_id
+
+                cur.execute(
+                    "INSERT INTO category (name, slug) VALUES ('Version tree', 'version-tree') RETURNING id"
+                )
+                tree_root = cur.fetchone()[0]
+                cur.execute(
+                    "INSERT INTO category (parent, name, slug) VALUES (%s, 'Version child', 'version-child') RETURNING id",
+                    (tree_root,),
+                )
+                tree_child = cur.fetchone()[0]
+                cur.execute(
+                    "INSERT INTO category (parent, name, slug) VALUES (%s, 'Version grandchild', 'version-grandchild') RETURNING id",
+                    (tree_child,),
+                )
+                tree_grandchild = cur.fetchone()[0]
+                cur.execute(
+                    "UPDATE category SET description = 'Versioned tree update' WHERE id = %s",
+                    (tree_grandchild,),
+                )
+                cur.execute(
+                    '''SELECT root_concept, root_concept_id, changed FROM _version
+                       WHERE concept = 'category' AND operation = 'update'
+                         AND concept_id = %s
+                       ORDER BY id DESC LIMIT 1;''',
+                    (tree_grandchild,),
+                )
+                recursive_update = cur.fetchone()
+                assert recursive_update[:2] == ('category', tree_root)
+                assert recursive_update[2]['description'] == 'Versioned tree update'
+
+                cur.execute('DELETE FROM order_item WHERE id = %s;', (item_id,))
+                cur.execute(
+                    '''SELECT root_concept, root_concept_id, operation, before, changed
+                       FROM _version WHERE concept = 'order_item'
+                       ORDER BY id DESC LIMIT 1;'''
+                )
+                deleted = cur.fetchone()
+                assert deleted[:3] == ('order', order_id, 'delete')
+                assert deleted[3]['id'] == item_id
+                assert deleted[4] == {}
+
+                cur.execute('SAVEPOINT immutable_version_probe')
+                with pytest.raises(psycopg2.Error):
+                    cur.execute(
+                        '''INSERT INTO _version (
+                               concept, concept_id, concept_id_presentation,
+                               root_concept, root_concept_id, root_concept_id_presentation,
+                               change_type, operation, transaction_id, changed
+                           ) VALUES ('order', 1, '#1', 'order', 1, '#1',
+                                     'fields', 'insert', 'manual', '{}');'''
+                    )
+                cur.execute('ROLLBACK TO SAVEPOINT immutable_version_probe')
 
             conn.rollback()
         finally:

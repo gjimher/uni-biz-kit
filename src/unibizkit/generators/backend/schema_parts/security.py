@@ -457,7 +457,11 @@ WITH CHECK (true);
 
         concept = concept_map.get(table)
         main_rules = concept_acl["_main"]
-        if concept:
+        # Version history is append-only through SECURITY DEFINER audit
+        # triggers. RLS exposes SELECT only, so the generic client field-write
+        # trigger would merely reject those trusted inserts based on the
+        # caller's role.
+        if concept and not concept.get("_be_version_history"):
             trigger_checks = []
 
             for field in concept["fields"]:

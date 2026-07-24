@@ -113,6 +113,11 @@ class SchemaLoader:
         
         try:
             business_schema = _load_jsonc_file(path)
+            explicitly_versioned = {
+                concept["name"]
+                for concept in business_schema.get("concepts", [])
+                if "versioned" in concept
+            }
 
             parent = Path(path).parent
 
@@ -180,6 +185,7 @@ class SchemaLoader:
             # This will now also apply defaults (like separator and show in id_presentation) 
             # to the injected authentication concepts.
             DefaultValidatingDraft7Validator(self.validation_schema).validate(business_schema)
+            self._apply_versioning_inheritance(business_schema, explicitly_versioned)
 
             concept_map = {concept["name"]: concept for concept in business_schema["concepts"]}
             concept_names = set(concept_map)
@@ -231,6 +237,54 @@ class SchemaLoader:
             error_msg = f"Failed to load schema: {e}"
             logger.error(error_msg)
             raise SchemaValidationError(error_msg)
+
+    def _apply_versioning_inheritance(
+        self,
+        business_schema: Dict[str, Any],
+        explicitly_versioned: set[str],
+    ):
+        """Resolve the effective versioned flag across part_of compositions."""
+        concept_map = {concept["name"]: concept for concept in business_schema["concepts"]}
+        parents = {}
+        for concept in business_schema["concepts"]:
+            part_of = [
+                field for field in concept["fields"]
+                if field["type"] == "relation_to_one" and field.get("subtype") == "part_of"
+            ]
+            if part_of and part_of[0]["target"] != concept["name"]:
+                parents[concept["name"]] = part_of[0]["target"]
+                if concept["name"] in explicitly_versioned:
+                    raise SchemaValidationError(
+                        f"Concept '{concept['name']}' is part_of '{part_of[0]['target']}' and "
+                        "must inherit 'versioned'; remove its explicit declaration"
+                    )
+
+        resolving = set()
+
+        def effective(name: str) -> bool:
+            if name not in concept_map:
+                return False
+            if name not in parents:
+                return concept_map[name]["versioned"]
+            if name in resolving:
+                raise SchemaValidationError("part_of relationships contain a cycle")
+            resolving.add(name)
+            value = effective(parents[name])
+            resolving.remove(name)
+            concept_map[name]["versioned"] = value
+            return value
+
+        for name in concept_map:
+            effective(name)
+
+        admin_role = business_schema["versioning"].get("admin_role")
+        if admin_role:
+            configured_roles = self.security_config.get("roles")
+            known_roles = {role["name"] for role in configured_roles} if configured_roles else {"admin", "user"}
+            if admin_role not in known_roles:
+                raise SchemaValidationError(
+                    f"versioning.admin_role references unknown role '{admin_role}'"
+                )
 
     def load_presentation(self, presentation_path: str):
         """
@@ -713,9 +767,44 @@ class SchemaLoader:
             return {
                 "name": name, "plural_name": plural, "description": description,
                 "id_presentation": {"fields": presentation_fields, "separator": " - ", "show": False},
-                "fields": fields, "data_size": "s", "checks": [],
+                "fields": fields, "data_size": "s", "checks": [], "versioned": False,
                 "_be_storage": storage, "_fe_allow_create": False, "_fe_allow_delete": False,
             }
+
+        if any(concept["versioned"] for concept in concepts):
+            self.presentation_config.setdefault("list_sort", {})["_version"] = "_updated_at DESC"
+            version_actions = self.presentation_config.setdefault("list_row_actions", {}).setdefault("_version", [])
+            for action in ("_version_details", "_version_revert"):
+                if action not in version_actions:
+                    version_actions.append(action)
+            self.presentation_config.setdefault("list_field_rules_level_3", {})["_version"] = (
+                "!*,concept,concept_id_presentation,root_concept,root_concept_id_presentation,change_type,operation,changed_by,transaction_id,_updated_at"
+            )
+            version_fields = [
+                field("concept", "string", "Concept whose row or relation changed", required=True),
+                field("concept_id", "integer", "Identifier of the affected row or relation", required=True),
+                field("concept_id_presentation", "string", "Presentation identifier copied when the change occurred", required=True, size="m"),
+                field("root_concept", "string", "Versioned aggregate root concept", required=True),
+                field("root_concept_id", "integer", "Identifier of the aggregate root", required=True),
+                field("root_concept_id_presentation", "string", "Aggregate root presentation identifier copied when the change occurred", required=True, size="m"),
+                field("change_type", "enum", "Kind of versioned data", required=True, enum_values=["fields", "relations", "documents"]),
+                field("operation", "enum", "Database operation", required=True, enum_values=["insert", "update", "delete"]),
+                field("changed_by", "string", "Email of the user who made the change"),
+                field("transaction_id", "string", "PostgreSQL transaction id", required=True),
+                field("before", "json", "Complete value before the change", size="l", _fe_list_exclude=True),
+                field("changed", "json", "Only fields and new values changed by the operation", required=True, size="l", _fe_list_exclude=True),
+            ]
+            version_concept = internal_concept(
+                "_version", "versions", "Versioned record and relation history",
+                ["concept", "concept_id_presentation", "operation"], version_fields, "table",
+            )
+            version_concept["data_size"] = "l"
+            version_concept["_be_version_history"] = True
+            version_concept["_fe_allow_edit"] = False
+            concepts.append(version_concept)
+            admin_role = business_schema["versioning"].get("admin_role")
+            if admin_role:
+                level3.append({"concept": "_version", "role": admin_role, "access": "read", "field": "*"})
 
         if self.integrations_config["integrations"]:
             self.presentation_config.setdefault("list_sort", {})["_integration_run"] = "requested_at DESC"
