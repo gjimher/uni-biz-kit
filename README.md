@@ -37,6 +37,7 @@ It is easier to obtain a quality application — without functional or security 
 
 * [docs/USAGE.md](docs/USAGE.md) — install and quick start.
 * [docs/README.md](docs/README.md) — documentation index and project vision.
+* [docs/Walkthrough.md](docs/Walkthrough.md) — guided tour, in screenshots, of what a model generates.
 
 ## Status
 

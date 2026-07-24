@@ -4,6 +4,7 @@
 
 | Document | What it covers |
 |----------|----------------|
+| [Walkthrough.md](Walkthrough.md) | Guided tour, in screenshots, of what a model generates |
 | [USAGE.md](USAGE.md) | Install, quick start, running the generated applications |
 | [Architecture.md](Architecture.md) | Layers, design principles, where to make changes |
 | [Model.md](Model.md) | Model-driven development and the model files |
