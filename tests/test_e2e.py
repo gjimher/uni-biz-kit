@@ -12,7 +12,12 @@ import json
 from pathlib import Path
 from playwright.sync_api import Page, expect, TimeoutError as PlaywrightTimeoutError
 from xprocess import ProcessStarter
-from smtp_mock import smtp_emails as _smtp_emails, smtp_lock as _smtp_lock, extract_links as _extract_links
+from smtp_mock import (
+    smtp_emails as _smtp_emails,
+    smtp_lock as _smtp_lock,
+    extract_links as _extract_links,
+    wait_for_email as _wait_for_email,
+)
 
 _env_num = int(os.environ.get('UBK_DEV_ENV_NUM', '0'))
 _base = 3000 + 100 * _env_num
@@ -234,7 +239,7 @@ def test_create_product_as_user(page: Page, app_server):
 
     page.set_default_timeout(10000)
     page.goto(app_server + "/#/admin")
-    page.wait_for_timeout(3000)
+    expect(page.locator('input[name="email"]')).to_be_visible()
 
     # Login
     page.locator('input[name="email"]').fill(admin_user["email"])
@@ -257,12 +262,10 @@ def test_create_product_as_user(page: Page, app_server):
     page.get_by_role("combobox", name="Status").click()
     page.get_by_role("option", name="published").click()
     page.get_by_label("Save").click()
-    page.wait_for_timeout(1000)
 
     # Verify in list
     page.get_by_role("menuitem", name="Products").click()
     page.get_by_role("button", name="Name").click()
-    page.wait_for_timeout(500)
     expect(page.get_by_role("cell", name="_User Journey Product").first).to_be_visible()
     expect(page.get_by_role("cell", name="PURE-E2E-001").first).to_be_visible()
 
@@ -286,7 +289,7 @@ def test_presentation_customization_as_admin(page: Page, app_server, request):
 
     page.set_default_timeout(10000)
     page.goto(app_server + "/#/admin")
-    page.wait_for_timeout(2000)
+    expect(page.locator('input[name="email"]')).to_be_visible()
 
     page.locator('input[name="email"]').fill(admin_user["email"])
     page.locator('input[name="password"]').fill(admin_user["password"])
@@ -350,7 +353,7 @@ def test_profile_completion_dialog_asks_for_missing_fields(page: Page, app_serve
 
         page.set_default_timeout(10000)
         page.goto(app_server + "/#/admin")
-        page.wait_for_timeout(2000)
+        expect(page.locator('input[name="email"]')).to_be_visible()
 
         page.locator('input[name="email"]').fill(user1["email"])
         page.locator('input[name="password"]').fill(user1["password"])
@@ -372,7 +375,6 @@ def test_profile_completion_dialog_asks_for_missing_fields(page: Page, app_serve
 
         # A completed profile must not trigger the dialog again.
         page.reload()
-        page.wait_for_timeout(2000)
         expect(page.get_by_text("Sales")).to_be_visible()
         expect(page.get_by_text("Complete your profile")).not_to_be_visible()
     finally:
@@ -392,7 +394,7 @@ def test_presentation_customization_as_user(page: Page, app_server, request):
 
     page.set_default_timeout(10000)
     page.goto(app_server + "/#/admin")
-    page.wait_for_timeout(2000)
+    expect(page.locator('input[name="email"]')).to_be_visible()
 
     page.locator('input[name="email"]').fill(user1["email"])
     page.locator('input[name="password"]').fill(user1["password"])
@@ -435,34 +437,41 @@ def test_personal_designer_end_user(page: Page, app_server, request):
     admin_user = next(u for u in users if "admin" in u["roles"])
 
     page.set_default_timeout(10000)
+    logged_in = False
 
     def login(user):
-        page.goto(app_server + "/#/admin")
-        page.wait_for_timeout(2000)
+        nonlocal logged_in
         user_menu = page.locator('header button[aria-label="Profile"]')
-        if user_menu.is_visible():
+        email_input = page.locator('input[name="email"]')
+        if logged_in:
             # Logging out lands on the public portal page; go back to the
             # admin entry to reach the sign-in form.
+            expect(user_menu).to_be_visible()
             user_menu.click()
             page.get_by_role("menuitem", name="Logout").click()
-            page.wait_for_timeout(1000)
-            page.goto(app_server + "/#/admin")
-            page.wait_for_timeout(2000)
-        page.locator('input[name="email"]').fill(user["email"])
+            page.wait_for_url(lambda url: "#/admin" not in url)
+        page.goto(app_server + "/#/admin")
+        expect(email_input).to_be_visible()
+        email_input.fill(user["email"])
         page.locator('input[name="password"]').fill(user["password"])
         page.get_by_role("button", name="Sign in").click()
         expect(page.get_by_text("Sales")).to_be_visible()
+        expect(
+            page.locator("header").get_by_text("Design", exact=True)
+        ).to_be_visible(timeout=15000)
+        logged_in = True
 
     def reset_personalization():
         # Idempotent cleanup: deleting the (possibly absent) _design row and
         # reloading leaves this user on the application defaults.
-        design_switch = page.locator("header").get_by_role("checkbox")
+        design_switch = page.locator("header").get_by_label("Design", exact=True)
         if not design_switch.is_checked():
             page.locator("header").get_by_text("Design", exact=True).click()
         expect(page.locator("header").get_by_text("My design")).to_be_visible()
         page.locator("header").get_by_text("My design").click()
-        page.get_by_role("button", name="Reset personalization").click()
-        page.wait_for_timeout(2500)
+        with page.expect_navigation(wait_until="domcontentloaded"):
+            page.get_by_role("button", name="Reset personalization").click()
+        expect(page.locator("header").get_by_text("Design", exact=True)).to_be_visible()
 
     # -- user1 personalizes: rename the product.name field label.
     login(user1)
@@ -479,8 +488,8 @@ def test_personal_designer_end_user(page: Page, app_server, request):
 
     # -- save to the _design table and verify it applies after the reload.
     page.locator("header").get_by_text("My design").click()
-    page.get_by_role("button", name="Save my design").click()
-    page.wait_for_timeout(3000)
+    with page.expect_navigation(wait_until="domcontentloaded"):
+        page.get_by_role("button", name="Save my design").click()
     expect(page.get_by_label("Nombre propio")).to_be_visible()
 
     # -- the personalization is user1's only: another user sees the default label.
@@ -517,7 +526,7 @@ def test_create_order_and_upload_document_as_user(page: Page, app_server):
 
     page.set_default_timeout(10000)
     page.goto(app_server + "/#/admin")
-    page.wait_for_timeout(2000)
+    expect(page.locator('input[name="email"]')).to_be_visible()
 
     # Login as user1
     page.locator('input[name="email"]').fill(user1["email"])
@@ -546,7 +555,6 @@ def test_create_order_and_upload_document_as_user(page: Page, app_server):
 
     # Go to Documents tab
     page.get_by_role("tab", name="Documents").click()
-    page.wait_for_timeout(500)
 
     import uuid
     unique_name = f"e2e_invoice_{uuid.uuid4().hex[:8]}.txt"
@@ -568,7 +576,7 @@ def _login_admin(page: Page, app_server):
         admin_user = next(u for u in json.load(f)["users"] if "admin" in u["roles"])
     page.set_default_timeout(10000)
     page.goto(app_server + "/#/admin")
-    page.wait_for_timeout(2000)
+    expect(page.locator('input[name="email"]')).to_be_visible()
     page.locator('input[name="email"]').fill(admin_user["email"])
     page.locator('input[name="password"]').fill(admin_user["password"])
     page.get_by_role("button", name="Sign in").click()
@@ -822,15 +830,7 @@ def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):
     print(f"\nReset password form submitted for: {email}")
 
     # -- 3. Wait for the reset email from the SMTP mock
-    deadline = time.time() + 10
-    email_received = None
-    while time.time() < deadline:
-        with _smtp_lock:
-            matching = [e for e in _smtp_emails if email in e["rcpt_tos"]]
-        if matching:
-            email_received = matching[-1]
-            break
-        time.sleep(0.5)
+    email_received = _wait_for_email(email)
     assert email_received, (
         "Reset email not received via in-process SMTP. "
         "Ensure Supabase is configured to use SMTP on port 3010 "
@@ -1032,15 +1032,7 @@ def test_register_confirmation_lands_on_profile_gate(page: Page, app_server, smt
 
     try:
         # -- 2. Wait for the confirmation email from the SMTP mock
-        deadline = time.time() + 10
-        email_received = None
-        while time.time() < deadline:
-            with _smtp_lock:
-                matching = [e for e in _smtp_emails if email in e["rcpt_tos"]]
-            if matching:
-                email_received = matching[-1]
-                break
-            time.sleep(0.5)
+        email_received = _wait_for_email(email)
         assert email_received, "Confirmation email not received via the SMTP mock"
         links = [l for l in _extract_links(email_received["content"]) if "verify" in l or "confirm" in l]
         assert links, f"No confirmation link found in the email: {_extract_links(email_received['content'])}"

@@ -3,7 +3,9 @@ import os
 import sys
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 from smtp_mock import MockSMTPHandler, SMTP_PORT
+from unibizkit.cli import CLI
 from unibizkit.schema_loader import _load_jsonc_file
 
 
@@ -87,9 +89,20 @@ def pytest_addoption(parser):
     )
 
 
-def app_variation_args(request):
-    """CLI arguments applied to every primary test-app generation."""
-    return ["--designer", "off"] if request.config.getoption("--variations") else []
+@pytest.fixture(scope="session")
+def generated_test_app(pytestconfig):
+    """Generate the primary app once for backend and frontend integration gates."""
+    output_dir = Path("test-app").resolve()
+    variation_args = ["--designer", "off"] if pytestconfig.getoption("--variations") else []
+    print("Executing uni-biz-kit: generating a complete app application from schema")
+    with patch("sys.argv", [
+        "uni-biz-kit", "models/test-app",
+        "--output-dir", str(output_dir),
+        "--dev-base-port", str(PRIMARY_BASE),
+        *variation_args,
+    ]):
+        CLI().run()
+    return output_dir
 
 
 def ensure_smtp_port_free(port=SMTP_PORT):
@@ -173,6 +186,11 @@ def pytest_collection_modifyitems(config, items):
         "test_api_auth",
         "test_e2e",
     ]
+    if not config.getoption("--slow"):
+        skip_e2e = pytest.mark.skip(reason="need --slow option to run")
+        for item in items:
+            if os.path.basename(str(item.fspath)) == "test_e2e.py":
+                item.add_marker(skip_e2e)
 
     def file_rank(item):
         name = os.path.basename(str(item.fspath)).replace(".py", "")

@@ -328,7 +328,11 @@ def _restart_edge_runtime(config_path):
         sys.exit("Could not determine the Supabase project id")
     container = f'supabase_edge_runtime_{project_id}'
     print("Only JS/TS Edge Function code changed — restarting Edge Runtime...")
-    result = subprocess.run(['docker', 'restart', container], stdout=subprocess.DEVNULL, stderr=sys.stderr)
+    result = subprocess.run(
+        ['docker', 'restart', '--time', '0', container],
+        stdout=subprocess.DEVNULL,
+        stderr=sys.stderr,
+    )
     if result.returncode != 0:
         sys.exit(f"docker restart {container} failed with code {result.returncode}")
     deadline = time.monotonic() + 30
@@ -524,9 +528,10 @@ running, up-to-date state. What it does depends on the current state:
     service-role keys, used by the test suite and the other dev scripts.
   - frontend/.env.development: adds VITE_SUPABASE_KEY (anon key).
 * Later runs: changes limited to existing Edge Function .js/.ts files restart
-  only Edge Runtime. Config, secrets or any other Functions tree change restart
-  the complete stack. If the stack is stopped, starts it; if Edge Runtime died,
-  restarts the stack; otherwise does nothing.
+  only Edge Runtime, immediately terminating any local request still in flight.
+  Config, secrets or any other Functions tree change restart the complete stack.
+  If the stack is stopped, starts it; if Edge Runtime died, restarts the stack;
+  otherwise does nothing.
 * Synchronizes backend/.env.secrets to Supabase's local Edge Functions .env;
   secret changes therefore participate in the same idempotent restart check.
 

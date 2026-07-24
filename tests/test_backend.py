@@ -15,14 +15,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from unittest.mock import patch
 import psycopg2
 from dotenv import load_dotenv, dotenv_values
-from unibizkit.cli import CLI
 from conftest import (
     HAS_SECONDARY_MODEL, PRIMARY_BASE, assert_secondary_model_is_normal_app,
-    app_variation_args,
 )
+from edge_function import call_edge_function as _call_edge_function_script
 
 
 def _run(cmd, timeout=600, input=None):
@@ -87,29 +85,6 @@ def _login(api_url, anon_key, email):
     return body["access_token"]
 
 
-def _call_edge_function_script(email, function_name, payload=None):
-    script = Path("test-app/bin/dev-supabase-call-edge-function.py")
-    assert script.exists(), "dev-supabase-call-edge-function.py must be generated"
-    args = [
-        sys.executable,
-        str(script),
-        email,
-        function_name,
-    ]
-    if payload is not None:
-        args.append(json.dumps(payload))
-    result = subprocess.run(
-        args,
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    if result.stderr:
-        print(result.stderr, end="", file=sys.stderr)
-    assert result.stdout, "Edge function caller should print a JSON response"
-    return result.returncode, json.loads(result.stdout)
-
-
 def _wait_for_order_values(api_url, anon_key, token, order_id, expected, timeout=5):
     encoded_filter = urllib.parse.urlencode({
         "id": f"eq.{order_id}",
@@ -143,7 +118,7 @@ class TestAppBackend:
 
     @pytest.mark.integration
     @pytest.mark.timeout(600)  # 10 minutes timeout
-    def test_generate_app_backend_and_setup_database(self, request):
+    def test_generate_app_backend_and_setup_database(self, request, generated_test_app):
         """Test generating a complete app app backend and setting up the database.
 
         This integration test:
@@ -153,21 +128,7 @@ class TestAppBackend:
 
         Note: This test may take several minutes to run.
         """
-        cli = CLI()
-
-        # Use the app schema from models
-        output_dir = Path('test-app').resolve()
-
-        print("Executing uni-biz-kit: generating a complete app application from schema")
-        with patch('sys.argv', [
-            'uni-biz-kit', 'models/test-app',
-            '--output-dir', str(output_dir),
-            '--dev-base-port', str(PRIMARY_BASE),
-            *app_variation_args(request),
-        ]):
-            cli.run()
-
-        assert output_dir.exists()
+        output_dir = generated_test_app
 
         backend_dir = output_dir / 'backend'
         original_cwd = os.getcwd()
@@ -395,6 +356,7 @@ class TestAppBackend:
             "user1@test.com",
             "external-company-dummy-ok",
             {"id": 1},
+            via_script=True,
         )
 
         assert returncode == 0

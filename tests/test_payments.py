@@ -16,7 +16,7 @@ import psycopg2
 import pytest
 from dotenv import load_dotenv
 
-from test_workflow import _call_edge_function_script
+from edge_function import call_edge_function as _call_edge_function_script
 
 # Stripe's classic test cards, honored by the dev simulator.
 CARD_OK = {"number": "4242424242424242", "exp_month": 12, "exp_year": 2030, "cvc": "123"}

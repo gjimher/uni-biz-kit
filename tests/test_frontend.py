@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 from unibizkit.cli import CLI
-from conftest import PRIMARY_BASE, app_variation_args
+from conftest import PRIMARY_BASE
 
 
 class TestAppFrontend:
@@ -21,7 +21,7 @@ class TestAppFrontend:
     
     @pytest.mark.integration
     @pytest.mark.timeout(600)  # 10 minutes timeout
-    def test_generate_app_frontend_and_compile(self, request):
+    def test_generate_app_frontend_and_compile(self, request, generated_test_app):
         """Test generating a complete app app frontend and compiling it.
         
         This integration test:
@@ -31,21 +31,7 @@ class TestAppFrontend:
         
         Note: This test may take several minutes to run.
         """
-        cli = CLI()
-        
-        # Use the app schema from models
-        schema_path = Path('models/test-app/concepts.jsonc')
-        output_dir = Path('test-app')
-        
-        print("Executing uni-biz-kit: generating a complete app application from schema")
-        with patch('sys.argv', [
-            'uni-biz-kit', 'models/test-app',
-            '--output-dir', str(output_dir),
-            '--dev-base-port', str(PRIMARY_BASE),
-            *app_variation_args(request),
-        ]):
-            # Should not raise an exception
-            cli.run()
+        output_dir = generated_test_app
         
         # Check that output directory was created
         assert output_dir.exists()

@@ -15,7 +15,22 @@ _env_num = int(os.environ.get('UBK_DEV_ENV_NUM', '0'))
 SMTP_PORT = 3000 + 100 * _env_num + 10
 
 smtp_emails: list[dict] = []
-smtp_lock = threading.Lock()
+smtp_lock = threading.Condition()
+
+
+def wait_for_email(recipient: str, timeout: float = 10) -> dict | None:
+    """Wait until the SMTP handler captures a message for recipient."""
+    with smtp_lock:
+        found = smtp_lock.wait_for(
+            lambda: any(recipient in email["rcpt_tos"] for email in smtp_emails),
+            timeout=timeout,
+        )
+        if not found:
+            return None
+        return next(
+            email for email in reversed(smtp_emails)
+            if recipient in email["rcpt_tos"]
+        )
 
 
 class MockSMTPHandler:
@@ -28,6 +43,7 @@ class MockSMTPHandler:
                 "rcpt_tos": envelope.rcpt_tos,
                 "content": envelope.content.decode("utf-8", errors="replace"),
             })
+            smtp_lock.notify_all()
         return "250 Message accepted for delivery"
 
 

@@ -16,7 +16,13 @@ import urllib.error
 import psycopg2
 from pathlib import Path
 from dotenv import load_dotenv
-from smtp_mock import smtp_emails as _smtp_emails, smtp_lock as _smtp_lock, extract_links as _extract_links, SMTP_PORT
+from smtp_mock import (
+    smtp_emails as _smtp_emails,
+    smtp_lock as _smtp_lock,
+    extract_links as _extract_links,
+    wait_for_email as _wait_for_email,
+    SMTP_PORT,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -365,15 +371,7 @@ def test_register_user_and_email_flow(smtp_server):
 
     # -- Step 3: Wait for confirmation email from mock SMTP
     print("Waiting for confirmation email via mock SMTP...")
-    deadline = time.time() + 10
-    email_received = None
-    while time.time() < deadline:
-        with _smtp_lock:
-            matching = [e for e in _smtp_emails if TEST_EMAIL in e["rcpt_tos"]]
-        if matching:
-            email_received = matching[-1]
-            break
-        time.sleep(0.5)
+    email_received = _wait_for_email(TEST_EMAIL)
 
     if not email_received:
         # Check the log file as fallback (if SMTP was configured externally)
@@ -418,11 +416,13 @@ def test_register_user_and_email_flow(smtp_server):
     except Exception as e:
         print(f"Confirmation note: {e}")
 
-    # Give Supabase a moment to process the confirmation
-    time.sleep(1)
-
     # -- Step 5: Verify can now login
-    success, token_or_err = _supabase_login(api_url, anon_key, TEST_EMAIL, TEST_PASSWORD)
+    deadline = time.monotonic() + 1
+    while True:
+        success, token_or_err = _supabase_login(api_url, anon_key, TEST_EMAIL, TEST_PASSWORD)
+        if success or time.monotonic() >= deadline:
+            break
+        time.sleep(0.02)
     assert success, f"Login failed after email confirmation: {token_or_err}"
     print(f"Login successful after confirmation! Token: {token_or_err[:20]}...")
 
@@ -496,15 +496,7 @@ def test_forgot_password_flow(smtp_server):
 
     # -- Step 2: Wait for the reset email
     print("Waiting for reset email via mock SMTP...")
-    deadline = time.time() + 10
-    email_received = None
-    while time.time() < deadline:
-        with _smtp_lock:
-            matching = [e for e in _smtp_emails if email in e["rcpt_tos"]]
-        if matching:
-            email_received = matching[-1]
-            break
-        time.sleep(0.5)
+    email_received = _wait_for_email(email)
 
     if not email_received:
         pytest.skip(

@@ -11,10 +11,10 @@ from pathlib import Path
 import psycopg2
 import pytest
 from dotenv import dotenv_values
+from edge_function import call_edge_function
 
 
 MOCK_SCRIPT = Path("test-app/bin/dev-integration-odata-mock.py")
-CALL_SCRIPT = Path("test-app/bin/dev-supabase-call-edge-function.py")
 
 
 def _run(args, *, timeout=60, check=True):
@@ -59,14 +59,12 @@ def _db_url():
 
 
 def _call_function(function, body='{"id": 1}'):
-    result = _run([
-        sys.executable,
-        str(CALL_SCRIPT),
+    _, response = call_edge_function(
         "admin@test.com",
         function,
-        body,
-    ])
-    return json.loads(result.stdout)
+        json.loads(body),
+    )
+    return response
 
 
 def _call_integration():
@@ -94,7 +92,7 @@ def odata_mock():
 @pytest.mark.integration
 @pytest.mark.timeout(120)
 def test_manual_integration_and_incremental_polling(odata_mock):
-    """The generated commands drive a full run and then one incremental change."""
+    """One authenticated session drives the complete incremental integration flow."""
     conn = psycopg2.connect(_db_url())
     try:
         with conn, conn.cursor() as cur:
@@ -217,21 +215,33 @@ def test_manual_integration_and_incremental_polling(odata_mock):
 @pytest.mark.integration
 @pytest.mark.timeout(100)
 def test_scheduled_integration_when_slow(request, odata_mock):
-    """Optionally wait for pg_cron to invoke the real integration endpoint."""
+    """Have pg_cron invoke the real endpoint on a temporary fast schedule."""
     if not request.config.getoption("--slow"):
         pytest.skip("requires --slow to wait for the next minute boundary")
 
     conn = psycopg2.connect(_db_url())
+    conn.autocommit = True
+    job_id = None
+    original_schedule = None
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT jobname, schedule FROM cron.job WHERE jobname = '_integration_odata-companies'"
+                "SELECT jobid, jobname, schedule FROM cron.job "
+                "WHERE jobname = '_integration_odata-companies'"
             )
-            assert cur.fetchone() == ("_integration_odata-companies", "* * * * *")
+            job_id, jobname, original_schedule = cur.fetchone()
+            assert (jobname, original_schedule) == (
+                "_integration_odata-companies",
+                "* * * * *",
+            )
             cur.execute("SELECT clock_timestamp()")
             started_at = cur.fetchone()[0]
+            cur.execute(
+                "SELECT cron.alter_job(%s, schedule := '1 second')",
+                (job_id,),
+            )
 
-        deadline = time.monotonic() + 75
+        deadline = time.monotonic() + 15
         last = None
         while time.monotonic() < deadline:
             with conn.cursor() as cur:
@@ -244,7 +254,13 @@ def test_scheduled_integration_when_slow(request, odata_mock):
                 last = cur.fetchone()
             if last and last[0] == "completed":
                 return
-            time.sleep(1)
-        raise AssertionError(f"No completed scheduled integration within 75 seconds; last={last}")
+            time.sleep(0.1)
+        raise AssertionError(f"No completed scheduled integration within 15 seconds; last={last}")
     finally:
+        if job_id is not None and original_schedule is not None:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT cron.alter_job(%s, schedule := %s)",
+                    (job_id, original_schedule),
+                )
         conn.close()

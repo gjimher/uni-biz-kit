@@ -6,34 +6,15 @@ from unibizkit.generators.backend.supabase_schema import generate as generate_sc
 from unibizkit.generators.backend.supabase_seed_data_dev import generate as generate_seed_data_dev
 import os
 import json
-import subprocess
-import sys
 from pathlib import Path
 import psycopg2
 from dotenv import load_dotenv
+from edge_function import call_edge_function as _call_edge_function_script
 from unibizkit.generators.backend.schema_parts.internal_columns import (
     generate_id_insert_privileges,
     generate_internal_column_protection,
     generate_system_timestamp_triggers,
 )
-
-
-def _call_edge_function_script(email, function_name, payload=None):
-    script = Path("test-app/bin/dev-supabase-call-edge-function.py")
-    assert script.exists(), "dev-supabase-call-edge-function.py must be generated"
-    args = [sys.executable, str(script), email, function_name]
-    if payload is not None:
-        args.append(json.dumps(payload))
-    result = subprocess.run(
-        args,
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    if result.stderr:
-        print(result.stderr, end="", file=sys.stderr)
-    assert result.stdout, "Edge function caller should print a JSON response"
-    return result.returncode, json.loads(result.stdout)
 
 _MINIMAL_CONCEPT = {
     "name": "item",

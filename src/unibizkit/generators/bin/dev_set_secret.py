@@ -55,13 +55,21 @@ else:
     if "\n" in value or "\r" in value:
         sys.exit("Error: secret value must be a single line")
 
-lines = secrets_path.read_text(encoding="utf-8").splitlines() if secrets_path.exists() else []
+existing_text = secrets_path.read_text(encoding="utf-8") if secrets_path.exists() else ""
+lines = existing_text.splitlines()
 lines = [line for line in lines if not line.startswith(f"{args.key}=")]
 if value is not None:
     lines.append(f"{args.key}={value}")
+updated_text = "".join(f"{line}\n" for line in lines)
 secrets_path.parent.mkdir(parents=True, exist_ok=True)
+if updated_text == existing_text:
+    if secrets_path.exists():
+        os.chmod(secrets_path, 0o600)
+    print("Nothing to do.")
+    raise SystemExit(0)
+
 temporary = secrets_path.with_name(secrets_path.name + ".tmp")
-temporary.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+temporary.write_text(updated_text, encoding="utf-8")
 os.chmod(temporary, 0o600)
 temporary.replace(secrets_path)
 os.chmod(secrets_path, 0o600)

@@ -2,28 +2,9 @@ import pytest
 import os
 import psycopg2
 import json
-import subprocess
 from dotenv import load_dotenv
 from pathlib import Path
-import sys
-
-
-def _call_edge_function_script(email, function_name, payload=None):
-    script = Path("test-app/bin/dev-supabase-call-edge-function.py")
-    assert script.exists(), "dev-supabase-call-edge-function.py must be generated"
-    args = [sys.executable, str(script), email, function_name]
-    if payload is not None:
-        args.append(json.dumps(payload))
-    result = subprocess.run(
-        args,
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    if result.stderr:
-        print(result.stderr, end="", file=sys.stderr)
-    assert result.stdout, "Edge function caller should print a JSON response"
-    return result.returncode, json.loads(result.stdout)
+from edge_function import call_edge_function as _call_edge_function_script
 
 
 def test_async_rule_generates_one_trigger_per_state():
