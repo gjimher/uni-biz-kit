@@ -192,7 +192,12 @@ ON CONFLICT (id) DO UPDATE SET public = EXCLUDED.public;"""]
         sql_parts.append("\n".join(storage_sql))
 
     if any(c["documents"]["enabled"] for c in concepts):
-        sql_parts.append("""CREATE OR REPLACE FUNCTION public.sync_document_on_upload()
+        versioned_document_concepts = ", ".join(
+            "'" + concept["name"].replace("'", "''") + "'"
+            for concept in concepts
+            if concept["documents"]["enabled"] and concept["documents"]["versioned"]
+        )
+        document_sync_sql = """CREATE OR REPLACE FUNCTION public.sync_document_on_upload()
 RETURNS TRIGGER AS $$
 DECLARE
   v_concept TEXT;
@@ -200,6 +205,7 @@ DECLARE
   v_rec_id  INTEGER;
   v_tag     TEXT;
   v_version INTEGER;
+  v_documents_are_versioned BOOLEAN;
   v_tbl     TEXT;
   v_fk      TEXT;
 BEGIN
@@ -212,12 +218,26 @@ BEGIN
   v_parts   := string_to_array(NEW.name, '/');
   v_rec_id  := v_parts[1]::INTEGER;
   v_tag     := v_parts[2];
+  v_documents_are_versioned := v_concept = ANY (
+    ARRAY[__VERSIONED_DOCUMENT_CONCEPTS__]::TEXT[]
+  );
   IF array_length(v_parts, 1) >= 4 AND v_parts[3] ~ '^v[0-9]+$' THEN
     v_version := substring(v_parts[3] FROM 2)::INTEGER;
     EXECUTE format(
       'INSERT INTO public.%I (%I, tag, version, is_current, storage_path) VALUES ($1, $2, $3, true, $4)',
       v_tbl, v_fk
     ) USING v_rec_id, v_tag, v_version, NEW.name;
+  ELSIF v_documents_are_versioned THEN
+    -- Direct Storage clients do not necessarily include /vN/ in the object
+    -- path. They still create a new metadata version instead of relying on the
+    -- non-versioned (record, tag) unique constraint.
+    PERFORM pg_advisory_xact_lock(hashtextextended(v_tbl || ':' || v_rec_id || ':' || v_tag, 0));
+    EXECUTE format(
+      'INSERT INTO public.%I (%I, tag, version, is_current, storage_path)
+       SELECT $1, $2, coalesce(max(version), 0) + 1, true, $3
+       FROM public.%I WHERE %I = $1 AND tag = $2',
+      v_tbl, v_fk, v_tbl, v_fk
+    ) USING v_rec_id, v_tag, NEW.name;
   ELSE
     EXECUTE format(
       'INSERT INTO public.%I (%I, tag, storage_path) VALUES ($1, $2, $3)
@@ -256,6 +276,10 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 DROP TRIGGER IF EXISTS cleanup_document_on_delete ON storage.objects;
 CREATE TRIGGER cleanup_document_on_delete
   AFTER DELETE ON storage.objects
-  FOR EACH ROW EXECUTE FUNCTION public.cleanup_document_on_delete();""")
+  FOR EACH ROW EXECUTE FUNCTION public.cleanup_document_on_delete();"""
+        sql_parts.append(document_sync_sql.replace(
+            "__VERSIONED_DOCUMENT_CONCEPTS__",
+            versioned_document_concepts,
+        ))
 
     return sql_parts
