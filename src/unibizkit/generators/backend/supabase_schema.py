@@ -2,7 +2,7 @@ from .context import Context
 from .schema_parts.tables import generate_table_sql
 from .schema_parts.joins import generate_join_tables, generate_foreign_key_constraints, generate_deleted_snapshot_triggers, get_join_table_names
 from .schema_parts.documents import generate_document_tables
-from .schema_parts.internal_columns import generate_internal_column_protection, generate_system_timestamp_triggers
+from .schema_parts.internal_columns import generate_id_insert_privileges, generate_internal_column_protection, generate_system_timestamp_triggers
 from .schema_parts.triggers import generate_presentation_triggers, generate_rollup_triggers, generate_copy_triggers
 from .schema_parts.security import generate_security_policies
 from .schema_parts.workflow_tasks import (
@@ -76,5 +76,9 @@ def generate(ctx: Context) -> str:
         sql_parts.extend(generate_security_policies(
             table_concepts, ctx.concept_map, ctx.security_config, ctx.workflow_config
         ))
+
+    # Supabase grants table-level INSERT by default. Narrow that existing grant
+    # last, after all generated tables exist, so API roles cannot choose SERIAL ids.
+    sql_parts.extend(generate_id_insert_privileges(generated_table_names))
 
     return '\n\n'.join(sql_parts)

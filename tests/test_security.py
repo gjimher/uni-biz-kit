@@ -12,6 +12,7 @@ from pathlib import Path
 import psycopg2
 from dotenv import load_dotenv
 from unibizkit.generators.backend.schema_parts.internal_columns import (
+    generate_id_insert_privileges,
     generate_internal_column_protection,
     generate_system_timestamp_triggers,
 )
@@ -841,7 +842,7 @@ def test_internal_column_protection_is_table_name_independent():
             cur.execute(f'DROP TABLE IF EXISTS "{table_name}";')
             cur.execute(f"""
                 CREATE TABLE "{table_name}" (
-                    "id" INTEGER PRIMARY KEY,
+                    "id" SERIAL PRIMARY KEY,
                     "_xxx" TEXT,
                     "_created_at" TIMESTAMP WITH TIME ZONE,
                     "_updated_at" TIMESTAMP WITH TIME ZONE
@@ -852,23 +853,33 @@ def test_internal_column_protection_is_table_name_independent():
             for sql in generate_system_timestamp_triggers([concept]):
                 cur.execute(sql)
             cur.execute(f'GRANT SELECT, INSERT, UPDATE ON "{table_name}" TO authenticated;')
+            for sql in generate_id_insert_privileges([concept]):
+                cur.execute(sql)
 
             user_claims = f'{{"sub": "{user_id}", "app_metadata": {{"roles": ["user"]}}}}'
             cur.execute("SET ROLE authenticated;")
             cur.execute(f"SELECT set_config('request.jwt.claims', '{user_claims}', false);")
 
-            with pytest.raises(psycopg2.Error):
-                cur.execute(f'INSERT INTO "{table_name}" ("id", "_xxx") VALUES (1, \'user value\');')
+            with pytest.raises(psycopg2.Error, match='permission denied'):
+                cur.execute(f'INSERT INTO "{table_name}" ("id") VALUES (1001);')
 
-            cur.execute(f'INSERT INTO "{table_name}" ("id") VALUES (2);')
-            cur.execute(f'SELECT "_xxx", "_created_at", "_updated_at" FROM "{table_name}" WHERE "id" = 2;')
+            cur.execute(f'INSERT INTO "{table_name}" DEFAULT VALUES RETURNING "id";')
+            generated_id = cur.fetchone()[0]
+            cur.execute(f'SELECT "_xxx", "_created_at", "_updated_at" FROM "{table_name}" WHERE "id" = %s;', (generated_id,))
             xxx, created_at, updated_at = cur.fetchone()
             assert xxx is None
             assert created_at is not None
             assert updated_at is not None
 
             with pytest.raises(psycopg2.Error):
-                cur.execute(f'UPDATE "{table_name}" SET "_xxx" = \'user value\' WHERE "id" = 2;')
+                cur.execute(f'UPDATE "{table_name}" SET "_xxx" = \'user value\' WHERE "id" = %s;', (generated_id,))
+            with pytest.raises(psycopg2.Error, match='id is immutable'):
+                cur.execute(f'UPDATE "{table_name}" SET "id" = 1002 WHERE "id" = %s;', (generated_id,))
+
+            cur.execute("RESET ROLE;")
+            cur.execute("SELECT set_config('request.jwt.claims', '', false);")
+            cur.execute(f'UPDATE "{table_name}" SET "id" = 1002 WHERE "id" = %s;', (generated_id,))
+            cur.execute(f'INSERT INTO "{table_name}" ("id") VALUES (1003);')
         finally:
             cur.execute("RESET ROLE;")
             cur.execute("SELECT set_config('request.jwt.claims', '', false);")

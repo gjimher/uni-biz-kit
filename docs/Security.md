@@ -328,10 +328,17 @@ Columns whose name starts with `_` are reserved for UniBizKit internals. A model
 
 All generated tables include two standard triggers for internal columns:
 
-- `00_protect_internal_columns_trigger` rejects `INSERT` values for `_...` columns and rejects any `UPDATE` that changes them.
+- `00_protect_internal_columns_trigger` rejects `INSERT` values for `_...`
+  columns and rejects any `UPDATE` that changes them. It also makes the serial
+  `id` immutable for every JWT-backed request, including `service_role`.
 - `01_set_system_timestamps_trigger` assigns `_created_at` and `_updated_at` after the protection trigger has validated the user-supplied row.
 
 This means the UI cannot create or modify internal columns. If a request sends `_created_at`, `_updated_at`, or any other `_...` column, the database rejects it.
+Application database roles receive column-level `INSERT` privileges that omit
+`id`, so an API client also cannot choose a primary key during creation. Normal
+inserts omit `id` and PostgreSQL assigns it from the serial sequence. A trusted
+direct database session retains both explicit-id insert and id-update access for
+administrative repair work.
 
 ### Bypass for Database Seeding
 
