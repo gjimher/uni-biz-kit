@@ -570,7 +570,7 @@ def generate_field_components(
 
         # The workflow-injected state field is internal (forms use the
         # WorkflowSelector instead) but is still a useful list column.
-        if list_html and (visibility != "internal" or field_name == "state"):
+        if list_html and not field["_fe_list_exclude"] and (visibility != "internal" or field_name == "state"):
             list_fields.append((field_name, list_html))
         if show_html and visibility != "internal":
             show_fields.append((field_name, show_html))
@@ -681,9 +681,18 @@ def generate_field_components(
     # Filters follow the full column set, so a user-added column can be filtered
     # too. The id_presentation search keeps alwaysOn only when it is a default
     # column; as an extra it stays available behind the Add-filter button.
-    filter_html_map = {name: html for name, html in filter_fields}
+    list_excluded_names = {
+        field["name"] for field in concept["fields"]
+        if field["_fe_list_exclude"]
+    }
+    filter_html_map = {
+        name: html for name, html in filter_fields
+        if name not in list_excluded_names
+    }
+    special_filter_names = [name for name in filter_html_map if name not in all_names]
     final_filter_fields = [filter_html_map[name] for name in result_names if name in filter_html_map] \
-                        + [filter_html_map[name].replace(' alwaysOn', '') for name in extra_names if name in filter_html_map]
+                        + [filter_html_map[name].replace(' alwaysOn', '') for name in extra_names if name in filter_html_map] \
+                        + [filter_html_map[name] for name in special_filter_names]
 
     # Old-style inline outputs, used by the designer-'off' emission (columns
     # and show fields baked into the resource, defaults first then the extras

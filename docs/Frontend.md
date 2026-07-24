@@ -16,7 +16,7 @@ frontend/
     ├── dataProvider.js       # Supabase data provider
     ├── authProvider.js       # Supabase auth (password + SSO)
     ├── supabaseClient.js     # single shared Supabase client
-    └── presentation/         # custom pages (copied from the model) + router
+    └── presentation/         # custom pages, list addons and router
 ```
 
 ### The tokens file and the `/api` proxy
@@ -47,6 +47,7 @@ Configuration in `presentation.jsonc`:
 * `locale`, `number_locale`, `currency` — UI language and number/currency formatting.
 * `menu` — custom left menu; defaults to a flat list of all resources.
 * `list_field_rules_level_1..3`, `list_sort` — which columns list views show and their default sort (see below).
+* `list_row_actions` — model-provided buttons rendered on individual list rows (see below).
 * `authenticated_pages` — which custom pages require login (see below).
 
 ### List field rules
@@ -102,6 +103,34 @@ Example from [`models/test-app/presentation.jsonc`](../models/test-app/presentat
 ### Configurable list columns
 
 List views open with the default columns computed by the field rules above, but the user can adjust them: the **Columns** button opens a panel to show or hide any non-internal field, and **Reset columns** returns to the defaults. The selection persists per concept in the browser's local storage (namespaced per app), so it survives reloads without affecting other users. The **Add filter** menu covers the same full field set, so any column a user adds can also be filtered on.
+
+### List row actions
+
+`list_row_actions` adds model-specific icon buttons to the standard generated list without replacing or specializing that list. It maps a concept to addon names; each name is resolved to `models/<app>/presentation/addons/<name>.jsx` and copied into the generated frontend. The filename is therefore the discovery mechanism:
+
+```jsonc
+// presentation.jsonc
+"list_row_actions": {
+  "invoice": ["payment_details"]
+}
+```
+
+```jsx
+// presentation/addons/payment_details.jsx
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import { PaymentDialog } from '../components/PaymentDialog';
+
+export const Icon = ReceiptLongIcon;
+export const tooltip = 'Payment details';
+export const visible = ({ record, permissions }) => Boolean(record.paid_at && permissions);
+export const execute = ({ record, close }) => (
+  <PaymentDialog payment={record} onClose={close} />
+);
+```
+
+An addon exports `Icon`, `tooltip`, `visible(context)` and `execute(context)`. `tooltip` may also be a function of the context. Both functions receive the complete row context: `resource`, `record`, its convenience `id`, `permissions`, `dataProvider`, `notify`, `navigate(resource, id)`, `refresh`, `close`, and an optional embedding `scope`. `visible` decides per row whether the button exists. `execute` may be synchronous or asynchronous; returning a React element mounts it as an overlay, which makes dialogs the usual pattern, while returning nothing is suitable for navigation or direct actions. The host prevents button and dialog clicks from triggering the list's row navigation.
+
+Addon names use lower-case snake case. Names beginning with `_` are reserved for framework-generated actions; for example, record versioning injects `_version_details` and `_version_revert` into the `_version` list and generates the matching addon files. Unknown concepts, missing addon files and model-owned files using the reserved prefix fail generation. As with every frontend visibility rule, `visible` is only a usability affordance: the backend must authorize every read or mutation performed by `execute`.
 
 ### Presentation customization overlays (`presentation-custom-NN.jsonc`)
 

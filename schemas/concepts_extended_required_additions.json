@@ -2,7 +2,7 @@
   "properties": {
     "concepts": {
       "items": {
-        "optional_properties": ["_prefill_groups", "_profile_for_roles", "_be_storage", "_fe_allow_create", "_fe_allow_delete"],
+        "optional_properties": ["_prefill_groups", "_profile_for_roles", "_be_storage", "_be_version_history", "_fe_allow_create", "_fe_allow_edit", "_fe_allow_delete"],
         "properties": {
           "_type": {
             "type": "string",
@@ -14,7 +14,12 @@
             "description": "Physical backend representation of the concept.",
             "enum": ["table", "view"]
           },
+          "_be_version_history": {
+            "type": "boolean",
+            "description": "True only for the generated immutable version-history concept. Backend generators use this capability marker instead of depending on its physical table name."
+          },
           "_fe_allow_create": { "type": "boolean" },
+          "_fe_allow_edit": { "type": "boolean" },
           "_fe_allow_delete": { "type": "boolean" },
           "_profile_for_roles": {
             "type": "array",
@@ -36,7 +41,7 @@
           },
           "_meta_m2m_links": {
             "type": "array",
-            "description": "Many-to-many relationship descriptors where this concept is either source or target. Used by both backend (join table DDL) and frontend (ReferenceManyField). Each item has: target_concept, join_table, my_fk, other_fk, field_name, is_source."
+            "description": "Many-to-many relationship descriptors where this concept is either source or target. Used by both backend (join table DDL) and frontend (ReferenceManyField). Each item has: target_concept, join_table, my_fk, other_fk, field_name, is_source and versioned (true when either endpoint is versioned)."
           },
           "_prefill_groups": {
             "type": "array",
@@ -80,6 +85,10 @@
                     "type": "string",
                     "description": "Controls how the field appears in the UI. 'editable' = shown in forms and lists, user can edit; 'read_only' = shown but not editable (e.g. calculated fields, id); 'internal' = hidden from UI entirely (e.g. state, part_of_order, _-prefixed system fields).",
                     "enum": ["editable", "read_only", "internal"]
+                },
+                "_fe_list_exclude": {
+                  "type": "boolean",
+                  "description": "Excludes the field from generated list columns and filters while retaining it in record payloads and other views."
                 },
                 "_prefill_group": {
                   "type": "string",

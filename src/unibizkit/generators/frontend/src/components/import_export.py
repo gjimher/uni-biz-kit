@@ -747,7 +747,7 @@ const ImportDialogButton = ({ resource, config }) => {
   );
 };
 
-export const ImportExportActions = () => {
+export const ImportExportActions = ({ preferenceKey: requestedPreferenceKey }) => {
   const { resource, filterValues, sort } = useListContext();
   const { hasCreate } = useResourceDefinition();
   const { permissions } = usePermissions();
@@ -784,15 +784,15 @@ __DESIGN_BADGE__      <FilterButton />
             "  // customizationConfig.js); the column selector and reset buttons must target\n"
             "  // the same key as the DatagridConfigurable of this list.\n"
             "  const listCfg = custom && custom.lists[resource];\n"
-            "  const preferenceKey = listCfg ? listCfg.prefKey : undefined;\n"
+            "  const preferenceKey = requestedPreferenceKey ?? (listCfg ? listCfg.prefKey : undefined);\n"
         )
         design_badge = "      <DesignBadge target={{ kind: 'list', concept: resource }} />\n"
         pref_prop = " preferenceKey={preferenceKey}"
     else:
         custom_import = ""
-        custom_pref = ""
+        custom_pref = "  const preferenceKey = requestedPreferenceKey;\n"
         design_badge = ""
-        pref_prop = ""
+        pref_prop = " preferenceKey={preferenceKey}"
     return (
         template
         .replace("__CUSTOM_IMPORT__\n", custom_import)

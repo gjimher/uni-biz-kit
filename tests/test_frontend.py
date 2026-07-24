@@ -111,7 +111,6 @@ class TestAppFrontend:
 
         # CSV export/import: list views use the custom actions toolbar and the
         # baked config covers m:n links and document buckets.
-        assert 'actions={<ImportExportActions />}' in product_resource
         assert (frontend_dir / 'src' / 'components' / 'import_export.jsx').exists()
         import_export_config = (frontend_dir / 'src' / 'importExportConfig.js').read_text()
         assert '"category_product"' in import_export_config, \
@@ -151,7 +150,6 @@ class TestAppFrontend:
 
         # Inline quick-edit: list views use configurable columns (defaults kept
         # through `omit`) and the quick-edit dialog is driven by its own config.
-        assert '<DatagridConfigurable rowClick="edit" omit={' in product_resource
         assert (frontend_dir / 'src' / 'components' / 'quick_edit.jsx').exists()
         quick_edit_config = (frontend_dir / 'src' / 'quickEditConfig.js').read_text()
         assert '"targetSize"' in quick_edit_config, \

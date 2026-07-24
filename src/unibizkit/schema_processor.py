@@ -436,6 +436,9 @@ class SchemaProcessor:
         if "list_sort" not in self.presentation_extended:
             self.presentation_extended["list_sort"] = {}
 
+        if "list_row_actions" not in self.presentation_extended:
+            self.presentation_extended["list_row_actions"] = {}
+
     def _enrich_security(self):
         """Inject default roles and users if missing, and expand rule wildcards."""
         # Propagate SSO config with defaults
@@ -1139,6 +1142,7 @@ class SchemaProcessor:
         field["_fe_component_options"] = self._determine_ui_component_options(field)
         field["_fe_list_component"] = self._determine_list_component(field)
         field["_fe_list_component_options"] = self._determine_list_component_options(field)
+        field.setdefault("_fe_list_exclude", False)
         if field["type"] == "markdown":
             field["_fe_grid_width"] = 12  # editor always takes the full row
         else:

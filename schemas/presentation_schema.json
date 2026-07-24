@@ -89,6 +89,19 @@
         "type": "string",
         "pattern": "^\\w+ (ASC|DESC)$"
       }
+    },
+    "list_row_actions": {
+      "type": "object",
+      "description": "Per-concept row buttons implemented by presentation/addons/<action>.jsx. Each addon exports Icon, tooltip, visible(context), and execute(context). Names beginning with '_' are reserved for generated framework actions.",
+      "default": {},
+      "additionalProperties": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "pattern": "^_?[a-z][a-z0-9_]*$"
+        }
+      }
     }
   },
   "definitions": {

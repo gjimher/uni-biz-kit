@@ -431,11 +431,29 @@ def _collect_validation_concepts(ctx: Context, concept: Dict[str, Any]) -> List[
 def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     resource_name = concept["name"]
     allow_delete_prop = "" if concept.get("_fe_allow_delete", True) else " allowDelete={false}"
+    row_click = "edit" if concept.get("_fe_allow_edit", True) else "show"
     title_desc_prop = f' description="{concept["description"].replace(chr(34), "&quot;")}"' if concept["description"] else ''
 
     owned_children = find_owned_children(resource_name, ctx.concepts)
     many_to_many_links = find_many_to_many_links(resource_name, ctx.concepts, ctx.concept_map)
     has_documents = concept["documents"]["enabled"]
+    is_versioned = concept.get("versioned", False)
+    history_concept = next(
+        (candidate for candidate in ctx.concepts if candidate.get("_be_version_history")),
+        None,
+    )
+    if is_versioned and history_concept is None:
+        raise ValueError("Versioned concepts require a version-history capability")
+    history_resource = history_concept["name"] if history_concept else None
+    history_list_component = (
+        f"{history_resource.upper()}_LIST" if history_resource else None
+    )
+    list_row_actions = ctx.presentation_config["list_row_actions"].get(resource_name, [])
+    list_row_actions_component = (
+        f"<ListRowActions actions={{{json.dumps(list_row_actions)}}} />"
+        if list_row_actions else ""
+    )
+    row_actions_preference_suffix = ".row-actions-v1" if list_row_actions else ""
     concept_workflow = ctx.workflow_config["_concept_workflow"].get(resource_name)
     validation_concepts = _collect_validation_concepts(ctx, concept)
 
@@ -511,6 +529,8 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     ]
     if concept.get("actions"):
         component_imports.append("import { ConceptActions, ConceptBulkActions } from '../../components/concept_actions';")
+    if list_row_actions:
+        component_imports.append("import { ListRowActions } from '../../components/list_row_actions';")
     if not workflow_import and "WorkflowSelector" in child_dialog_components:
         # Child dialogs render the selector when the child concept has a
         # workflow, even if this (parent) concept does not.
@@ -682,16 +702,25 @@ const {inner_comp_name} = () => {{
         edit_custom_decl = "  const custom = useCustomization();\n" if edit_needs_custom else ""
         edit_component = f"""<Edit title={{<Title name="{resource_name}"{title_desc_prop} />}}{edit_actions_prop} {{...props}}>
     <SimpleForm toolbar={{<CustomEditToolbar resource="{resource_name}"{allow_delete_prop} />}}{validate_prop}>
+      {history_edit_bridge}
       <Grid container rowSpacing={{0}} columnSpacing={{2}}>{id_field_edit}
         {edit_entries_render}
       </Grid>
     </SimpleForm>
   </Edit>"""
 
-    bulk_actions_prop = (
-        ' bulkActionButtons={<ConceptBulkActions' + allow_delete_prop + ' />}'
-        if any('list' in action['placement'] for action in concept.get('actions', [])) else ''
-    )
+    if not concept.get("_fe_allow_delete", True):
+        bulk_actions_prop = ' bulkActionButtons={false}'
+        bulk_actions_expr = 'false'
+    else:
+        bulk_actions_prop = (
+            ' bulkActionButtons={<ConceptBulkActions' + allow_delete_prop + ' />}'
+            if any('list' in action['placement'] for action in concept.get('actions', [])) else ''
+        )
+        bulk_actions_expr = (
+            '<ConceptBulkActions' + allow_delete_prop + ' />'
+            if bulk_actions_prop else 'undefined'
+        )
     if ctx.customization:
         columns_map_entries = ",\n".join(
             f"  '{name}': {html.strip()}" for name, html in field_components["list_column_entries"]
@@ -712,15 +741,29 @@ const {resource_name.upper()}_COLUMNS = {{
 {edit_form_const}
 
 """
-        list_component = f"""export const {resource_name.upper()}_LIST = (props) => {{
-  const {{ permissions }} = usePermissions();
+        list_component = f"""const {resource_name.upper()}_BULK_ACTIONS = {bulk_actions_expr};
+
+export const {resource_name.upper()}_LIST_CONTENT = ({{ rowClick = '{row_click}', bulkActionButtons = {resource_name.upper()}_BULK_ACTIONS, omit, preferenceKey, children }}) => {{
   const custom = useCustomization();
   const cfg = custom.lists['{resource_name}'];
+  const effectiveOmit = [...new Set([...(cfg.omit || []), ...(omit || [])])];
+  const effectivePreferenceKey = `${{preferenceKey ?? cfg.prefKey}}{row_actions_preference_suffix}`;
   return (
-    <List {{...props}} title={{custom.labels.titles['{resource_name}']}} filters={{{resource_name}_filters}} sort={{cfg.sort || undefined}} actions={{<ImportExportActions />}}>
-      <DatagridConfigurable rowClick="edit" omit={{cfg.omit}} preferenceKey={{cfg.prefKey}}{bulk_actions_prop}>
-        {{renderColumns('{resource_name}', {resource_name.upper()}_COLUMNS, custom)}}
-      </DatagridConfigurable>
+    <DatagridConfigurable rowClick={{rowClick}} omit={{effectiveOmit}} preferenceKey={{effectivePreferenceKey}} bulkActionButtons={{bulkActionButtons}}>
+      {{renderColumns('{resource_name}', {resource_name.upper()}_COLUMNS, custom)}}
+      {{children}}
+      {list_row_actions_component}
+    </DatagridConfigurable>
+  );
+}};
+
+export const {resource_name.upper()}_LIST = ({{ rowClick = '{row_click}', bulkActionButtons = {resource_name.upper()}_BULK_ACTIONS, omit, preferenceKey, children, ...props }}) => {{
+  const custom = useCustomization();
+  const cfg = custom.lists['{resource_name}'];
+  const effectivePreferenceKey = `${{preferenceKey ?? cfg.prefKey}}{row_actions_preference_suffix}`;
+  return (
+    <List {{...props}} title={{custom.labels.titles['{resource_name}']}} filters={{{resource_name.upper()}_FILTERS}} sort={{cfg.sort || undefined}} actions={{<ImportExportActions preferenceKey={{effectivePreferenceKey}} />}}>
+      <{resource_name.upper()}_LIST_CONTENT rowClick={{rowClick}} bulkActionButtons={{bulkActionButtons}} omit={{omit}} preferenceKey={{preferenceKey}}>{{children}}</{resource_name.upper()}_LIST_CONTENT>
     </List>
   );
 }};"""
@@ -748,13 +791,21 @@ export const {resource_name.upper()}_SHOW = (props) => {{
             list_sort_prop = f" sort={{{{ field: '{sort_field}', order: '{sort_order}' }}}}"
         else:
             list_sort_prop = ""
-        list_component = f"""export const {resource_name.upper()}_LIST = (props) => {{
-  const {{ permissions }} = usePermissions();
+        list_component = f"""const {resource_name.upper()}_BULK_ACTIONS = {bulk_actions_expr};
+
+export const {resource_name.upper()}_LIST_CONTENT = ({{ rowClick = '{row_click}', bulkActionButtons = {resource_name.upper()}_BULK_ACTIONS, omit, preferenceKey, children }}) => (
+  <DatagridConfigurable rowClick={{rowClick}} omit={{[...new Set([...{field_components["list_omit_json"]}, ...(omit || [])])]}} preferenceKey={{`${{preferenceKey ?? '{resource_name}.datagrid'}}{row_actions_preference_suffix}`}} bulkActionButtons={{bulkActionButtons}}>
+    {field_components["list_fields_inline"]}
+    {{children}}
+    {list_row_actions_component}
+  </DatagridConfigurable>
+);
+
+export const {resource_name.upper()}_LIST = ({{ rowClick = '{row_click}', bulkActionButtons = {resource_name.upper()}_BULK_ACTIONS, omit, preferenceKey, children, ...props }}) => {{
+  const effectivePreferenceKey = `${{preferenceKey ?? '{resource_name}.datagrid'}}{row_actions_preference_suffix}`;
   return (
-    <List {{...props}} filters={{{resource_name}_filters}}{list_sort_prop} actions={{<ImportExportActions />}}>
-      <DatagridConfigurable rowClick="edit" omit={{{field_components["list_omit_json"]}}}{bulk_actions_prop}>
-        {field_components["list_fields_inline"]}
-      </DatagridConfigurable>
+    <List {{...props}} filters={{{resource_name.upper()}_FILTERS}}{list_sort_prop} actions={{<ImportExportActions preferenceKey={{effectivePreferenceKey}} />}}>
+      <{resource_name.upper()}_LIST_CONTENT rowClick={{rowClick}} bulkActionButtons={{bulkActionButtons}} omit={{omit}} preferenceKey={{preferenceKey}}>{{children}}</{resource_name.upper()}_LIST_CONTENT>
     </List>
   );
 }};"""
@@ -782,7 +833,7 @@ import {{ {mui_imports_str} }} from '@mui/material';
 {edit_actions}
 {show_actions}
 
-const {resource_name}_filters = [
+export const {resource_name.upper()}_FILTERS = [
 {field_components["filter_fields"]}
 ];
 

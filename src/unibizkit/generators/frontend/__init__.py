@@ -18,7 +18,7 @@ from .src.components import (
     title, reorderable_datagrid, recursive_parent_selector,
     custom_edit_toolbar, document_tab, workflow_selector, field_help_icon,
     markdown_input, import_export, quick_edit, workflow_tasks, deleted_snapshot_reference,
-    concept_actions, precision_datetime_input, customization
+    concept_actions, precision_datetime_input, customization, list_row_actions
 )
 from .src.devtools import (
     api as devtools_api, design_badge, design_tools, editors as devtools_editors,
@@ -170,6 +170,8 @@ class ReactAdminGenerator:
         _write(ctx.output_dir / "src" / "components" / "import_export.jsx", import_export.generate(ctx.customization))
         _write(ctx.output_dir / "src" / "components" / "quick_edit.jsx", quick_edit.generate())
         _write(ctx.output_dir / "src" / "components" / "concept_actions.jsx", concept_actions.generate())
+        if any(ctx.presentation_config["list_row_actions"].values()):
+            _write(ctx.output_dir / "src" / "components" / "list_row_actions.jsx", list_row_actions.generate())
         if any(f["type"] == "datetime" for c in ctx.concepts for f in c["fields"]):
             _write(ctx.output_dir / "src" / "components" / "precision_datetime_input.jsx", precision_datetime_input.generate())
         if any(f.get("on_delete") == "snapshot_data" for c in ctx.concepts for f in c["fields"]):
@@ -200,6 +202,57 @@ class ReactAdminGenerator:
         _write(pres_dir / "model.js", model_js.generate(ctx))
         _write(pres_dir / "PresentationRouter.jsx", router.generate(ctx))
         _write(pres_dir / "CustomPage.jsx", custom_page.generate())
+
+        # List-row UI actions are referenced declaratively by their file stem in
+        # presentation.jsonc. Model addons are copied verbatim; underscore names
+        # are reserved for framework addons generated here.
+        actions_by_resource = ctx.presentation_config["list_row_actions"]
+        known_concepts = {concept["name"] for concept in ctx.concepts}
+        unknown_resources = sorted(set(actions_by_resource) - known_concepts)
+        if unknown_resources:
+            raise ValueError(
+                "presentation list_row_actions references unknown concept(s): "
+                + ", ".join(unknown_resources)
+            )
+        action_names = {
+            name for names in actions_by_resource.values() for name in names
+        }
+        if action_names:
+            addons_dir = pres_dir / "addons"
+            addons_dir.mkdir(exist_ok=True)
+            addons_src = presentation_src / "addons"
+            if addons_src.exists():
+                for addon_file in addons_src.iterdir():
+                    if not addon_file.is_file() or addon_file.suffix != ".jsx":
+                        continue
+                    if addon_file.stem.startswith("_"):
+                        raise ValueError(
+                            f"presentation addon '{addon_file.name}' uses the reserved '_' prefix"
+                        )
+                    shutil.copy2(addon_file, addons_dir / addon_file.name)
+
+            history_resource = next((
+                concept["name"] for concept in ctx.concepts
+                if concept.get("_be_version_history")
+            ), None)
+            builtins = {
+                f"{history_resource}_details": list_row_actions.generate_version_details,
+                f"{history_resource}_revert": list_row_actions.generate_version_revert,
+            } if history_resource else {}
+            for name, generate_addon in builtins.items():
+                if name in action_names:
+                    _write(addons_dir / f"{name}.jsx", generate_addon())
+
+            missing = sorted(
+                name for name in action_names
+                if not (addons_dir / f"{name}.jsx").is_file()
+            )
+            if missing:
+                raise ValueError(
+                    "presentation list_row_actions addon file(s) not found: "
+                    + ", ".join(f"presentation/addons/{name}.jsx" for name in missing)
+                )
+            _write(addons_dir / "_registry.jsx", list_row_actions.generate_registry(action_names))
 
         # Look & feel of the generated auth pages. A model rebrands them all at
         # once by providing its own presentation/style/auth.jsx (copied below,
@@ -300,6 +353,7 @@ class ReactAdminGenerator:
         (src_dir / "presentation").mkdir(exist_ok=True)
         (src_dir / "presentation" / "pages").mkdir(exist_ok=True)
         (src_dir / "presentation" / "layouts").mkdir(exist_ok=True)
+        (src_dir / "presentation" / "addons").mkdir(exist_ok=True)
 
         self._generate_index_html(ctx)
 
