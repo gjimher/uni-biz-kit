@@ -80,8 +80,8 @@ def generate(ctx: Context) -> str:
         ))
         sql_parts.extend(generate_versioning_access_sql(ctx.concepts, ctx.concept_map))
 
-    # Supabase grants table-level INSERT by default. Narrow that existing grant
-    # last, after all generated tables exist, so API roles cannot choose SERIAL ids.
-    sql_parts.extend(generate_id_insert_privileges(generated_table_names))
+    # Supabase grants table-level INSERT by default. Narrow that grant last,
+    # after all generated tables exist, so API roles cannot choose SERIAL ids.
+    sql_parts.extend(generate_id_insert_privileges('\n\n'.join(sql_parts), generated_table_names))
 
     return '\n\n'.join(sql_parts)

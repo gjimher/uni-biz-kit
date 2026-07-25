@@ -1,6 +1,8 @@
+import re
 from typing import Any, Dict, List, Optional
 
 
+API_ROLES = "anon, authenticated, service_role"
 PROTECT_INTERNAL_COLUMNS_TRIGGER = "00_protect_internal_columns_trigger"
 PROTECT_INTERNAL_COLUMNS_FUNCTION = "00_protect_internal_columns_trigger_function"
 SET_SYSTEM_TIMESTAMPS_TRIGGER = "01_set_system_timestamps_trigger"
@@ -140,44 +142,51 @@ EXECUTE FUNCTION "{PROTECT_INTERNAL_COLUMNS_FUNCTION}"({col_args});
     return sql_parts
 
 
-def generate_id_insert_privileges(tables: List[Any]) -> List[str]:
+def _created_table_columns(schema_sql: str) -> Dict[str, List[str]]:
+    """Column names per table, read back from the generated CREATE TABLE blocks.
+
+    The column list is not rebuilt from the model: fields can be skipped, and
+    tables/joins/documents each add their own columns, so the emitted SQL is
+    the only accurate source.
+    """
+    columns = {}
+    for table_name, body in re.findall(
+        r'CREATE TABLE "([^"]+)" \(\n(.*?)\n\s*\);', schema_sql, re.DOTALL
+    ):
+        # Constraint lines (UNIQUE, FOREIGN KEY, CONSTRAINT ...) never start with a quote.
+        columns[table_name] = [
+            match.group(1)
+            for match in (re.match(r'\s*"([^"]+)"\s', line) for line in body.splitlines())
+            if match
+        ]
+    return columns
+
+
+def generate_id_insert_privileges(schema_sql: str, tables: List[Any]) -> List[str]:
     """Remove API roles' ability to provide an explicit SERIAL primary key.
 
     Supabase's default table grants include INSERT. PostgreSQL table-level
     INSERT implies INSERT on every column, so a column-level REVOKE alone is
-    ineffective: preserve whether each API role could insert, revoke the table
-    grant, then restore it for every column except ``id``. Database owners and
-    trusted direct connections are not affected.
+    ineffective: the table grant has to go and come back as a column list
+    without ``id``. Plain statements (rather than a DO block reading the
+    catalog) stay re-runnable and remain visible to the production schema
+    diff. Database owners and trusted direct connections are not affected.
     """
-    table_names = [_table_name(table) for table in tables]
-    tables_sql = ", ".join("'" + name.replace("'", "''") + "'" for name in table_names)
-    return [f"""
-DO $id_insert_privileges$
-DECLARE
-    target_table TEXT;
-    role_name TEXT;
-    insert_columns TEXT;
-    had_insert BOOLEAN;
-BEGIN
-    FOREACH target_table IN ARRAY ARRAY[{tables_sql}] LOOP
-        SELECT string_agg(format('%I', column_name), ', ' ORDER BY ordinal_position)
-          INTO insert_columns
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND information_schema.columns.table_name = target_table
-          AND column_name <> 'id';
-
-        FOREACH role_name IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
-            had_insert := has_table_privilege(role_name, format('public.%I', target_table), 'INSERT');
-            EXECUTE format('REVOKE INSERT ON TABLE %I FROM %I', target_table, role_name);
-            IF had_insert AND insert_columns IS NOT NULL THEN
-                EXECUTE format('GRANT INSERT (%s) ON TABLE %I TO %I', insert_columns, target_table, role_name);
-            END IF;
-        END LOOP;
-    END LOOP;
-END;
-$id_insert_privileges$;
-"""]
+    table_columns = _created_table_columns(schema_sql)
+    sql_parts = []
+    for table in tables:
+        name = _table_name(table)
+        insert_columns = [column for column in table_columns.get(name, []) if column != "id"]
+        if not insert_columns:
+            raise ValueError(
+                f"Cannot narrow INSERT on '{name}': no non-id columns found in its CREATE TABLE"
+            )
+        column_list = ", ".join(f'"{column}"' for column in insert_columns)
+        sql_parts.append(f"""
+REVOKE INSERT ON TABLE "{name}" FROM {API_ROLES};
+GRANT INSERT ({column_list}) ON TABLE "{name}" TO {API_ROLES};
+""")
+    return sql_parts
 
 
 def generate_system_timestamp_triggers(tables: List[Any]) -> List[str]:

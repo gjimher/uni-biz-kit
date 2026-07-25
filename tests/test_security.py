@@ -820,21 +820,24 @@ def test_internal_column_protection_is_table_name_independent():
             pytest.skip(f"Required users not found. Found: {user_ids}")
 
         try:
+            create_sql = (
+                f'CREATE TABLE "{table_name}" (\n'
+                '  "id" SERIAL PRIMARY KEY,\n'
+                '  "_xxx" TEXT,\n'
+                '  "_created_at" TIMESTAMP WITH TIME ZONE,\n'
+                '  "_updated_at" TIMESTAMP WITH TIME ZONE\n'
+                ');'
+            )
             cur.execute(f'DROP TABLE IF EXISTS "{table_name}";')
-            cur.execute(f"""
-                CREATE TABLE "{table_name}" (
-                    "id" SERIAL PRIMARY KEY,
-                    "_xxx" TEXT,
-                    "_created_at" TIMESTAMP WITH TIME ZONE,
-                    "_updated_at" TIMESTAMP WITH TIME ZONE
-                );
-            """)
+            cur.execute(create_sql)
             for sql in generate_internal_column_protection([concept]):
                 cur.execute(sql)
             for sql in generate_system_timestamp_triggers([concept]):
                 cur.execute(sql)
             cur.execute(f'GRANT SELECT, INSERT, UPDATE ON "{table_name}" TO authenticated;')
-            for sql in generate_id_insert_privileges([concept]):
+            # Applied twice: re-running the schema must not strip the INSERT grant
+            # it just narrowed, or every create in the app would start failing.
+            for sql in generate_id_insert_privileges(create_sql, [concept]) * 2:
                 cur.execute(sql)
 
             user_claims = f'{{"sub": "{user_id}", "app_metadata": {{"roles": ["user"]}}}}'
