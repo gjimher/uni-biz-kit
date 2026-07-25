@@ -1,0 +1,79 @@
+{
+  "$schema": "../../schemas/presentation_schema.json",
+  "html_head_title": "UBK Agile Demo",
+  "locale": "en-GB",
+  "number_locale": "en-GB",
+  // Design mode also ships in production builds: authenticated users keep a personal
+  // design in the generated _design table; admins review them all.
+  "designer": "production",
+  "designer_admin_role": "admin",
+  "menu": [
+    {
+      "label": "Work",
+      "children": [
+        { "label": "Issues",          "concept": "issue" },
+        { "label": "Boards",          "concept": "board" }
+      ]
+    },
+    {
+      "label": "Planning",
+      "children": [
+        { "label": "Projects",        "concept": "project" },
+        { "label": "Sprints",         "concept": "sprint" },
+        { "label": "Releases",        "concept": "version" },
+        { "label": "Components",      "concept": "component" },
+        { "label": "Labels",          "concept": "label" }
+      ]
+    },
+    {
+      "label": "Activity",
+      "children": [
+        { "label": "Comments",        "concept": "issue_comment" },
+        { "label": "Work Logs",       "concept": "work_log" },
+        { "label": "Issue Links",     "concept": "issue_link" }
+      ]
+    },
+    {
+      "label": "People",
+      "children": [
+        { "label": "Team Members",    "concept": "member" }
+      ]
+    },
+    {
+      "label": "Tasks",
+      "children": [
+        { "label": "Assignable tasks", "workflow": "assignable_tasks" },
+        { "label": "My tasks", "workflow": "my_tasks" }
+      ]
+    }
+  ],
+  "list_field_rules_level_2": {
+    // Issue list = the Jira issue navigator: key, type, summary, state, priority,
+    // assignee, estimate and sprint. Everything else (description, links, rollups,
+    // ranking) belongs to the issue page, not to a column.
+    "issue": "!*, id_presentation, type, summary, state, priority, assignee, story_points, sprint",
+
+    // Project list: key/name plus the health rollups; the markdown brief stays inside
+    "project": "!description, !start_date",
+
+    // Sprint list: state and dates matter, the goal is a full sentence
+    "sprint": "!goal, state[id_presentation]",
+
+    // Comment/work log lists identify the entry; the text itself is in the record
+    "issue_comment": "!body",
+    "work_log": "!description",
+
+    // Board list: the configuration knobs, not the prose
+    "board": "!description",
+
+    // Directory: who they are and whether they are active
+    "member": "!capacity_hours_per_sprint"
+  },
+  "list_sort": {
+    // Newest first, the way an issue navigator and an activity stream read
+    "issue": "id DESC",
+    "issue_comment": "id DESC",
+    "work_log": "work_date DESC",
+    "sprint": "start_date DESC"
+  }
+}

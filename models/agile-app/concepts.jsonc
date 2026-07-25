@@ -1,0 +1,199 @@
+{
+  "$schema": "../../schemas/concepts_schema.json",
+  "version": "1.0.0",
+  "name": "Agile App",
+  "description": "Agile software project management (Jira-style): projects with their boards, components and releases, issues of every type (epic, story, task, bug, subtask) identified by a project key, sprint planning with story points, a kanban lifecycle workflow, comments, work logs, issue links and attachments.",
+  // Issue history is a core Jira feature: 'project' is versioned and every concept
+  // that is part_of it inherits the flag, so the whole project aggregate is audited.
+  // admin_role opens the global Operations > Versions resource.
+  "versioning": { "admin_role": "admin" },
+  "concepts": [
+    {
+      "name": "member",
+      "plural_name": "members",
+      "description": "Team member profile linked to a registered user account. Referenced as issue assignee, reporter, project/component lead and work log author.",
+      "id_presentation": { "fields": ["first_name", "last_name"] },
+      // Avatar shown on board cards and in the people directory.
+      "documents": { "enabled": true, "tags": ["avatar"] },
+      "fields": [
+        // Profile rows are auto-created empty when a user is seeded or signs in for the
+        // first time, so required fields need defaults (same pattern as intranet-app employee).
+        { "name": "first_name", "type": "string", "required": true, "min_length": 1, "max_length": 50, "default": "Pending", "description": "First name" },
+        { "name": "last_name", "type": "string", "required": true, "min_length": 1, "max_length": 50, "default": "Profile", "description": "Last name" },
+        { "name": "email", "type": "string", "min_length": 5, "max_length": 100, "calculated": "\"_user_email\"", "description": "Email — auto-set from the authenticated user at INSERT; read-only" },
+        { "name": "job_title", "type": "string", "max_length": 100, "description": "Role in the team (e.g. Frontend Developer, QA Engineer)" },
+        { "name": "capacity_hours_per_sprint", "type": "decimal", "precision": 5, "scale": 1, "min": 0, "max": 400, "default": 60, "description": "Hours this member can commit to a sprint; used in sprint planning" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Whether the member is currently part of the team" }
+      ]
+    },
+    {
+      "name": "label",
+      "plural_name": "labels",
+      "description": "Free-form tag attached to issues across projects (e.g. tech-debt, security, ux)",
+      "id_presentation": { "fields": ["name"] },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 40, "description": "Label text, lowercase and hyphenated" },
+        { "name": "color", "type": "string", "min_length": 4, "max_length": 7, "default": "#94a3b8", "description": "Hex colour used for the label chip (e.g. #ef4444)" },
+        { "name": "description", "type": "string", "max_length": 200, "size": "m", "description": "When this label should be used" }
+      ]
+    },
+    {
+      "name": "project",
+      "plural_name": "projects",
+      "description": "A software project: the container for issues, boards, sprints, components and releases. Its key prefixes every issue identifier (AGL-12).",
+      // Aggregate root of the version history; every part_of child inherits it.
+      "versioned": true,
+      "id_presentation": { "fields": ["key", "name"], "separator": " · ", "show": true },
+      "documents": { "enabled": true, "tags": ["charter", "logo"] },
+      "fields": [
+        { "name": "key", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 10, "description": "Short uppercase project key used as the issue prefix (e.g. AGL)" },
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 100, "description": "Project name" },
+        { "name": "description", "type": "markdown", "description": "What the project is about, its scope and stakeholders" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["scrum", "kanban"], "default": "scrum", "description": "Delivery method: sprint-based (scrum) or continuous flow (kanban)" },
+        { "name": "lead", "type": "relation_to_one", "subtype": "related_to", "target": "member", "description": "Project lead responsible for the backlog" },
+        { "name": "start_date", "type": "date", "description": "Date the project started" },
+        { "name": "is_archived", "type": "boolean", "default": false, "description": "Archived projects stay readable but are hidden from the boards" },
+        // Rollups over the project's issues (issue is part_of project)
+        { "name": "issue_count", "type": "integer", "calculated": "rollup(count,issue,summary)", "description": "Total number of issues in the project" },
+        { "name": "open_points", "type": "decimal", "precision": 8, "scale": 1, "calculated": "rollup(sum,issue,open_points)", "description": "Story points still not done across the whole project" }
+      ]
+    },
+    {
+      "name": "board",
+      "plural_name": "boards",
+      "description": "Kanban/scrum board configuration for a project. Columns are the issue workflow states; this concept adds the WIP limit and the swimlane grouping used by the board page.",
+      "id_presentation": { "fields": ["project.id_presentation", "name"], "separator": " / ", "show": true },
+      "fields": [
+        { "name": "project", "type": "relation_to_one", "subtype": "part_of", "target": "project", "description": "Project this board shows" },
+        { "name": "name", "type": "string", "required": true, "min_length": 2, "max_length": 100, "description": "Board name (e.g. AGL Sprint Board)" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["kanban", "scrum"], "default": "kanban", "description": "A scrum board shows issues from active sprints; a kanban board shows the whole flow" },
+        { "name": "description", "type": "string", "max_length": 300, "size": "m", "description": "What this board is used for" },
+        { "name": "wip_limit", "type": "integer", "min": 0, "max": 50, "default": 5, "description": "Maximum issues allowed in the In progress column before it is flagged (0 disables the limit)" },
+        { "name": "swimlane_by", "type": "enum", "required": true, "enum_values": ["none", "assignee", "epic", "priority"], "default": "none", "description": "How board rows are grouped" },
+        { "name": "is_default", "type": "boolean", "default": false, "description": "Board opened first for this project" }
+      ]
+    },
+    {
+      "name": "component",
+      "plural_name": "components",
+      "description": "Functional area of a project (e.g. API, Web UI, Billing) used to route and filter issues",
+      "id_presentation": { "fields": ["project.id_presentation", "name"], "separator": " / " },
+      "fields": [
+        { "name": "project", "type": "relation_to_one", "subtype": "part_of", "target": "project", "description": "Project this component belongs to" },
+        { "name": "name", "type": "string", "required": true, "min_length": 2, "max_length": 80, "description": "Component name" },
+        { "name": "description", "type": "string", "max_length": 300, "size": "m", "description": "What this component covers" },
+        { "name": "lead", "type": "relation_to_one", "subtype": "related_to", "target": "member", "description": "Member owning this component" }
+      ]
+    },
+    {
+      "name": "version",
+      "plural_name": "versions",
+      "description": "Release of a project. Issues declare the release that will ship them through fix_version.",
+      "id_presentation": { "fields": ["project.id_presentation", "name"], "separator": " / " },
+      "fields": [
+        { "name": "project", "type": "relation_to_one", "subtype": "part_of", "target": "project", "description": "Project being released" },
+        { "name": "name", "type": "string", "required": true, "min_length": 1, "max_length": 40, "description": "Version number (e.g. 1.4.0)" },
+        { "name": "description", "type": "string", "max_length": 300, "size": "m", "description": "Headline content of the release" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["unreleased", "released", "archived"], "default": "unreleased", "description": "Release status" },
+        { "name": "release_date", "type": "date", "description": "Planned or actual release date" }
+      ]
+    },
+    {
+      "name": "sprint",
+      "plural_name": "sprints",
+      "description": "Time-boxed iteration of a project (sprint_workflow: planned → active → completed). Issues join a sprint through their sprint field.",
+      "checks": ["end_date IS NULL OR start_date IS NULL OR end_date >= start_date"],
+      "id_presentation": { "fields": ["project.id_presentation", "name"], "separator": " / ", "show": true },
+      "fields": [
+        { "name": "project", "type": "relation_to_one", "subtype": "part_of", "target": "project", "description": "Project this sprint belongs to" },
+        { "name": "name", "type": "string", "required": true, "min_length": 2, "max_length": 80, "description": "Sprint name (e.g. Sprint 4)" },
+        { "name": "goal", "type": "string", "max_length": 300, "size": "m", "description": "One-sentence sprint goal agreed at planning" },
+        { "name": "start_date", "type": "date", "description": "First day of the sprint" },
+        { "name": "end_date", "type": "date", "description": "Last day of the sprint" },
+        { "name": "capacity_points", "type": "decimal", "precision": 5, "scale": 1, "min": 0, "description": "Story points the team commits to in this sprint" }
+      ]
+    },
+    {
+      "name": "issue",
+      "plural_name": "issues",
+      "description": "Unit of work: epic, story, task, bug or subtask (issue_workflow: backlog → todo → in_progress → in_review → done). Identified by the Jira-style key <project key>-<number>.",
+      "data_size": "m",
+      // project_key is a copy of the parent project's key, so the label is the familiar
+      // AGL-12 and stays stable in list views, pickers and board cards.
+      "id_presentation": { "fields": ["project_key", "id"], "separator": "-", "show": true },
+      // The document table is unique per (issue, tag, version), so each tag is an
+      // attachment slot that keeps its own history.
+      "documents": { "enabled": true, "versioned": true, "tags": ["attachment", "screenshot", "spec"] },
+      "fields": [
+        { "name": "project", "type": "relation_to_one", "subtype": "part_of", "target": "project", "description": "Project the issue belongs to" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["epic", "story", "task", "bug", "subtask"], "default": "task", "description": "Issue type" },
+        { "name": "summary", "type": "string", "required": true, "min_length": 3, "max_length": 200, "size": "m", "description": "One-line description of the work" },
+        { "name": "description", "type": "markdown", "description": "Full description, acceptance criteria or steps to reproduce" },
+        { "name": "priority", "type": "enum", "required": true, "enum_values": ["lowest", "low", "medium", "high", "highest"], "default": "medium", "description": "How urgent the issue is" },
+        { "name": "assignee", "type": "relation_to_one", "subtype": "related_to", "target": "member", "on_delete": "set_null", "description": "Member currently working on the issue" },
+        // Plain relation (not copy_logged_on_insert) so seed data can file issues on behalf
+        // of anyone; rules_level_3 makes it read-only for the member role instead.
+        { "name": "reporter", "type": "relation_to_one", "subtype": "related_to", "target": "member", "on_delete": "set_null", "description": "Member who reported the issue" },
+        // Self references: 'part_of' is already taken by project and a concept can only have
+        // one of them, so the epic/subtask hierarchy uses related_to — deleting an epic or a
+        // parent must regroup its children, not delete them.
+        { "name": "epic", "type": "relation_to_one", "subtype": "related_to", "target": "issue", "on_delete": "set_null", "description": "Epic this issue contributes to" },
+        { "name": "parent", "type": "relation_to_one", "subtype": "related_to", "target": "issue", "on_delete": "set_null", "description": "Parent issue when this one is a subtask" },
+        { "name": "sprint", "type": "relation_to_one", "subtype": "related_to", "target": "sprint", "on_delete": "set_null", "description": "Sprint the issue is scheduled in; empty means it sits in the backlog" },
+        { "name": "fix_version", "type": "relation_to_one", "subtype": "related_to", "target": "version", "on_delete": "set_null", "description": "Release that will ship this issue" },
+        { "name": "components", "type": "relation_to_many", "target": "component", "description": "Functional areas this issue touches" },
+        { "name": "labels", "type": "relation_to_many", "target": "label", "description": "Tags used for cross-project filtering" },
+        { "name": "story_points", "type": "decimal", "precision": 4, "scale": 1, "min": 0, "max": 100, "description": "Relative estimate agreed at refinement (Fibonacci-like)" },
+        { "name": "original_estimate_hours", "type": "decimal", "precision": 6, "scale": 2, "min": 0, "description": "Initial time estimate in hours" },
+        { "name": "due_date", "type": "date", "description": "Date the issue is expected to be finished" },
+        { "name": "environment", "type": "string", "max_length": 200, "size": "m", "description": "Where a bug was found (browser, OS, version)" },
+        { "name": "resolution", "type": "enum", "enum_values": ["done", "wont_do", "duplicate", "cannot_reproduce"], "description": "Why the issue was closed; required to reach the done state" },
+        // Board and backlog ordering, seeded in steps of 100 so a card can be dropped
+        // between two others without renumbering the whole column.
+        { "name": "rank", "type": "integer", "min": 0, "default": 1000, "description": "Manual ordering position inside a board column or the backlog (lower comes first)" },
+        { "name": "project_key", "type": "string", "max_length": 10, "calculated": "copy(project,key,on_change)", "description": "Key of the parent project; forms the issue key together with the id" },
+        { "name": "logged_hours", "type": "decimal", "precision": 7, "scale": 2, "calculated": "rollup(sum,work_log,hours)", "description": "Hours logged against this issue" },
+        { "name": "comment_count", "type": "integer", "calculated": "rollup(count,issue_comment,body)", "description": "Number of comments on the issue" },
+        // Feeds project.open_points; a done issue no longer counts as outstanding work.
+        { "name": "open_points", "type": "decimal", "precision": 4, "scale": 1, "calculated": "CASE WHEN state <> 'done' THEN COALESCE(story_points, 0) ELSE 0 END", "description": "story_points while the issue is not done, 0 otherwise" }
+      ]
+    },
+    {
+      "name": "issue_comment",
+      "plural_name": "issue_comments",
+      "description": "Discussion entry on an issue",
+      "id_presentation": { "fields": ["issue.id_presentation", "author.id_presentation"], "separator": " · ", "show": true },
+      "fields": [
+        { "name": "issue", "type": "relation_to_one", "subtype": "part_of", "target": "issue", "description": "Issue being discussed" },
+        // Plain relation for the same reason as issue.reporter: seed data needs to write it.
+        { "name": "author", "type": "relation_to_one", "subtype": "related_to", "target": "member", "on_delete": "set_null", "description": "Member who wrote the comment" },
+        { "name": "body", "type": "markdown", "required": true, "description": "Comment text" }
+      ]
+    },
+    {
+      "name": "work_log",
+      "plural_name": "work_logs",
+      "description": "Time logged by a member against an issue; feeds issue.logged_hours",
+      "data_size": "m",
+      "id_presentation": { "fields": ["issue.id_presentation", "work_date"], "separator": " · ", "show": true },
+      "fields": [
+        { "name": "issue", "type": "relation_to_one", "subtype": "part_of", "target": "issue", "description": "Issue the time was spent on" },
+        { "name": "member", "type": "relation_to_one", "subtype": "related_to", "target": "member", "on_delete": "set_null", "description": "Member who did the work" },
+        { "name": "work_date", "type": "date", "required": true, "description": "Day the work was done" },
+        { "name": "hours", "type": "decimal", "required": true, "precision": 5, "scale": 2, "min": 0.25, "max": 24, "description": "Hours spent" },
+        { "name": "description", "type": "string", "max_length": 300, "size": "m", "description": "What was done" }
+      ]
+    },
+    {
+      "name": "issue_link",
+      "plural_name": "issue_links",
+      "description": "Directed relationship between two issues (blocks, duplicates, relates to). Deleting either issue removes the link.",
+      "id_presentation": { "fields": ["issue.id_presentation", "type", "target.id_presentation"], "separator": " ", "show": true },
+      "fields": [
+        { "name": "issue", "type": "relation_to_one", "subtype": "part_of", "target": "issue", "description": "Issue the link starts from" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["blocks", "is_blocked_by", "relates_to", "duplicates", "is_duplicated_by", "clones"], "default": "relates_to", "description": "Nature of the relationship" },
+        { "name": "target", "type": "relation_to_one", "subtype": "related_to", "target": "issue", "required": true, "description": "Issue on the other end of the link" }
+      ]
+    }
+  ]
+}

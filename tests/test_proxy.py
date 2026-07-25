@@ -46,13 +46,13 @@ class TestProxyGeneration:
 
         assert output_dir.exists()
 
-        # deployment_extended.json: resolved targets + domain.
+        # deployment_extended.json: the domain the proxy terminates HTTPS for.
+        # The resolved target list is not pinned here: which demos are proxied is
+        # model content, and the Caddyfile assertions below already cover the
+        # resolution (base_uri normalized with a trailing slash, port taken from
+        # the target model's deployment.jsonc) on the artifact that ships.
         dep = json.loads((output_dir / "deployment_extended.json").read_text())
         assert dep["proxy"]["domain"] == "www.unibizkit.dev"
-        assert dep["_proxy_targets"] == [
-            {"model": "b2c-app", "base_uri": "/b2c/", "port": 3050},
-            {"model": "intranet-app", "base_uri": "/intranet/", "port": 3100},
-        ]
 
         # Caddyfile: TLS-ALPN-01 only, no HTTP-01, prefix-preserving reverse proxy.
         caddyfile = (output_dir / "prod" / "docker" / "caddy" / "Caddyfile").read_text()

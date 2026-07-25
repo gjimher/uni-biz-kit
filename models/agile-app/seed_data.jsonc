@@ -1,0 +1,165 @@
+// Demo dataset: three projects in different shapes (a scrum platform project mid-sprint,
+// a continuous-flow marketing site and a young mobile project), so the boards, the backlog
+// and the reports all have something to show right after a reset.
+//
+// Seed ids are model-local aliases used to wire the records together; the database
+// assigns the real numeric ids. Members come first because everything references them,
+// and inside the issue array parents/epics precede the issues that point at them
+// (self-references are not reordered by the topological sort).
+{
+  "$schema": "../../schemas/seed_data_schema.json",
+  // Real, coherent demo data only — no faker rows on top of it.
+  "include_test_data": false,
+  "records": {
+    // _user_pending_link claims the seeded profile for that seed user the first time
+    // they sign in, so pm@agile.com *is* Paula rather than an empty auto-created profile.
+    "member": [
+      { "id": "paula", "first_name": "Paula", "last_name": "Rivas", "job_title": "Project Manager", "capacity_hours_per_sprint": 30, "is_active": true, "_user_pending_link": "pm@agile.com" },
+      { "id": "diego", "first_name": "Diego", "last_name": "Ferrer", "job_title": "Senior Backend Developer", "capacity_hours_per_sprint": 60, "is_active": true, "_user_pending_link": "dev1@agile.com" },
+      { "id": "nadia", "first_name": "Nadia", "last_name": "Kaur", "job_title": "Frontend Developer", "capacity_hours_per_sprint": 60, "is_active": true, "_user_pending_link": "dev2@agile.com" },
+      { "id": "tomas", "first_name": "Tomás", "last_name": "Bianchi", "job_title": "Full-stack Developer", "capacity_hours_per_sprint": 55, "is_active": true, "_user_pending_link": "dev3@agile.com" },
+      { "id": "iris", "first_name": "Iris", "last_name": "Lundgren", "job_title": "QA Engineer", "capacity_hours_per_sprint": 50, "is_active": true, "_user_pending_link": "qa@agile.com" },
+      { "id": "marc", "first_name": "Marc", "last_name": "Delaunay", "job_title": "UX Designer", "capacity_hours_per_sprint": 40, "is_active": true }
+    ],
+    "label": [
+      { "id": "tech-debt", "name": "tech-debt", "color": "#f59e0b", "description": "Work that pays back accumulated shortcuts" },
+      { "id": "security", "name": "security", "color": "#ef4444", "description": "Security hardening or vulnerability fixes" },
+      { "id": "ux", "name": "ux", "color": "#8b5cf6", "description": "User experience and interaction design" },
+      { "id": "performance", "name": "performance", "color": "#0ea5e9", "description": "Latency, memory or bundle-size improvements" },
+      { "id": "documentation", "name": "documentation", "color": "#10b981", "description": "User or developer documentation" },
+      { "id": "customer-request", "name": "customer-request", "color": "#ec4899", "description": "Explicitly asked for by a customer" }
+    ],
+    "project": [
+      { "id": "agl", "key": "AGL", "name": "Agile Kit Platform", "type": "scrum", "lead": "paula", "start_date": "2026-01-12", "is_archived": false,
+        "description": "# Agile Kit Platform\n\nThe core product: boards, backlog, sprints and reporting.\n\n* Two-week sprints, planning on Mondays\n* Definition of done: reviewed, tested and documented" },
+      { "id": "web", "key": "WEB", "name": "Marketing Website", "type": "kanban", "lead": "marc", "start_date": "2026-03-02", "is_archived": false,
+        "description": "Public website and documentation portal. Continuous flow — no sprints, WIP limited." },
+      { "id": "mob", "key": "MOB", "name": "Mobile Companion App", "type": "scrum", "lead": "paula", "start_date": "2026-05-04", "is_archived": false,
+        "description": "iOS and Android companion app. First beta targeted at 0.9.0." }
+    ],
+    "board": [
+      { "id": "agl-board", "project": "agl", "name": "AGL Sprint Board", "type": "scrum", "wip_limit": 4, "swimlane_by": "none", "is_default": true, "description": "The team board for the running sprint" },
+      { "id": "agl-triage", "project": "agl", "name": "AGL Bug Triage", "type": "kanban", "wip_limit": 6, "swimlane_by": "priority", "is_default": false, "description": "All incoming defects, grouped by priority" },
+      { "id": "web-board", "project": "web", "name": "WEB Delivery Flow", "type": "kanban", "wip_limit": 3, "swimlane_by": "assignee", "is_default": true, "description": "Continuous flow board with a tight WIP limit" },
+      { "id": "mob-board", "project": "mob", "name": "MOB Sprint Board", "type": "scrum", "wip_limit": 5, "swimlane_by": "epic", "is_default": true, "description": "Mobile team board" }
+    ],
+    "component": [
+      { "id": "agl-api", "project": "agl", "name": "API", "description": "PostgREST endpoints and edge functions", "lead": "diego" },
+      { "id": "agl-web", "project": "agl", "name": "Web UI", "description": "Board, backlog and issue views", "lead": "nadia" },
+      { "id": "agl-auth", "project": "agl", "name": "Authentication", "description": "Sign-in, sessions and permissions", "lead": "diego" },
+      { "id": "web-content", "project": "web", "name": "Content", "description": "Pages, blog and case studies", "lead": "marc" },
+      { "id": "web-seo", "project": "web", "name": "SEO & Performance", "description": "Metadata, sitemap and page speed", "lead": "marc" },
+      { "id": "mob-ios", "project": "mob", "name": "iOS", "description": "iOS client", "lead": "tomas" },
+      { "id": "mob-android", "project": "mob", "name": "Android", "description": "Android client", "lead": "tomas" }
+    ],
+    "version": [
+      { "id": "agl-1-4", "project": "agl", "name": "1.4.0", "status": "released", "release_date": "2026-06-19", "description": "Board drag and drop, public REST API documentation" },
+      { "id": "agl-1-5", "project": "agl", "name": "1.5.0", "status": "unreleased", "release_date": "2026-08-14", "description": "Real-time collaboration and the first reports" },
+      { "id": "agl-2-0", "project": "agl", "name": "2.0.0", "status": "unreleased", "description": "Bulk editing and the new permission model" },
+      { "id": "web-launch", "project": "web", "name": "Launch", "status": "released", "release_date": "2026-04-20", "description": "Public launch of the new site" },
+      { "id": "mob-0-9", "project": "mob", "name": "0.9.0-beta", "status": "unreleased", "release_date": "2026-09-30", "description": "First closed beta" }
+    ],
+    // One sprint per state so the workflow, the board and the velocity report all have data.
+    "sprint": [
+      { "id": "agl-s3", "project": "agl", "name": "Sprint 3", "goal": "Ship drag and drop on the board", "start_date": "2026-07-06", "end_date": "2026-07-17", "capacity_points": 34, "state": "completed" },
+      { "id": "agl-s4", "project": "agl", "name": "Sprint 4", "goal": "Real-time presence and a stable session", "start_date": "2026-07-20", "end_date": "2026-07-31", "capacity_points": 30, "state": "active" },
+      { "id": "agl-s5", "project": "agl", "name": "Sprint 5", "goal": "First reports and board swimlanes", "start_date": "2026-08-03", "end_date": "2026-08-14", "capacity_points": 30, "state": "planned" },
+      { "id": "mob-s1", "project": "mob", "name": "Sprint 1", "goal": "Read-only offline cache", "start_date": "2026-07-20", "end_date": "2026-07-31", "capacity_points": 21, "state": "active" }
+    ],
+    // Epics and parents first: epic/parent are self-references and keep the array order.
+    "issue": [
+      { "id": "agl-e1", "project": "agl", "type": "epic", "summary": "Real-time collaboration on issues", "priority": "high", "reporter": "paula", "state": "in_progress", "rank": 100, "labels": ["ux"], "fix_version": "agl-1-5",
+        "description": "Two people opening the same issue should see each other, and changes should land without a refresh." },
+      { "id": "agl-e2", "project": "agl", "type": "epic", "summary": "Reporting and analytics", "priority": "medium", "reporter": "paula", "state": "backlog", "rank": 200, "fix_version": "agl-2-0",
+        "description": "Burndown, velocity and cumulative flow, computed from the issue history." },
+      { "id": "mob-e1", "project": "mob", "type": "epic", "summary": "Offline mode", "priority": "high", "reporter": "paula", "state": "in_progress", "rank": 100,
+        "description": "The app must stay usable on a plane: read cached issues and queue edits." },
+
+      { "id": "agl-1", "project": "agl", "type": "story", "summary": "Drag and drop cards between board columns", "priority": "high", "reporter": "paula", "assignee": "nadia", "epic": "agl-e1", "sprint": "agl-s3", "components": ["agl-web"], "labels": ["ux"], "fix_version": "agl-1-4", "story_points": 8, "original_estimate_hours": 24, "state": "done", "resolution": "done", "rank": 100,
+        "description": "Moving a card to another column performs the workflow transition, with an optimistic UI update and a rollback if the backend rejects it." },
+      // Attachments are seeded inline: each document tag is a slot on the issue
+      // (attachment / screenshot / spec), versioned so a slot keeps its history.
+      { "id": "agl-2", "project": "agl", "type": "story", "summary": "Websocket presence indicators on the issue page", "priority": "high", "reporter": "paula", "assignee": "tomas", "epic": "agl-e1", "sprint": "agl-s4", "components": ["agl-web", "agl-api"], "story_points": 5, "original_estimate_hours": 16, "state": "in_progress", "rank": 100,
+        "description": "Show an avatar row of everyone currently looking at the issue.",
+        "documents": [
+          { "tag": "spec", "name": "presence-acceptance-criteria.txt", "content_type": "text/plain", "content_base64": "QWNjZXB0YW5jZSBjcml0ZXJpYQo9PT09PT09PT09PT09PT09PT09CjEuIFByZXNlbmNlIGF2YXRhcnMgYXBwZWFyIHdpdGhpbiA1MDAgbXMgb2YgYSBwZWVyIG9wZW5pbmcgdGhlIGlzc3VlLgoyLiBBIHBlZXIgbGVhdmluZyByZW1vdmVzIHRoZSBhdmF0YXIgd2l0aGluIDIgcy4KMy4gUmVjb25uZWN0aW9uIGlzIHRyYW5zcGFyZW50IGFmdGVyIGEgbmV0d29yayBkcm9wLgo=" }
+        ] },
+      { "id": "agl-3", "project": "agl", "type": "subtask", "summary": "Design the presence avatar row", "priority": "medium", "reporter": "tomas", "assignee": "marc", "parent": "agl-2", "sprint": "agl-s4", "components": ["agl-web"], "labels": ["ux"], "story_points": 1, "state": "done", "resolution": "done", "rank": 200 },
+      { "id": "agl-4", "project": "agl", "type": "subtask", "summary": "Wire the presence channel in the API", "priority": "medium", "reporter": "tomas", "assignee": "diego", "parent": "agl-2", "sprint": "agl-s4", "components": ["agl-api"], "story_points": 2, "state": "in_progress", "rank": 300 },
+      { "id": "agl-5", "project": "agl", "type": "bug", "summary": "Card dropped on the wrong column at 125% zoom", "priority": "high", "reporter": "iris", "assignee": "nadia", "sprint": "agl-s4", "components": ["agl-web"], "labels": ["ux"], "story_points": 2, "environment": "Chrome 141 / Windows 11, 125% display scaling", "state": "in_review", "rank": 100,
+        "description": "The drop target is computed from the raw pointer position, which is off by the device pixel ratio.",
+        "documents": [
+          { "tag": "attachment", "name": "steps-to-reproduce.txt", "content_type": "text/plain", "content_base64": "U3RlcHMgdG8gcmVwcm9kdWNlCj09PT09PT09PT09PT09PT09PQoxLiBTZXQgdGhlIGRpc3BsYXkgc2NhbGluZyB0byAxMjUlIGluIENocm9tZS4KMi4gRHJhZyBBR0wtNCBmcm9tIFRvIGRvIHRvIEluIHByb2dyZXNzLgozLiBUaGUgY2FyZCBpcyBkcm9wcGVkIGluIHRoZSBJbiByZXZpZXcgY29sdW1uIGluc3RlYWQuCg==" }
+        ] },
+      { "id": "agl-6", "project": "agl", "type": "bug", "summary": "Session expires without warning after 30 minutes", "priority": "highest", "reporter": "iris", "assignee": "diego", "sprint": "agl-s4", "components": ["agl-auth"], "labels": ["security"], "story_points": 3, "state": "in_progress", "rank": 200,
+        "description": "The refresh token is not renewed while the tab is idle; the next write fails with a 401 and the unsaved form is lost." },
+      { "id": "agl-7", "project": "agl", "type": "task", "summary": "Upgrade PostgREST to 13", "priority": "medium", "reporter": "diego", "assignee": "diego", "sprint": "agl-s4", "components": ["agl-api"], "labels": ["tech-debt"], "story_points": 3, "state": "todo", "rank": 100 },
+      { "id": "agl-8", "project": "agl", "type": "story", "summary": "Sprint burndown chart", "priority": "medium", "reporter": "paula", "assignee": "tomas", "epic": "agl-e2", "sprint": "agl-s4", "story_points": 5, "state": "todo", "rank": 200,
+        "description": "Remaining story points per day against the ideal line, for the active sprint." },
+      { "id": "agl-9", "project": "agl", "type": "task", "summary": "Migrate CI to the new runners", "priority": "low", "reporter": "diego", "assignee": "diego", "sprint": "agl-s4", "labels": ["tech-debt"], "story_points": 3, "state": "in_review", "rank": 200 },
+      { "id": "agl-10", "project": "agl", "type": "story", "summary": "Board swimlanes by assignee and epic", "priority": "medium", "reporter": "paula", "assignee": "nadia", "epic": "agl-e1", "sprint": "agl-s5", "components": ["agl-web"], "story_points": 3, "state": "todo", "rank": 300 },
+      { "id": "agl-11", "project": "agl", "type": "bug", "summary": "Attachment upload fails over 10 MB", "priority": "high", "reporter": "iris", "assignee": "iris", "sprint": "agl-s5", "components": ["agl-api"], "story_points": 2, "state": "todo", "rank": 400,
+        "description": "The storage bucket rejects the upload but the UI reports success." },
+      { "id": "agl-12", "project": "agl", "type": "story", "summary": "Velocity report per team", "priority": "medium", "reporter": "paula", "assignee": "paula", "epic": "agl-e2", "story_points": 8, "state": "backlog", "rank": 300 },
+      { "id": "agl-13", "project": "agl", "type": "story", "summary": "Bulk edit issues from the navigator", "priority": "medium", "reporter": "paula", "labels": ["customer-request"], "fix_version": "agl-2-0", "story_points": 13, "state": "backlog", "rank": 400 },
+      // Scheduled into the mobile team's sprint: the mobile app is the API's heaviest
+      // client, so an AGL issue is delivered inside a sprint owned by another project.
+      { "id": "agl-14", "project": "agl", "type": "task", "summary": "Add rate limiting to the public API", "priority": "medium", "reporter": "diego", "assignee": "iris", "sprint": "mob-s1", "components": ["agl-api"], "labels": ["security"], "story_points": 5, "state": "todo", "rank": 500 },
+      { "id": "agl-15", "project": "agl", "type": "story", "summary": "Keyboard shortcuts for the board", "priority": "low", "reporter": "nadia", "labels": ["ux"], "story_points": 5, "state": "backlog", "rank": 600 },
+      { "id": "agl-16", "project": "agl", "type": "story", "summary": "Daily email digest of my open issues", "priority": "low", "reporter": "paula", "assignee": "paula", "story_points": 8, "state": "backlog", "rank": 700 },
+      { "id": "agl-17", "project": "agl", "type": "task", "summary": "Document the REST API", "priority": "medium", "reporter": "paula", "assignee": "diego", "sprint": "agl-s3", "labels": ["documentation"], "fix_version": "agl-1-4", "story_points": 3, "state": "done", "resolution": "done", "rank": 200 },
+      { "id": "agl-18", "project": "agl", "type": "bug", "summary": "Story points of subtasks counted twice in the sprint total", "priority": "medium", "reporter": "iris", "assignee": "tomas", "sprint": "agl-s3", "story_points": 1, "state": "done", "resolution": "duplicate", "rank": 300 },
+
+      { "id": "web-1", "project": "web", "type": "task", "summary": "New pricing page", "priority": "high", "reporter": "marc", "assignee": "marc", "components": ["web-content"], "story_points": 3, "state": "in_progress", "rank": 100,
+        "description": "Three tiers, a comparison table and a FAQ block." },
+      { "id": "web-2", "project": "web", "type": "task", "summary": "Improve the Lighthouse score to 95", "priority": "medium", "reporter": "marc", "assignee": "nadia", "components": ["web-seo"], "labels": ["performance"], "story_points": 5, "state": "todo", "rank": 100 },
+      { "id": "web-3", "project": "web", "type": "bug", "summary": "Blog images are not lazy-loaded", "priority": "low", "reporter": "iris", "components": ["web-seo"], "labels": ["performance"], "story_points": 2, "state": "backlog", "rank": 100 },
+      { "id": "web-4", "project": "web", "type": "task", "summary": "Cookie banner consent update", "priority": "high", "reporter": "marc", "assignee": "marc", "components": ["web-content"], "labels": ["security"], "fix_version": "web-launch", "story_points": 2, "state": "done", "resolution": "done", "rank": 100 },
+      { "id": "web-5", "project": "web", "type": "story", "summary": "Customer case studies section", "priority": "medium", "reporter": "paula", "assignee": "marc", "components": ["web-content"], "story_points": 5, "state": "in_review", "rank": 100 },
+
+      { "id": "mob-1", "project": "mob", "type": "story", "summary": "Cache issues locally for offline reading", "priority": "high", "reporter": "paula", "assignee": "tomas", "epic": "mob-e1", "sprint": "mob-s1", "components": ["mob-ios", "mob-android"], "story_points": 8, "state": "in_progress", "rank": 100 },
+      { "id": "mob-2", "project": "mob", "type": "story", "summary": "Sync queue for edits made offline", "priority": "high", "reporter": "paula", "epic": "mob-e1", "sprint": "mob-s1", "story_points": 8, "state": "todo", "rank": 100 },
+      // Hangs from an AGL epic: real-time collaboration is a programme-level epic that
+      // both products contribute to, which is what the board renders as a swimlane.
+      { "id": "mob-3", "project": "mob", "type": "bug", "summary": "Push notifications duplicated on Android 15", "priority": "high", "reporter": "iris", "assignee": "iris", "epic": "agl-e1", "sprint": "mob-s1", "components": ["mob-android"], "story_points": 3, "environment": "Pixel 8, Android 15", "state": "todo", "rank": 200 },
+      { "id": "mob-4", "project": "mob", "type": "task", "summary": "Set up TestFlight distribution", "priority": "medium", "reporter": "tomas", "assignee": "tomas", "sprint": "mob-s1", "components": ["mob-ios"], "fix_version": "mob-0-9", "story_points": 2, "state": "done", "resolution": "done", "rank": 100 },
+      { "id": "mob-5", "project": "mob", "type": "story", "summary": "Biometric unlock", "priority": "low", "reporter": "paula", "labels": ["security"], "story_points": 5, "state": "backlog", "rank": 200 }
+    ],
+    "issue_comment": [
+      { "issue": "agl-2", "author": "paula", "body": "Let's keep the first version read-only: presence avatars, no live cursor." },
+      { "issue": "agl-2", "author": "tomas", "body": "Agreed. The channel is per issue id, so the subscription is cheap." },
+      { "issue": "agl-5", "author": "nadia", "body": "Reproduced. `getBoundingClientRect()` is fine, the problem is the cached column offsets." },
+      { "issue": "agl-5", "author": "iris", "body": "Also happens at 150%. Retested on Firefox: not affected." },
+      { "issue": "agl-6", "author": "diego", "body": "The refresh call is there but it only fires on a route change. Moving it to a timer." },
+      { "issue": "agl-6", "author": "paula", "body": "Highest priority for this sprint — three customers reported it this week." },
+      { "issue": "agl-1", "author": "iris", "body": "Verified on the staging board, closing." },
+      { "issue": "agl-17", "author": "diego", "body": "Published under /docs/api. Examples included for every endpoint." },
+      { "issue": "web-1", "author": "marc", "body": "Copy is final, waiting for the legal review of the enterprise tier." },
+      { "issue": "mob-1", "author": "tomas", "body": "SQLite on both platforms; the schema mirrors the issue table one to one." },
+      { "issue": "mob-3", "author": "iris", "body": "Only on Android 15 with battery saver on. Android 14 is fine." }
+    ],
+    "work_log": [
+      { "issue": "agl-1", "member": "nadia", "work_date": "2026-07-08", "hours": 6, "description": "Drop target calculation and column highlighting" },
+      { "issue": "agl-1", "member": "nadia", "work_date": "2026-07-09", "hours": 7.5, "description": "Optimistic update and rollback on error" },
+      { "issue": "agl-1", "member": "iris", "work_date": "2026-07-15", "hours": 3, "description": "Cross-browser testing" },
+      { "issue": "agl-17", "member": "diego", "work_date": "2026-07-13", "hours": 5, "description": "Endpoint reference and examples" },
+      { "issue": "agl-2", "member": "tomas", "work_date": "2026-07-21", "hours": 4, "description": "Channel subscription prototype" },
+      { "issue": "agl-2", "member": "tomas", "work_date": "2026-07-22", "hours": 3.5, "description": "Avatar row integration" },
+      { "issue": "agl-4", "member": "diego", "work_date": "2026-07-22", "hours": 2.5, "description": "Presence broadcast endpoint" },
+      { "issue": "agl-5", "member": "nadia", "work_date": "2026-07-23", "hours": 4, "description": "Fix and unit tests for the pixel ratio offset" },
+      { "issue": "agl-6", "member": "diego", "work_date": "2026-07-23", "hours": 6, "description": "Token refresh timer and expiry warning dialog" },
+      { "issue": "agl-9", "member": "diego", "work_date": "2026-07-21", "hours": 2, "description": "Runner image and pipeline migration" },
+      { "issue": "web-1", "member": "marc", "work_date": "2026-07-22", "hours": 5, "description": "Layout and comparison table" },
+      { "issue": "mob-1", "member": "tomas", "work_date": "2026-07-23", "hours": 6, "description": "Local schema and first sync read" },
+      { "issue": "mob-4", "member": "tomas", "work_date": "2026-07-21", "hours": 3, "description": "Certificates and first TestFlight build" }
+    ],
+    "issue_link": [
+      { "issue": "agl-6", "type": "blocks", "target": "agl-2" },
+      { "issue": "agl-5", "type": "relates_to", "target": "agl-1" },
+      { "issue": "agl-18", "type": "duplicates", "target": "agl-1" },
+      { "issue": "agl-14", "type": "relates_to", "target": "agl-6" },
+      { "issue": "agl-10", "type": "relates_to", "target": "agl-1" },
+      { "issue": "mob-3", "type": "relates_to", "target": "agl-6" }
+    ]
+  }
+}

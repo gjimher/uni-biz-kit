@@ -1,0 +1,30 @@
+{
+  "$schema": "../../schemas/workflow_schema.json",
+  "workflow_rules": [
+    {
+      "name": "issue_workflow",
+      "description": "Issue lifecycle, the columns of every board: backlog → todo → in_progress → in_review → done. The backoffice selector moves an issue one step at a time; the board page drops a card straight into any column (the workflow-transition function validates the target state, not the distance).",
+      "concepts": "issue",
+      // assigners: roles that may change the task owner (state_task_owner) in each state.
+      // From 'in_progress' on the task owner is retained, so whoever picked the issue up
+      // stays responsible for it through review until it is done.
+      "states": [
+        { "name": "backlog", "owners": ["member", "manager", "admin"], "assigners": ["manager", "admin"], "description": "Reported but not scheduled yet; refined and ranked by the project manager." },
+        { "name": "todo", "owners": ["member", "manager", "admin"], "assigners": ["member", "manager", "admin"], "description": "Ready for development: estimated, prioritised and usually already in a sprint." },
+        { "name": "in_progress", "owners": ["member", "manager", "admin"], "assigners": ["member", "manager", "admin"], "retain_task_owner": true, "description": "Somebody is actively working on it; an assignee is mandatory to reach this state." },
+        { "name": "in_review", "owners": ["member", "manager", "admin"], "assigners": ["member", "manager", "admin"], "retain_task_owner": true, "description": "Code review / QA. Returning it to in_progress is how a review is rejected." },
+        { "name": "done", "owners": ["manager", "admin"], "assigners": ["manager", "admin"], "retain_task_owner": true, "description": "Finished, with a resolution set. Only managers reopen a closed issue." }
+      ]
+    },
+    {
+      "name": "sprint_workflow",
+      "description": "Sprint lifecycle: planned → active → completed. Projects may run parallel active sprints for independent teams or work streams; scrum boards show the work from every active sprint in their scope.",
+      "concepts": "sprint",
+      "states": [
+        { "name": "planned", "owners": ["manager", "admin"], "assigners": ["manager", "admin"], "description": "Being filled at sprint planning; dates and capacity may still change." },
+        { "name": "active", "owners": ["manager", "admin"], "assigners": ["manager", "admin"], "retain_task_owner": true, "description": "Running sprint. Its issues are the ones shown on a scrum board." },
+        { "name": "completed", "owners": ["manager", "admin"], "assigners": ["manager", "admin"], "retain_task_owner": true, "description": "Closed sprint kept for the velocity report; unfinished issues are moved on manually." }
+      ]
+    }
+  ]
+}

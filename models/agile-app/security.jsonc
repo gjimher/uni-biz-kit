@@ -1,0 +1,64 @@
+{
+  "$schema": "../../schemas/security_schema.json",
+  // Team accounts are provisioned by the administrator; no self-registration, no SSO
+  // (both default off). Everything behind the sign-in page requires authentication.
+  "registration": {},
+  "sso": {},
+  "roles": [
+    { "name": "admin", "description": "System administrator — full access to everything, including the version history" },
+    // manager and member share the same profile concept: a project manager is a team
+    // member too, so their issues, comments and work logs hang from the same record.
+    { "name": "manager", "description": "Project manager / scrum master — owns projects, boards, sprints, releases and the backlog", "profile_concept": "member" },
+    { "name": "member", "description": "Team member — works the board: creates and moves issues, comments and logs time", "profile_concept": "member" },
+    { "name": "viewer", "description": "Stakeholder — read-only access to projects, boards and issues" }
+  ],
+  // Seed users (development only). The project manager also carries the member role so
+  // they show up in the team directory and can be assigned issues.
+  "users": [
+    { "email": "admin@agile.com", "password": "adminadmin", "roles": ["admin"] },
+    { "email": "pm@agile.com", "password": "managermanager", "roles": ["member", "manager"] },
+    { "email": "dev1@agile.com", "password": "membermember", "roles": ["member"] },
+    { "email": "dev2@agile.com", "password": "membermember", "roles": ["member"] },
+    { "email": "dev3@agile.com", "password": "membermember", "roles": ["member"] },
+    { "email": "qa@agile.com", "password": "membermember", "roles": ["member"] },
+    { "email": "stakeholder@agile.com", "password": "viewerviewer", "roles": ["viewer"] }
+  ],
+  // rules_level_2: per-role, per-concept access enforced by Supabase RLS policies.
+  // access values:
+  //   read        — SELECT only
+  //   write       — INSERT, UPDATE, DELETE
+  //   owner_write — INSERT/UPDATE/DELETE only on records linked to the user's profile
+  //
+  // Ordering matters: a concept-level rule propagates to every concept that is part_of
+  // it, and within one level the last matching rule wins. The project-wide 'read' rules
+  // therefore come first, and the concepts a role really writes come last.
+  "rules_level_2": [
+    // Managers run the projects end to end
+    { "role": "manager", "concept": "*", "access": "write" },
+
+    // Stakeholders see the whole picture and change nothing
+    { "role": "viewer", "concept": "*", "access": "read" },
+
+    // Team members read the project setup (restructuring a project is a manager job)
+    { "role": "member", "concept": "project", "access": "read" },
+    { "role": "member", "concept": "board", "access": "read" },
+    { "role": "member", "concept": "component", "access": "read" },
+    { "role": "member", "concept": "version", "access": "read" },
+    { "role": "member", "concept": "sprint", "access": "read" },
+    { "role": "member", "concept": "label", "access": "read" },
+    // The team directory is readable by everyone; profiles are managed by managers
+    // (an owner_write rule here would also scope reads to own rows, hiding colleagues).
+    { "role": "member", "concept": "member", "access": "read" },
+
+    // ...and own the work itself. Plain 'write' rather than 'owner_write': a team has to
+    // be able to pick up, edit and comment each other's issues.
+    { "role": "member", "concept": "issue", "access": "write" },
+    { "role": "member", "concept": "issue_comment", "access": "write" },
+    { "role": "member", "concept": "work_log", "access": "write" },
+    { "role": "member", "concept": "issue_link", "access": "write" }
+  ],
+  "rules_level_3": [
+    // Who reported an issue is part of its audit trail: members read it, managers set it
+    { "role": "member", "concept": "issue", "field": "reporter", "access": "read" }
+  ]
+}

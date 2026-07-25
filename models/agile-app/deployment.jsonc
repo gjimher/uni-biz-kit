@@ -1,0 +1,11 @@
+{
+  "$schema": "../../schemas/deployment_schema.json",
+  "base_uri": "/agile",
+  "prod_origin": "https://www.unibizkit.dev",
+  // 50-port blocks, unique per model (b2c=3050, intranet=3100)
+  "prod_base_port": 3150,
+  "prod_smtp_server": "127.0.0.1",
+  "prod_smtp_port": 25,
+  "prod_smtp_from": "noreply-agile@unibizkit.dev",
+  "prod_versioning": "dev"
+}

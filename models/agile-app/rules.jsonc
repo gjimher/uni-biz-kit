@@ -1,0 +1,51 @@
+{
+  "$schema": "../../schemas/rules_schema.json",
+  // Rules are evaluated by the FEEL (Friendly Enough Expression Language) engine.
+  //
+  // action types:
+  //   check  — validates; { error: "..." } aborts the transition
+  //
+  // FEEL context: db.<concept> = current record; auth.<concept> = logged-in user's profile
+  //
+  // These are the workflow guards a Jira administrator would configure as transition
+  // conditions/validators. They run wherever the transition comes from — the backoffice
+  // workflow selector or a card dropped on the board page — because both go through the
+  // same workflow-transition backend function.
+  "rules": [
+    {
+      "concept": "issue",
+      "name": "issue-check-ready",
+      // Definition of ready: a story without an estimate cannot be pulled into the
+      // sprint-ready column. Other types (bugs, chores, epics) are not estimated.
+      "feel_expr": "if db.issue.type != \"story\" then true else if db.issue.story_points != null then true else { error: \"Estimate the story (story points) before marking it ready\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_todo"]
+    },
+    {
+      "concept": "issue",
+      "name": "issue-check-assignee",
+      // Work in progress always has a name on it, so the board never shows an
+      // unattributed card in the In progress column.
+      "feel_expr": "if db.issue.assignee != null then true else { error: \"Assign the issue to a team member before starting work on it\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_in_progress"]
+    },
+    {
+      "concept": "issue",
+      "name": "issue-check-resolution",
+      // Closing an issue records why it was closed (done, wont_do, duplicate, ...),
+      // which is what the reports break the finished work down by.
+      "feel_expr": "if db.issue.resolution != null then true else { error: \"Set a resolution before closing the issue\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_done"]
+    },
+    {
+      "concept": "sprint",
+      "name": "sprint-check-dates",
+      // A sprint is a time box: it cannot start without one.
+      "feel_expr": "if db.sprint.start_date != null and db.sprint.end_date != null then true else { error: \"Set the start and end dates before starting the sprint\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_active"]
+    }
+  ]
+}
