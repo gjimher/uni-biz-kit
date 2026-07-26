@@ -18,7 +18,7 @@ from pathlib import Path
 import psycopg2
 from dotenv import load_dotenv, dotenv_values
 from conftest import (
-    HAS_SECONDARY_MODEL, PRIMARY_BASE, assert_secondary_model_is_normal_app,
+    HAS_SECONDARY_MODEL, assert_secondary_model_is_normal_app, dev_base_port,
 )
 from edge_function import call_edge_function as _call_edge_function_script
 
@@ -129,6 +129,7 @@ class TestAppBackend:
         Note: This test may take several minutes to run.
         """
         output_dir = generated_test_app
+        base_port = dev_base_port(output_dir)
 
         backend_dir = output_dir / 'backend'
         original_cwd = os.getcwd()
@@ -156,9 +157,9 @@ class TestAppBackend:
             effective_env = functions_env.read_text()
             assert generated_functions_env.read_text() == (
                 'INTEGRATION_SCHEDULER_TOKEN=dev-integration-scheduler-token\n'
-                f'UBK_DEV_BASE_PORT={PRIMARY_BASE}\n'
+                f'UBK_DEV_BASE_PORT={base_port}\n'
             )
-            assert f'UBK_DEV_BASE_PORT={PRIMARY_BASE}\n' in effective_env
+            assert f'UBK_DEV_BASE_PORT={base_port}\n' in effective_env
             assert 'UBK_TEST_SECRET=dev-secret-value\n' in effective_env
             with open(backend_dir / 'supabase' / 'config.toml', 'rb') as config_file:
                 project_id = tomllib.load(config_file)['project_id']
@@ -170,7 +171,7 @@ class TestAppBackend:
             assert inspected.stdout.strip() == 'found'
             base_port_inspected = _run([
                 'docker', 'inspect', f'supabase_edge_runtime_{project_id}', '--format',
-                '{{range .Config.Env}}{{if eq . "UBK_DEV_BASE_PORT=' + str(PRIMARY_BASE) + '"}}found{{end}}{{end}}',
+                '{{range .Config.Env}}{{if eq . "UBK_DEV_BASE_PORT=' + str(base_port) + '"}}found{{end}}{{end}}',
             ])
             assert base_port_inspected.returncode == 0
             assert base_port_inspected.stdout.strip() == 'found'

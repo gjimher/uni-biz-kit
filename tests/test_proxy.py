@@ -156,6 +156,7 @@ class TestProxyGeneration:
         output_dir = tmp_path / "shop-app"
         with patch("sys.argv", [
             "uni-biz-kit", str(app_dir), "--output-dir", str(output_dir), "--skip-frontend",
+            "--dev-base-port", "3000",
         ]):
             CLI().run()
 

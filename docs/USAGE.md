@@ -43,7 +43,7 @@ Log in with the users seeded from the model's `security.jsonc` (listed in the ge
 
 ```bash
 # Generate backend + frontend from the model in b2c-app output directory
-uni-biz-kit models/b2c-app 
+uni-biz-kit models/b2c-app --dev-base-port-from-env
 
 # Create/start the app's Supabase instance (writes backend/.env with URL and keys)
 python b2c-app/bin/dev-supabase-start.py

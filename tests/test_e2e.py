@@ -19,26 +19,22 @@ from smtp_mock import (
     wait_for_email as _wait_for_email,
 )
 
-_env_num = int(os.environ.get('UBK_DEV_ENV_NUM', '0'))
-_base = 3000 + 100 * _env_num
-_FRONTEND_PORT = _base + 0
-_PREVIEW_PORT = _base + 1
-
 # Optional second dev environment (UBK_DEV_MODEL), served on a +50 port offset.
 from conftest import (
     HAS_SECONDARY_MODEL,
     SECONDARY_MODEL,
-    SECONDARY_BASE,
-    SECONDARY_PREVIEW_PORT as _DUMMY_PREVIEW_PORT,
+    dev_base_port,
+    generate_secondary_model,
 )
 
 
 @pytest.fixture(scope="module")
-def app_server(xprocess, request):
+def app_server(xprocess, request, generated_test_app):
     if not request.config.getoption("--slow"):
         pytest.skip("need --slow option to run")
 
     frontend_dir = os.path.abspath("test-app/frontend")
+    preview_port = dev_base_port(generated_test_app) + 1
 
     # Build the production bundle first (Vite dev server has issues with
     # emotion/MUI pre-bundling in dev mode; the production build works correctly)
@@ -59,7 +55,7 @@ def app_server(xprocess, request):
         env = os.environ.copy()
         args = [
             "npm", "--prefix", frontend_dir, "run", "preview", "--",
-            "--port", str(_PREVIEW_PORT), "--strictPort",
+            "--port", str(preview_port), "--strictPort",
         ]
         cwd = frontend_dir
         timeout = 30
@@ -72,7 +68,7 @@ def app_server(xprocess, request):
         pass
 
     xprocess.ensure("app_server_pure", Starter)
-    yield f"http://localhost:{_PREVIEW_PORT}"
+    yield f"http://localhost:{preview_port}"
     xprocess.getinfo("app_server_pure").terminate()
 
 
@@ -84,7 +80,9 @@ def secondary_app_server(xprocess, request):
     if not HAS_SECONDARY_MODEL:
         pytest.skip("UBK_DEV_MODEL is not set; secondary dev environment disabled")
 
-    frontend_dir = os.path.abspath(f"{SECONDARY_MODEL}/frontend")
+    output_dir = generate_secondary_model()
+    frontend_dir = str(output_dir / "frontend")
+    preview_port = dev_base_port(output_dir) + 1
 
     import subprocess
     result = subprocess.run(
@@ -99,7 +97,7 @@ def secondary_app_server(xprocess, request):
         env = os.environ.copy()
         args = [
             "npm", "--prefix", frontend_dir, "run", "preview", "--",
-            "--port", str(_DUMMY_PREVIEW_PORT), "--strictPort",
+            "--port", str(preview_port), "--strictPort",
         ]
         cwd = frontend_dir
         timeout = 30
@@ -110,7 +108,7 @@ def secondary_app_server(xprocess, request):
         pass
 
     xprocess.ensure("secondary_app_server_pure", Starter)
-    yield f"http://localhost:{_DUMMY_PREVIEW_PORT}"
+    yield f"http://localhost:{preview_port}"
     xprocess.getinfo("secondary_app_server_pure").terminate()
 
 
@@ -144,7 +142,7 @@ def test_b2c_storefront_purchase_with_payment(page: Page, secondary_app_server):
     if SECONDARY_MODEL != "b2c-app":
         pytest.skip("b2c storefront test requires UBK_DEV_MODEL=b2c-app")
 
-    backend = f"http://localhost:{SECONDARY_BASE + 40}"
+    backend = f"http://localhost:{dev_base_port(SECONDARY_MODEL) + 40}"
     try:
         urllib.request.urlopen(backend + "/auth/v1/health", timeout=5)
     except urllib.error.HTTPError:
@@ -797,12 +795,13 @@ def test_forgot_password_browser_flow(page: Page, app_server, smtp_server):
     original_password = admin_user["password"]
     new_password = "BrowserResetTest999!"
 
-    # Supabase site_url=http://localhost:3000 but test server is on 3005.
-    # Intercept and rewrite port so the SPA receives the recovery tokens.
+    # Supabase site_url uses the generated frontend port, while this test uses
+    # the generated preview port. Rewrite it so the SPA receives recovery tokens.
     test_port = app_server.split(":")[-1].rstrip("/")
+    frontend_port = dev_base_port("test-app")
     page.route(
-        f"http://localhost:{_FRONTEND_PORT}/**",
-        lambda route: route.continue_(url=route.request.url.replace(f"localhost:{_FRONTEND_PORT}", f"localhost:{test_port}"))
+        f"http://localhost:{frontend_port}/**",
+        lambda route: route.continue_(url=route.request.url.replace(f"localhost:{frontend_port}", f"localhost:{test_port}"))
     )
 
     # -- 1. Ensure we land on the login page.
@@ -1013,9 +1012,10 @@ def test_register_confirmation_lands_on_profile_gate(page: Page, app_server, smt
 
     # Supabase site_url points at the dev frontend port; rewrite to this server.
     test_port = app_server.split(":")[-1].rstrip("/")
+    frontend_port = dev_base_port("test-app")
     page.route(
-        f"http://localhost:{_FRONTEND_PORT}/**",
-        lambda route: route.continue_(url=route.request.url.replace(f"localhost:{_FRONTEND_PORT}", f"localhost:{test_port}"))
+        f"http://localhost:{frontend_port}/**",
+        lambda route: route.continue_(url=route.request.url.replace(f"localhost:{frontend_port}", f"localhost:{test_port}"))
     )
 
     with _smtp_lock:
@@ -1066,19 +1066,20 @@ def test_register_confirmation_lands_on_profile_gate(page: Page, app_server, smt
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
-def dev_server(xprocess, request):
+def dev_server(xprocess, request, generated_test_app):
     """Replace the E2E preview with Vite dev for endpoint contract tests."""
     if not request.config.getoption("--slow"):
         pytest.skip("need --slow option to run")
 
     frontend_dir = os.path.abspath("test-app/frontend")
+    preview_port = dev_base_port(generated_test_app) + 1
 
     class Starter(ProcessStarter):
         pattern = "Local:"
         env = os.environ.copy()
         args = [
             "npm", "--prefix", frontend_dir, "run", "start", "--",
-            "--port", str(_PREVIEW_PORT), "--strictPort",
+            "--port", str(preview_port), "--strictPort",
         ]
         cwd = frontend_dir
         timeout = 60
@@ -1087,7 +1088,7 @@ def dev_server(xprocess, request):
     # the development server on the same test-owned port because only Vite dev
     # exposes the presentation-custom endpoint.
     xprocess.ensure("app_server_pure", Starter, restart=True)
-    yield f"http://localhost:{_PREVIEW_PORT}"
+    yield f"http://localhost:{preview_port}"
     xprocess.getinfo("app_server_pure").terminate()
 
 

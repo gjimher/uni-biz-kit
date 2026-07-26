@@ -6,6 +6,7 @@ Provides the main CLI entry point for UniBizKit.
 
 import argparse
 import logging
+import os
 import sys
 import json
 import copy
@@ -26,6 +27,60 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+DEFAULT_DEV_BASE_PORT = 3000
+DEV_ENV_PORT_BLOCK = 100
+SECONDARY_MODEL_PORT_OFFSET = 50
+
+
+def _read_dev_env_num():
+    raw_env_num = os.environ.get("UBK_DEV_ENV_NUM", "0")
+    try:
+        env_num = int(raw_env_num)
+    except ValueError as error:
+        raise ValueError(
+            f"UBK_DEV_ENV_NUM must be a non-negative integer, got {raw_env_num!r}"
+        ) from error
+    if env_num < 0:
+        raise ValueError(
+            f"UBK_DEV_ENV_NUM must be a non-negative integer, got {raw_env_num!r}"
+        )
+    return env_num
+
+
+def _dev_base_port_from_env(input_dir: Path):
+    env_num = _read_dev_env_num()
+    secondary_model = os.environ.get("UBK_DEV_MODEL")
+    environment_is_configured = (
+        "UBK_DEV_ENV_NUM" in os.environ or bool(secondary_model)
+    )
+
+    if not environment_is_configured:
+        return DEFAULT_DEV_BASE_PORT
+
+    model_name = input_dir.name
+    base_port = DEFAULT_DEV_BASE_PORT + DEV_ENV_PORT_BLOCK * env_num
+    if model_name == "test-app":
+        return base_port
+    return base_port + SECONDARY_MODEL_PORT_OFFSET
+
+
+def _dev_base_port_help():
+    try:
+        env_num = _read_dev_env_num()
+    except ValueError as error:
+        return f"Current environment: {error}."
+
+    secondary_model = os.environ.get("UBK_DEV_MODEL")
+    if "UBK_DEV_ENV_NUM" not in os.environ and not secondary_model:
+        return f"Current environment selects {DEFAULT_DEV_BASE_PORT}."
+
+    primary_port = DEFAULT_DEV_BASE_PORT + DEV_ENV_PORT_BLOCK * env_num
+    return (
+        f"Current environment selects {primary_port} for test-app and "
+        f"{primary_port + SECONDARY_MODEL_PORT_OFFSET} for any other model."
+    )
+
 
 class CLI:
     def __init__(self):
@@ -64,11 +119,25 @@ Examples:
             type=str,
             help='Output directory for generated files (default: current directory + input directory name)'
         )
-        parser.add_argument(
+        dev_base_port_group = parser.add_mutually_exclusive_group()
+        dev_base_port_group.add_argument(
             '--dev-base-port',
             type=int,
-            default=3000,
-            help='Base port for generated development services (default: 3000)'
+            metavar='PORT',
+            help=(
+                "Explicit base port for generated development services. Required "
+                "unless the environment-derived port is the default 3000."
+            ),
+        )
+        dev_base_port_group.add_argument(
+            '-de',
+            '--dev-base-port-from-env',
+            action='store_true',
+            help=(
+                "Calculate the base port from the current UBK_DEV environment "
+                "and the input model. "
+                + _dev_base_port_help()
+            ),
         )
         parser.add_argument(
             '--skip-frontend',
@@ -632,7 +701,24 @@ Examples:
             self._handle_generate_proxy(input_dir, output_dir, emit=True)
             return
 
-        dev_ports.configure(args.dev_base_port)
+        if args.dev_base_port is not None:
+            dev_base_port = args.dev_base_port
+        else:
+            try:
+                dev_base_port = _dev_base_port_from_env(input_dir)
+            except ValueError as error:
+                self.parser.error(str(error))
+            if (
+                not args.dev_base_port_from_env
+                and dev_base_port != DEFAULT_DEV_BASE_PORT
+            ):
+                self.parser.error(
+                    f"the environment-derived development base port is "
+                    f"{dev_base_port}; pass --dev-base-port PORT to choose one "
+                    "explicitly or --dev-base-port-from-env (-de) to use "
+                    f"{dev_base_port}"
+                )
+        dev_ports.configure(dev_base_port)
 
         logger.info(f"Generating application from schema: {schema_path}")
         

@@ -23,12 +23,17 @@ import requests
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, expect, TimeoutError as PlaywrightTimeoutError
+from conftest import dev_base_port
 
-_env_num = int(os.environ.get('UBK_DEV_ENV_NUM', '0'))
-_base = 3000 + 100 * _env_num
-CDP_PORT = _base + 2
-APP_URL = f"http://localhost:{_base}/#/admin"
 BIN_DIR = Path(__file__).parent.parent / "test-app" / "bin"
+
+
+def _cdp_port():
+    return dev_base_port(BIN_DIR.parent) + 2
+
+
+def _app_url():
+    return f"http://localhost:{dev_base_port(BIN_DIR.parent)}/#/admin"
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -66,7 +71,7 @@ def _launch_chrome(user=None):
 def _close_chrome():
     """Kill the Chrome process bound to the CDP port (pkill is reliable; browser.close() via CDP is not)."""
     result = subprocess.run(
-        ["pkill", "-f", f"remote-debugging-port={CDP_PORT}"],
+        ["pkill", "-f", f"remote-debugging-port={_cdp_port()}"],
         capture_output=True,
     )
     time.sleep(2)
@@ -123,10 +128,10 @@ def _sso_login_and_verify_role(browser, email, expected_role, print_reminder=Fal
     print(f"\n[sso] Keycloak authenticated for {email}. URL: {page.url}")
 
     if print_reminder:
-        print(f"\n[sso] REMINDER: npm start must be running on {APP_URL}")
+        print(f"\n[sso] REMINDER: npm start must be running on {_app_url()}")
 
-    page.goto(APP_URL)
-    print(f"[sso] Gone to {APP_URL}")
+    page.goto(_app_url())
+    print(f"[sso] Gone to {_app_url()}")
 
     user_label = page.locator("header").get_by_text(email)
     try:
@@ -249,7 +254,7 @@ def _full_sso_cycle(playwright, email, expected_role, user_arg=None, print_remin
     If profile_concept is given, also verifies profile sync behaviour across the delete+re-create.
     Chrome stays open after round 2; caller is responsible for closing it.
     """
-    browser = playwright.chromium.connect_over_cdp(f"http://localhost:{CDP_PORT}")
+    browser = playwright.chromium.connect_over_cdp(f"http://localhost:{_cdp_port()}")
     _sso_login_and_verify_role(browser, email, expected_role, print_reminder=print_reminder)
 
     before = _get_profile_state(email, profile_concept) if profile_concept else None
@@ -260,7 +265,7 @@ def _full_sso_cycle(playwright, email, expected_role, user_arg=None, print_remin
     _delete_supabase_user(email)
 
     _launch_chrome(user=user_arg)
-    browser2 = playwright.chromium.connect_over_cdp(f"http://localhost:{CDP_PORT}")
+    browser2 = playwright.chromium.connect_over_cdp(f"http://localhost:{_cdp_port()}")
     _sso_login_and_verify_role(browser2, email, expected_role)
     _assert_keycloak_only(email)
     if profile_concept:

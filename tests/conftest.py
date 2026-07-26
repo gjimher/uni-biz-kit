@@ -4,7 +4,7 @@ import sys
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
-from smtp_mock import MockSMTPHandler, SMTP_PORT
+from smtp_mock import MockSMTPHandler
 from unibizkit.cli import CLI
 from unibizkit.schema_loader import _load_jsonc_file
 
@@ -15,11 +15,28 @@ from unibizkit.schema_loader import _load_jsonc_file
 SECONDARY_MODEL = os.environ.get("UBK_DEV_MODEL")
 HAS_SECONDARY_MODEL = bool(SECONDARY_MODEL)
 
-_ENV_NUM = int(os.environ.get("UBK_DEV_ENV_NUM", "0"))
-PRIMARY_BASE = 3000 + 100 * _ENV_NUM
-SECONDARY_BASE = PRIMARY_BASE + 50
-SECONDARY_FRONTEND_PORT = SECONDARY_BASE + 0
-SECONDARY_PREVIEW_PORT = SECONDARY_BASE + 1
+
+def dev_base_port(output_dir):
+    """Read the base port from a generated application's public dev CLI."""
+    script = Path(output_dir) / "bin" / "dev-info-ports.py"
+    result = subprocess.run(
+        [sys.executable, str(script), "--print-base-port"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        pytest.fail(
+            f"{script} --print-base-port failed with code {result.returncode}: "
+            f"{result.stderr.strip()}"
+        )
+    try:
+        return int(result.stdout.strip())
+    except ValueError:
+        pytest.fail(
+            f"{script} --print-base-port returned a non-integer: "
+            f"{result.stdout!r}"
+        )
 
 
 def secondary_model_kind_error():
@@ -51,8 +68,8 @@ def assert_secondary_model_is_normal_app():
 def generate_secondary_model():
     """Generate the secondary model into ./<SECONDARY_MODEL> on the +50 port offset.
 
-    Pytest computes and passes the exact base port. Run in a subprocess to keep the
-    primary in-process generation and this secondary generation cleanly separated."""
+    Run in a subprocess to keep the primary in-process generation and this
+    secondary generation cleanly separated."""
     if not HAS_SECONDARY_MODEL:
         pytest.skip("UBK_DEV_MODEL is not set; secondary dev environment disabled")
     assert_secondary_model_is_normal_app()
@@ -61,7 +78,7 @@ def generate_secondary_model():
         [
             sys.executable, "-m", "unibizkit.cli",
             f"models/{SECONDARY_MODEL}", "--output-dir", SECONDARY_MODEL,
-            "--dev-base-port", str(SECONDARY_BASE),
+            "--dev-base-port-from-env",
         ],
         capture_output=True, text=True, timeout=600,
     )
@@ -98,14 +115,14 @@ def generated_test_app(pytestconfig):
     with patch("sys.argv", [
         "uni-biz-kit", "models/test-app",
         "--output-dir", str(output_dir),
-        "--dev-base-port", str(PRIMARY_BASE),
+        "--dev-base-port-from-env",
         *variation_args,
     ]):
         CLI().run()
     return output_dir
 
 
-def ensure_smtp_port_free(port=SMTP_PORT):
+def ensure_smtp_port_free(port):
     """Free the SMTP port for tests that bind their own in-process mock.
 
     A running bin/dev-smtp-mock.py (often left open in a terminal) would make
@@ -159,14 +176,15 @@ def ensure_smtp_port_free(port=SMTP_PORT):
 
 
 @pytest.fixture(scope="module")
-def smtp_server():
-    """Start an in-process SMTP mock on port 3010 for the duration of the module."""
+def smtp_server(generated_test_app):
+    """Start an in-process SMTP mock on the generated app's SMTP port."""
     try:
         from aiosmtpd.controller import Controller
     except ImportError:
         pytest.skip("aiosmtpd not installed — run: pip install aiosmtpd")
-    ensure_smtp_port_free()
-    controller = Controller(MockSMTPHandler(), hostname="0.0.0.0", port=SMTP_PORT)
+    smtp_port = dev_base_port(generated_test_app) + 10
+    ensure_smtp_port_free(smtp_port)
+    controller = Controller(MockSMTPHandler(), hostname="0.0.0.0", port=smtp_port)
     controller.start()
     yield controller
     controller.stop()

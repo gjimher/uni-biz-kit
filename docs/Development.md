@@ -40,7 +40,7 @@ Every generated app ships scripts to operate its local stack. The state-changing
 | `dev-set-secret.py` | Manages local Edge Function secrets and reconciles Supabase when they change |
 | `dev-integration-odata-mock.py` | Runs the deterministic paginated source used by [integration](Integrations.md) development |
 | `dev-smtp-mock.py` | SMTP mock: captures auth emails and prints them (with their links) to stdout |
-| `dev-info-ports.py` | Prints the generated app's baked development port layout |
+| `dev-info-ports.py` | Prints the generated app's baked development port layout; `--print-base-port` prints only its base port |
 | `dev-sso-start.py` | Starts and auto-configures the [SSO](SingleSignOn.md) dev environment (Kerberos + Keycloak) |
 | `dev-sso-stop.py` | Stops the SSO containers, keeping volumes |
 | `dev-sso-remove.py` | Stops and removes the SSO environment |
@@ -62,20 +62,33 @@ Every app also ships `bin/prod-dc-*` scripts to deploy it to a production server
 
 ## Multiple dev environments on one machine
 
-For normal `uni-biz-kit` usage, pass a base port explicitly when you need an
+For normal `uni-biz-kit` usage, select the base port explicitly when you need an
 isolated development environment:
 
 ```bash
 uni-biz-kit models/my-app --dev-base-port 3100
 ```
 
-The test suite also supports `UBK_DEV_ENV_NUM` as a pytest-only convenience. If
-the variable is absent or `0`, tests use the default environment.
+Alternatively, let the generator select it from `UBK_DEV_ENV_NUM` and
+`UBK_DEV_MODEL`:
 
 ```bash
 export UBK_DEV_ENV_NUM=1   # env 1 — all ports shift by 100
-pytest                     # generates and tests env 1
+export UBK_DEV_MODEL=b2c-app
+uni-biz-kit models/test-app --dev-base-port-from-env  # base 3100
+uni-biz-kit models/b2c-app -de                        # base 3150
 ```
+
+`UBK_DEV_MODEL` tells pytest which secondary model to generate; it does not
+restrict manual CLI use. With an environment configured, `test-app` uses the
+primary slot and any other model passed to `uni-biz-kit` uses the `+50`
+secondary slot.
+
+For normal app generation, either `--dev-base-port` or
+`--dev-base-port-from-env` (`-de`) is required unless the environment-derived
+port is the default `3000`. This default applies when neither variable is set,
+or for `test-app` in environment 0. Run `uni-biz-kit -h` to see the ports the
+current environment would select.
 
 All ports for a generated app are derived from a single base:
 
@@ -84,12 +97,11 @@ port = dev_base_port + offset
 ```
 
 When running pytest with `UBK_DEV_MODEL` set, each `UBK_DEV_ENV_NUM` block of 100
-ports hosts **two** parallel environments: the primary model (`models/test-app`)
+ports hosts **two** parallel applications: the primary model (`models/test-app`)
 at `3000 + 100 * UBK_DEV_ENV_NUM`, and the
 [second dev environment](#second-dev-environment-ubk_dev_model) (`UBK_DEV_MODEL`)
-at that base plus `50`. Pytest computes those base ports and passes
-`--dev-base-port` to `uni-biz-kit`; the generator itself does not read
-`UBK_DEV_*`. Without `UBK_DEV_MODEL`, pytest only generates and verifies the
+at that base plus `50`. Pytest passes `--dev-base-port-from-env` to the
+generator. Without `UBK_DEV_MODEL`, pytest only generates and verifies the
 primary app.
 
 ### Port table

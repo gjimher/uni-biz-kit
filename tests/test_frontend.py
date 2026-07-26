@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 from unibizkit.cli import CLI
-from conftest import PRIMARY_BASE
+from conftest import dev_base_port
 
 
 class TestAppFrontend:
@@ -35,8 +35,7 @@ class TestAppFrontend:
         
         # Check that output directory was created
         assert output_dir.exists()
-        dev_info_ports = (output_dir / 'bin' / 'dev-info-ports.py').read_text()
-        assert f"BASE_PORT = {PRIMARY_BASE}" in dev_info_ports
+        dev_base_port(output_dir)
 
         frontend_dir = output_dir / 'frontend'
 
@@ -217,9 +216,8 @@ class TestAppFrontend:
         from conftest import generate_secondary_model
 
         output_dir = generate_secondary_model()
-        from conftest import SECONDARY_BASE, SECONDARY_MODEL
-        dev_info_ports = (output_dir / 'bin' / 'dev-info-ports.py').read_text()
-        assert f"BASE_PORT = {SECONDARY_BASE}" in dev_info_ports
+        from conftest import SECONDARY_MODEL
+        dev_base_port(output_dir)
 
         frontend_dir = output_dir / 'frontend'
 
@@ -307,7 +305,7 @@ class TestAppFrontend:
     
 
 
-def test_designer_off_emits_no_customization_system(tmp_path):
+def test_designer_off_emits_no_customization_system(tmp_path, generated_test_app):
     """designer 'off' must emit the pre-customization app: no runtime merge
     engine, no design tools, no dev endpoint, no overlay IR. This generation is
     the only gate for the 'off' variant — test-app pins designer 'production'
@@ -318,11 +316,12 @@ def test_designer_off_emits_no_customization_system(tmp_path):
     shutil.copytree("models/test-app", model_dir)
 
     out = tmp_path / "out"
+    base_port = dev_base_port(generated_test_app)
     cli = CLI()
     with patch('sys.argv', [
         'uni-biz-kit', str(model_dir),
         '--output-dir', str(out),
-        '--dev-base-port', str(PRIMARY_BASE),
+        '--dev-base-port', str(base_port),
         '--designer', 'off',
     ]):
         cli.run()

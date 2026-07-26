@@ -15,6 +15,12 @@ from unibizkit.schema_loader import SchemaValidationError
 import shutil
 
 
+@pytest.fixture(autouse=True)
+def default_dev_environment(monkeypatch):
+    monkeypatch.delenv("UBK_DEV_ENV_NUM", raising=False)
+    monkeypatch.delenv("UBK_DEV_MODEL", raising=False)
+
+
 def _write_deployment(path):
     with open(Path(path) / "deployment.jsonc", "w") as f:
         json.dump({"prod_versioning": "dev"}, f)

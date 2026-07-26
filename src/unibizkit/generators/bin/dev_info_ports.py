@@ -30,11 +30,34 @@ def _content() -> str:
     return f"""#!/usr/bin/python3
 \"\"\"Print the development port layout baked into this generated app.\"\"\"
 
+import argparse
+
+
 BASE_PORT = {dev_ports.BASE}
 ROWS = {rows!r}
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Show the development ports baked into this generated application. "
+            "Run without options to print the complete port layout."
+        ),
+    )
+    parser.add_argument(
+        "--print-base-port",
+        action="store_true",
+        help="print only the base port as an integer, for use by scripts",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    if args.print_base_port:
+        print(BASE_PORT)
+        return
+
     print(f"Development base port: {{BASE_PORT}}")
     print()
     print(f"{{'Offset':<8}} {{'Port':<6}} Service")

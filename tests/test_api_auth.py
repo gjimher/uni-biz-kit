@@ -21,8 +21,8 @@ from smtp_mock import (
     smtp_lock as _smtp_lock,
     extract_links as _extract_links,
     wait_for_email as _wait_for_email,
-    SMTP_PORT,
 )
+from conftest import dev_base_port
 
 
 # ---------------------------------------------------------------------------
@@ -308,7 +308,7 @@ def test_security_allows_registration():
     )
 
 
-def test_supabase_config_generated():
+def test_supabase_config_generated(generated_test_app):
     """Verify the generated supabase_config_dev.toml contains SMTP settings."""
     config_file = os.path.abspath("test-app/backend/supabase_config_dev.toml")
     assert os.path.exists(config_file), "supabase_config_dev.toml not found"
@@ -323,7 +323,7 @@ def test_supabase_config_generated():
     assert "[auth.rate_limit]" in content
     assert "email_sent = 120" in content
     assert 'max_frequency = "1s"' in content
-    assert str(SMTP_PORT) in content
+    assert str(dev_base_port(generated_test_app) + 10) in content
 
 
 def test_register_user_and_email_flow(smtp_server):
