@@ -457,7 +457,13 @@ def _collect_validation_concepts(ctx: Context, concept: Dict[str, Any]) -> List[
 def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     resource_name = concept["name"]
     allow_delete_prop = "" if concept.get("_fe_allow_delete", True) else " allowDelete={false}"
-    row_click = "edit" if concept.get("_fe_allow_edit", True) else "show"
+    # A view row stands for a record of the concept named in its 'concept'
+    # column (null on aggregate rows, which do not navigate anywhere), so
+    # clicking it opens that record instead of the view's own show page.
+    if concept["_be_storage"] == "view":
+        row_click = f"{resource_name.upper()}_ROW_CLICK"
+    else:
+        row_click = "'edit'" if concept.get("_fe_allow_edit", True) else "'show'"
     title_desc_prop = f' description="{concept["description"].replace(chr(34), "&quot;")}"' if concept["description"] else ''
 
     owned_children = find_owned_children(resource_name, ctx.concepts)
@@ -551,10 +557,11 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
     component_imports = [
         f"import {{ Title }} from '../../components/title';",
         f"import {{ CustomEditToolbar }} from '../../components/custom_edit_toolbar';",
-        f"import {{ ImportExportActions }} from '../../components/import_export';"
+        f"import {{ ImportExportActions }} from '../../components/import_export';",
+        f"import {{ useConceptBulkActions }} from '../../components/concept_actions';",
     ]
     if concept.get("actions"):
-        component_imports.append("import { ConceptActions, ConceptBulkActions } from '../../components/concept_actions';")
+        component_imports.append("import { ConceptActions } from '../../components/concept_actions';")
     if list_row_actions:
         component_imports.append("import { ListRowActions } from '../../components/list_row_actions';")
     if not workflow_import and "WorkflowSelector" in child_dialog_components:
@@ -764,17 +771,28 @@ const {inner_comp_name} = () => {{
     </SimpleForm>
   </Edit>"""
 
-    if not concept.get("_fe_allow_delete", True):
-        bulk_actions_prop = ' bulkActionButtons={false}'
-        bulk_actions_expr = 'false'
-    else:
-        bulk_actions_prop = (
-            ' bulkActionButtons={<ConceptBulkActions' + allow_delete_prop + ' />}'
-            if any('list' in action['placement'] for action in concept.get('actions', [])) else ''
-        )
-        bulk_actions_expr = (
-            '<ConceptBulkActions' + allow_delete_prop + ' />'
-            if bulk_actions_prop else 'undefined'
+    # The default bulk action bar is resolved at runtime from the permissions
+    # (see useConceptBulkActions): an explicit bulkActionButtons prop, including
+    # the false an embedding list passes, still wins.
+    bulk_actions_hook = (
+        "useConceptBulkActions()" if concept.get("_fe_allow_delete", True)
+        else "useConceptBulkActions({ allowDelete: false })"
+    )
+    # React-Admin derives the list title from the resource name, which for the
+    # generated underscore concepts reads as ' assignable tasks'. The model's
+    # plural name is both nicer and authoritative (customization overlays can
+    # still override it at runtime).
+    plural = concept.get("plural_name", resource_name + "s").replace("_", " ")
+    list_title = json.dumps(plural[:1].upper() + plural[1:])
+
+    row_click_decl = ""
+    if concept["_be_storage"] == "view":
+        row_click_decl = (
+            f"// Rows stand for records of the concept in their 'concept' column; the\n"
+            f"// admin router prefixes /admin. Aggregate rows (no concept) do not navigate.\n"
+            f"const {resource_name.upper()}_ROW_CLICK = (id, resource, record) => (\n"
+            f"  record.concept ? `/${{record.concept}}/${{record.concept_id}}` : false\n"
+            f");\n\n"
         )
     if ctx.customization:
         columns_map_entries = ",\n".join(
@@ -796,15 +814,14 @@ const {resource_name.upper()}_COLUMNS = {{
 {edit_form_const}
 
 """
-        list_component = f"""const {resource_name.upper()}_BULK_ACTIONS = {bulk_actions_expr};
-
-export const {resource_name.upper()}_LIST_CONTENT = ({{ rowClick = '{row_click}', bulkActionButtons = {resource_name.upper()}_BULK_ACTIONS, omit, preferenceKey, children }}) => {{
+        list_component = f"""{row_click_decl}export const {resource_name.upper()}_LIST_CONTENT = ({{ rowClick = {row_click}, bulkActionButtons, omit, preferenceKey, children }}) => {{
   const custom = useCustomization();
+  const defaultBulkActions = {bulk_actions_hook};
   const cfg = custom.lists['{resource_name}'];
   const effectiveOmit = [...new Set([...(cfg.omit || []), ...(omit || [])])];
   const effectivePreferenceKey = `${{preferenceKey ?? cfg.prefKey}}{row_actions_preference_suffix}`;
   return (
-    <DatagridConfigurable rowClick={{rowClick}} omit={{effectiveOmit}} preferenceKey={{effectivePreferenceKey}} bulkActionButtons={{bulkActionButtons}}>
+    <DatagridConfigurable rowClick={{rowClick}} omit={{effectiveOmit}} preferenceKey={{effectivePreferenceKey}} bulkActionButtons={{bulkActionButtons ?? defaultBulkActions}}>
       {{renderColumns('{resource_name}', {resource_name.upper()}_COLUMNS, custom)}}
       {{children}}
       {list_row_actions_component}
@@ -812,12 +829,12 @@ export const {resource_name.upper()}_LIST_CONTENT = ({{ rowClick = '{row_click}'
   );
 }};
 
-export const {resource_name.upper()}_LIST = ({{ rowClick = '{row_click}', bulkActionButtons = {resource_name.upper()}_BULK_ACTIONS, omit, preferenceKey, children, ...props }}) => {{
+export const {resource_name.upper()}_LIST = ({{ rowClick = {row_click}, bulkActionButtons, omit, preferenceKey, children, ...props }}) => {{
   const custom = useCustomization();
   const cfg = custom.lists['{resource_name}'];
   const effectivePreferenceKey = `${{preferenceKey ?? cfg.prefKey}}{row_actions_preference_suffix}`;
   return (
-    <List {{...props}} title={{custom.labels.titles['{resource_name}']}} filters={{{resource_name.upper()}_FILTERS}} sort={{cfg.sort || undefined}} actions={{<ImportExportActions preferenceKey={{effectivePreferenceKey}} />}}>
+    <List {{...props}} title={{custom.labels.titles['{resource_name}'] ?? {list_title}}} filters={{{resource_name.upper()}_FILTERS}} sort={{cfg.sort || undefined}} actions={{<ImportExportActions preferenceKey={{effectivePreferenceKey}} />}}>
       <{resource_name.upper()}_LIST_CONTENT rowClick={{rowClick}} bulkActionButtons={{bulkActionButtons}} omit={{omit}} preferenceKey={{preferenceKey}}>{{children}}</{resource_name.upper()}_LIST_CONTENT>
     </List>
   );
@@ -846,20 +863,21 @@ export const {resource_name.upper()}_SHOW = (props) => {{
             list_sort_prop = f" sort={{{{ field: '{sort_field}', order: '{sort_order}' }}}}"
         else:
             list_sort_prop = ""
-        list_component = f"""const {resource_name.upper()}_BULK_ACTIONS = {bulk_actions_expr};
-
-export const {resource_name.upper()}_LIST_CONTENT = ({{ rowClick = '{row_click}', bulkActionButtons = {resource_name.upper()}_BULK_ACTIONS, omit, preferenceKey, children }}) => (
-  <DatagridConfigurable rowClick={{rowClick}} omit={{[...new Set([...{field_components["list_omit_json"]}, ...(omit || [])])]}} preferenceKey={{`${{preferenceKey ?? '{resource_name}.datagrid'}}{row_actions_preference_suffix}`}} bulkActionButtons={{bulkActionButtons}}>
+        list_component = f"""{row_click_decl}export const {resource_name.upper()}_LIST_CONTENT = ({{ rowClick = {row_click}, bulkActionButtons, omit, preferenceKey, children }}) => {{
+  const defaultBulkActions = {bulk_actions_hook};
+  return (
+  <DatagridConfigurable rowClick={{rowClick}} omit={{[...new Set([...{field_components["list_omit_json"]}, ...(omit || [])])]}} preferenceKey={{`${{preferenceKey ?? '{resource_name}.datagrid'}}{row_actions_preference_suffix}`}} bulkActionButtons={{bulkActionButtons ?? defaultBulkActions}}>
     {field_components["list_fields_inline"]}
     {{children}}
     {list_row_actions_component}
   </DatagridConfigurable>
-);
+  );
+}};
 
-export const {resource_name.upper()}_LIST = ({{ rowClick = '{row_click}', bulkActionButtons = {resource_name.upper()}_BULK_ACTIONS, omit, preferenceKey, children, ...props }}) => {{
+export const {resource_name.upper()}_LIST = ({{ rowClick = {row_click}, bulkActionButtons, omit, preferenceKey, children, ...props }}) => {{
   const effectivePreferenceKey = `${{preferenceKey ?? '{resource_name}.datagrid'}}{row_actions_preference_suffix}`;
   return (
-    <List {{...props}} filters={{{resource_name.upper()}_FILTERS}}{list_sort_prop} actions={{<ImportExportActions preferenceKey={{effectivePreferenceKey}} />}}>
+    <List {{...props}} title={{{list_title}}} filters={{{resource_name.upper()}_FILTERS}}{list_sort_prop} actions={{<ImportExportActions preferenceKey={{effectivePreferenceKey}} />}}>
       <{resource_name.upper()}_LIST_CONTENT rowClick={{rowClick}} bulkActionButtons={{bulkActionButtons}} omit={{omit}} preferenceKey={{preferenceKey}}>{{children}}</{resource_name.upper()}_LIST_CONTENT>
     </List>
   );

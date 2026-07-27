@@ -16,7 +16,9 @@
       "label": "Sales",
       "children": [
         { "label": "Orders", "concept": "order" },
-        { "label": "Customers", "concept": "customer" }
+        { "label": "Customers", "concept": "customer" },
+        // view concept: read-only list, rows open the customer
+        { "label": "Customer totals", "concept": "customer_totals" }
       ]
     },
     {
@@ -43,7 +45,10 @@
     // order: show id as first column and remove fields after total_amount
     "order": "id_presentation[0], !>total_amount",
     // customer: remove fields after email
-    "customer": "!>email"
+    "customer": "!>email",
+    // customer_totals (view): the id label and the polymorphic concept column
+    // are plumbing here, the view only ever aggregates customers
+    "customer_totals": "!*, customer, order_count, ordered_amount"
   },
   "list_sort": {
     // Newest orders first

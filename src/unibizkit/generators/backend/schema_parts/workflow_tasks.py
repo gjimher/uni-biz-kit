@@ -5,52 +5,6 @@ def _quote_ident(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
 
 
-def _sql_literal(value: str) -> str:
-    return "'" + value.replace("'", "''") + "'"
-
-
-def generate_workflow_tasks_view(workflow_config: Dict[str, Any], security_config: Dict[str, Any]) -> List[str]:
-    """UNION view of all workflow concepts, backing the admin task list pages.
-
-    security_invoker makes each branch run under the caller's RLS, so users
-    only see the records they can already read. The 'assigners' column bakes
-    the current state's assigner roles as text[], letting the assignable-tasks
-    page filter server-side with a PostgREST array overlap (assigners=ov.{...}).
-    """
-    if not workflow_config["_concept_workflow"]:
-        return []
-    if not security_config["authentication_required"]:
-        return []
-
-    selects = []
-    for concept_name, workflow in sorted(workflow_config["_concept_workflow"].items()):
-        whens = "\n".join(
-            f"      WHEN {_sql_literal(state['name'])} THEN "
-            f"ARRAY[{', '.join(_sql_literal(role) for role in state['assigners'])}]::text[]"
-            for state in workflow["states"]
-        )
-        selects.append(f"""SELECT
-    {_sql_literal(concept_name)} || '-' || t."id"::text AS "id",
-    {_sql_literal(concept_name)}::text AS "concept",
-    t."id" AS "record_id",
-    t."id_presentation",
-    t."state",
-    t."state_task_owner",
-    CASE t."state"
-{whens}
-      ELSE ARRAY[]::text[]
-    END AS "assigners",
-    t."_updated_at"
-  FROM {_quote_ident(concept_name)} t""")
-
-    view_sql = (
-        'CREATE VIEW "_workflow_tasks" WITH (security_invoker = true) AS\n  '
-        + "\nUNION ALL\n  ".join(selects)
-        + ";"
-    )
-    return [view_sql]
-
-
 def generate_user_directory(workflow_config: Dict[str, Any], security_config: Dict[str, Any]) -> List[str]:
     """Discovery cache of application users for workflow task assignment.
 

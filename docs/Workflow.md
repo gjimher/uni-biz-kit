@@ -65,10 +65,10 @@ Two built-in admin pages can be linked from the [custom menu](Frontend.md) using
 }
 ```
 
-*   **assignable_tasks**: unassigned records (`state_task_owner` is null) in states where the user can assign, with an *Assign to me* button per row.
+*   **assignable_tasks**: unassigned records (`state_task_owner` is null) in states where the user can assign, with an *Assign to me* action per row.
 *   **my_tasks**: records whose task is assigned to the logged-in user.
 
-Both are standard list views (server-side filtering by concept, state and record text, sorting and pagination) backed by the generated `_workflow_tasks` SQL view: a UNION of every workflow concept with the concept as a column and the current state's `assigners` baked in as an array. The view uses `security_invoker`, so each user only sees the records their row-level security already allows.
+Both are generated [view concepts](Backend.md#view-concepts-view) (`_assignable_task` and `_my_task`), so they are ordinary generated lists — filters by concept and state, search, configurable columns, sorting, pagination, export — and clicking a row opens the record. Each view is a UNION of every workflow concept that **selects its rows by the caller in SQL**: unassigned records whose current state lists one of the caller's roles in `assigners`, or records assigned to the caller's email. They run with `security_invoker` on top, so each user only sees the records their row-level security already allows, and they are read-only like any view. *Assign to me* is a built-in [list row action](Frontend.md#list-row-actions) (`_task_assign_to_me`) that writes `state_task_owner` on the record's own concept, where the security trigger authorizes it.
 
 ### User directory
 

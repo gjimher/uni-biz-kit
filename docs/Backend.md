@@ -54,6 +54,7 @@ Each concept becomes a table plus its CRUD UI. Example (from `models/b2c-app/con
 * `versioned` — records inserts, updates and deletes in the generated `_version` audit table. It defaults to `false`. A `part_of` child inherits the effective value from its parent and cannot declare it independently.
 * `checks` — SQL check constraints at concept level.
 * `data_size` — expected volume hint.
+* `view` — makes the concept a read-only SQL view instead of a table (see [View concepts](#view-concepts-view)).
 
 ### Field types
 
@@ -139,6 +140,40 @@ transaction, user, concept, date, type and operation. Other authenticated users
 can only read history whose aggregate root is visible to them through the
 root concept's RLS policies. Clients never receive insert, update or delete
 access to `_version`.
+
+### View concepts (`view`)
+
+A concept that declares a `view.query` is generated as a PostgreSQL view rather than a table. Everything else follows the normal pipeline: it is a concept in `concepts_extended.json`, it gets its ACL, and the frontend generates the same list — filters, configurable columns, search, export, [row actions](Frontend.md#list-row-actions) — minus create, edit and delete.
+
+```jsonc
+{
+  "name": "customer_totals",
+  "plural_name": "customer_totals",
+  "description": "Orders and amount ordered per customer",
+  "id_presentation": { "fields": ["customer"] },
+  "view": {
+    "query": "SELECT 'customer'::text AS concept, c.id AS concept_id, c.id_presentation AS customer, count(o.id)::int AS order_count FROM customer c LEFT JOIN \"order\" o ON o.customer = c.id GROUP BY c.id, c.id_presentation"
+  },
+  "fields": [
+    { "name": "concept", "type": "string" },
+    { "name": "concept_id", "type": "integer" },
+    { "name": "customer", "type": "string", "size": "m" },
+    { "name": "order_count", "type": "integer" }
+  ]
+}
+```
+
+The query returns one row per view record: `concept` and `concept_id` — the record each row stands for, so clicking the row opens it — plus one column per declared field. Both may be `NULL` together on aggregate rows that stand for no record; those rows simply do not navigate. Table names are the concept names, and a view over another view must be declared after it.
+
+The generator wraps the query, so the model never produces these itself:
+
+* `id`, which React-Admin requires on every record: `concept-concept_id`, or the row's `id_presentation` when there is no record (which must then be unique and non-empty).
+* `id_presentation`, composed from `id_presentation.fields` exactly like a table's generated column.
+* an explicit projection of the declared columns, so a query that forgets one fails when the schema is applied instead of at runtime, and a join in the query cannot leak anything else through the view.
+
+A view is read-only, and not only in the UI: `security.jsonc` may grant `read` (naming one in a write rule is an error, and a wildcard write rule reaches it as `read`), and INSERT, UPDATE and DELETE are revoked from the API roles — PostgreSQL makes a single-table view auto-updatable, so the grant is what protects it. Reads run with `security_invoker`, so every caller only sees the rows their [row-level security](Security.md) already allows on the underlying tables. A view holds no data of its own: it cannot be versioned, own documents, declare relations, checks or actions, and neither seed nor deployed data can write to it.
+
+The [workflow task pages](Workflow.md#task-pages) are two generated view concepts.
 
 ## Validations (`validations/*.csv`)
 

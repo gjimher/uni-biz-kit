@@ -103,8 +103,8 @@ def test_unknown_concept_is_rejected():
 
 
 def test_internal_concepts_are_not_customizable():
-    with pytest.raises(SchemaValidationError, match="_workflow_tasks"):
-        _load({"presentation-custom-00.jsonc": {"labels": {"titles": {"_workflow_tasks": "Tasks"}}}})
+    with pytest.raises(SchemaValidationError, match="_my_task"):
+        _load({"presentation-custom-00.jsonc": {"labels": {"titles": {"_my_task": "Tasks"}}}})
 
 
 def test_unknown_list_column_is_rejected():

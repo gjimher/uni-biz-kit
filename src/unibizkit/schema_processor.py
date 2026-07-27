@@ -11,8 +11,29 @@ Naming Convention for Enriched Fields:
 """
 
 import copy
+import fnmatch
 import re
 from typing import Dict, Any, List, Optional
+
+
+def workflow_rule_concepts(rule: Dict[str, Any], concept_names: List[str]) -> List[str]:
+    """Concept names a workflow rule applies to.
+
+    'concepts' is a comma-separated list of names, each of which may be a glob.
+    Wildcards belong to the user model: the generated underscore concepts
+    (operational tables and views) never take a workflow.
+    """
+    model_names = [name for name in concept_names if not name.startswith("_")]
+    matched = []
+    for part in (part.strip() for part in rule["concepts"].split(",")):
+        if not part:
+            continue
+        if "*" in part:
+            matched.extend(name for name in model_names if fnmatch.fnmatch(name, part))
+        else:
+            matched.append(part)
+    return matched
+
 
 class SchemaProcessor:
     @staticmethod
@@ -356,29 +377,12 @@ class SchemaProcessor:
         # Support renaming from 'workflows' to 'workflow_rules'
         workflow_rules = self.workflow_extended.get("workflow_rules", self.workflow_extended.get("workflows", []))
         
-        # Collect and expand wildcard concept rules
-        import fnmatch
+        concept_names = [concept["name"] for concept in self.concepts]
         for rule in workflow_rules:
-            # Concepts can be comma-separated string
-            concepts_str = rule.get("concepts", "")
-            if isinstance(concepts_str, list):
-                # Backwards compat if needed, but schema changed to string
-                concepts_parts = concepts_str
-            else:
-                concepts_parts = [p.strip() for p in concepts_str.split(',') if p.strip()]
-            
-            for part in concepts_parts:
-                matched_concepts = []
-                if part == "*":
-                    matched_concepts = [c["name"] for c in self.concepts]
-                elif "*" in part:
-                    matched_concepts = [c["name"] for c in self.concepts if fnmatch.fnmatch(c["name"], part)]
-                else:
-                    matched_concepts = [part]
-                
-                for c_name in matched_concepts:
-                    concept_to_workflow[c_name] = rule
-        
+            for c_name in workflow_rule_concepts(rule, concept_names):
+                concept_to_workflow[c_name] = rule
+
+
         # Inject state and state_info fields to concepts with workflows
         self.workflow_extended["_concept_workflow"] = {}
         for concept in self.concepts:
@@ -503,6 +507,18 @@ class SchemaProcessor:
                         f"got field '{rule['field']}' for concept '{rule['concept']}' in {level_key}"
                     )
 
+        # A view concept is read-only. A rule naming one explicitly is a model
+        # error; the same access coming from a wildcard rule (the default level 1
+        # grants '*' write to admin) is silently narrowed to 'read' below.
+        view_concepts = {concept["name"] for concept in self.concepts if "view" in concept}
+        for level_key in ["rules_level_1", "rules_level_2", "rules_level_3"]:
+            for rule in self.security_extended.get(level_key, []):
+                if rule["concept"] in view_concepts and rule["access"] in ("write", "owner_write"):
+                    raise ValueError(
+                        f"Concept '{rule['concept']}' is a view and only supports 'read' or 'none' "
+                        f"access, got '{rule['access']}' for role '{rule['role']}' in {level_key}"
+                    )
+
         # Map: parent concept name -> [child concept names] (via 'part_of' composition).
         # Only 'part_of' relations imply ownership, so only they inherit the parent's
         # access rules. 'related_to' lookups (e.g. order -> shipping_method) must NOT
@@ -580,7 +596,10 @@ class SchemaProcessor:
         for level_key in ["rules_level_1", "rules_level_2", "rules_level_3"]:
             level_rules = self.security_extended.get(level_key, [])
             for rule in expand_rules(level_rules):
-                rules_map[(rule["concept"], rule["field"], rule["role"])] = rule["access"]
+                access = rule["access"]
+                if rule["concept"] in view_concepts and access in ("write", "owner_write"):
+                    access = "read"
+                rules_map[(rule["concept"], rule["field"], rule["role"])] = access
         
         # Build the effective _acl. Rules may use "none" to remove a lower-level
         # permission, but _acl contains only permissions granted in the final result.
@@ -1041,7 +1060,17 @@ class SchemaProcessor:
         for k, v in concept.items():
             if k not in top_keys:
                 new_concept[k] = v
-        
+
+        # A concept declaring a 'view' query is materialized as a read-only SQL
+        # view: the generated artifacts must not offer create, edit or delete
+        # (the ACL never grants write on a view, but the edit route and the
+        # datagrid's default bulk delete do not depend on permissions).
+        new_concept["_be_storage"] = "view" if "view" in concept else "table"
+        if new_concept["_be_storage"] == "view":
+            new_concept["_fe_allow_create"] = False
+            new_concept["_fe_allow_edit"] = False
+            new_concept["_fe_allow_delete"] = False
+
         return new_concept
 
     def _process_presentation_logic(self, concept: Dict[str, Any]):
@@ -1140,6 +1169,10 @@ class SchemaProcessor:
         
         # 2. Frontend Processing
         field["_fe_visibility"] = self._determine_visibility(field)
+        # A view's concept_id is plumbing, like a row id: it identifies the
+        # record the row links to, and is never a column worth showing.
+        if concept["_be_storage"] == "view" and field["name"] == "concept_id":
+            field["_fe_visibility"] = "internal"
         field["_fe_component"] = self._determine_ui_component(field)
         field["_fe_component_options"] = self._determine_ui_component_options(field)
         field["_fe_list_component"] = self._determine_list_component(field)

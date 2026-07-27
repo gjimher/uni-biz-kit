@@ -43,6 +43,14 @@ class SchemaValidationError(Exception):
     """Exception raised when schema validation fails."""
     pass
 
+
+def _quote_ident(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
 _jsonc = JsonComment()
 
 def _load_jsonc_file(path) -> Dict[str, Any]:
@@ -212,6 +220,7 @@ class SchemaLoader:
                         )
 
             self._validate_reserved_field_names(business_schema)
+            self._validate_view_concepts(business_schema)
             self._validate_presentation_custom(business_schema)
             self._validate_designer()
             self._validate_backend_action_sources(business_schema, parent)
@@ -724,6 +733,77 @@ class SchemaLoader:
                         f"Field '{concept['name']}.{field['name']}' uses reserved '_' prefix"
                     )
 
+    VIEW_FIELD_TYPES = ("string", "markdown", "integer", "decimal", "enum", "boolean", "date", "datetime", "json")
+
+    def _validate_view_concepts(self, business_schema: Dict[str, Any]):
+        """A view concept only describes columns of its own SELECT.
+
+        Everything a table concept gets from being physically stored — relations
+        and their join tables, documents, check constraints, versioning triggers,
+        calculated columns, backend actions on a synthetic id — has no meaning on
+        a view and would silently generate SQL against a table that is never
+        created. Each row stands for a record of the concept named in 'concept'
+        (both 'concept' and 'concept_id' may be null for aggregate rows), which is
+        what makes the generated list link back to the real record.
+        """
+        view_names = {concept["name"] for concept in business_schema["concepts"] if "view" in concept}
+        if view_names:
+            for concept in business_schema["concepts"]:
+                for field in concept["fields"]:
+                    if field.get("target") in view_names:
+                        raise SchemaValidationError(
+                            f"Field '{concept['name']}.{field['name']}' targets the view concept "
+                            f"'{field['target']}': a foreign key needs a table"
+                        )
+            for source, names in (
+                ("seed_data", self.seed_data_config["records"]),
+                ("deployed_data", [entry["concept"] for entry in self.deployed_data_config["concepts"]]),
+            ):
+                for concept_name in names:
+                    if concept_name in view_names:
+                        raise SchemaValidationError(
+                            f"{source} cannot write to the view concept '{concept_name}'"
+                        )
+
+        for concept in business_schema["concepts"]:
+            if "view" not in concept:
+                continue
+            name = concept["name"]
+            for prop in ("documents", "actions", "checks"):
+                if concept.get(prop):
+                    raise SchemaValidationError(f"View concept '{name}' cannot declare '{prop}'")
+            if concept["versioned"]:
+                raise SchemaValidationError(f"View concept '{name}' cannot be versioned")
+            if any("." in field_name for field_name in concept["id_presentation"]["fields"]):
+                raise SchemaValidationError(
+                    f"View concept '{name}' id_presentation cannot traverse relations: "
+                    "its query must return the value as a column"
+                )
+            field_map = {field["name"]: field for field in concept["fields"]}
+            for field in concept["fields"]:
+                if field["type"] not in self.VIEW_FIELD_TYPES:
+                    raise SchemaValidationError(
+                        f"View concept '{name}' field '{field['name']}' has type '{field['type']}', "
+                        f"which a view cannot provide (allowed: {', '.join(self.VIEW_FIELD_TYPES)})"
+                    )
+                for prop in ("calculated", "unique", "default"):
+                    if field.get(prop):
+                        raise SchemaValidationError(
+                            f"View concept '{name}' field '{field['name']}' cannot declare '{prop}'"
+                        )
+            for field_name, allowed_types in (("concept", ("string", "enum")), ("concept_id", ("integer",))):
+                field = field_map.get(field_name)
+                if not field:
+                    raise SchemaValidationError(
+                        f"View concept '{name}' must declare a '{field_name}' field: view rows "
+                        "identify the record they stand for"
+                    )
+                if field["type"] not in allowed_types:
+                    raise SchemaValidationError(
+                        f"View concept '{name}' field '{field_name}' must be of type "
+                        f"{' or '.join(allowed_types)}"
+                    )
+
     def _validate_designer(self):
         """
         Cross-checks for the presentation 'designer' setting: per-user
@@ -763,13 +843,16 @@ class SchemaLoader:
         security = self.security_config
         level3 = security.setdefault("rules_level_3", [])
         all_roles = [role["name"] for role in security.get("roles") or [{"name": "admin"}, {"name": "user"}]]
-        def internal_concept(name, plural, description, presentation_fields, fields, storage):
-            return {
+        def internal_concept(name, plural, description, presentation_fields, fields, query=None):
+            concept = {
                 "name": name, "plural_name": plural, "description": description,
                 "id_presentation": {"fields": presentation_fields, "separator": " - ", "show": False},
                 "fields": fields, "data_size": "s", "checks": [], "versioned": False,
-                "_be_storage": storage, "_fe_allow_create": False, "_fe_allow_delete": False,
+                "_fe_allow_create": False, "_fe_allow_delete": False,
             }
+            if query:
+                concept["view"] = {"query": query}
+            return concept
 
         if any(concept["versioned"] for concept in concepts):
             self.presentation_config.setdefault("list_sort", {})["_version"] = "_updated_at DESC"
@@ -796,7 +879,7 @@ class SchemaLoader:
             ]
             version_concept = internal_concept(
                 "_version", "versions", "Versioned record and relation history",
-                ["concept", "concept_id_presentation", "operation"], version_fields, "table",
+                ["concept", "concept_id_presentation", "operation"], version_fields,
             )
             version_concept["data_size"] = "l"
             version_concept["_be_version_history"] = True
@@ -850,14 +933,14 @@ class SchemaLoader:
                 field("removed_count", "integer", "Source removals handled", required=True, default=0),
                 field("error", "string", "Execution error", size="l"),
             ]
-            integration_concept = internal_concept("_integration", "integrations", "Configured external integrations", ["name"], integration_fields, "table")
+            integration_concept = internal_concept("_integration", "integrations", "Configured external integrations", ["name"], integration_fields)
             integration_concept["actions"] = [
                 {"label": "Run now", "source": "_integration-run.js", "placement": ["edit"]},
                 {"label": "Reset checkpoint", "source": "_integration-reset-checkpoint.js", "placement": ["edit"]},
             ]
             concepts.extend([
                 integration_concept,
-                internal_concept("_integration_run", "integration_runs", "Integration execution history", ["id"], run_fields, "table"),
+                internal_concept("_integration_run", "integration_runs", "Integration execution history", ["id"], run_fields),
             ])
             readonly = [f["name"] for f in integration_fields if f["name"] not in ("notes", "operational_status")]
             for role in self.integrations_config["roles"]:
@@ -878,7 +961,7 @@ class SchemaLoader:
             ]
             design_concept = internal_concept(
                 "_design", "designs", "Per-user presentation personalizations made in design mode",
-                ["user_email"], design_fields, "table",
+                ["user_email"], design_fields,
             )
             # The reviewer role may delete a personalization (reset it to defaults).
             design_concept["_fe_allow_delete"] = True
@@ -892,7 +975,8 @@ class SchemaLoader:
                 access = "write" if role == admin_role else "owner_write"
                 level2.append({"concept": "_design", "role": role, "access": access})
 
-        if self.workflow_config.get("workflow_rules") and security["authentication_required"]:
+        concept_workflow = self._concept_workflow(concepts)
+        if concept_workflow and security["authentication_required"]:
             directory_fields = [
                 field("email", "string", "Known user email", required=True, unique=True),
                 field("_user", "string", "Authentication user id", unique=True),
@@ -900,18 +984,94 @@ class SchemaLoader:
                 field("source", "string", "Discovery source", required=True),
                 field("last_seen_at", "datetime", "Last discovery time"),
             ]
-            task_fields = [
-                field("concept", "string", "Source concept"), field("record_id", "integer", "Source record id"),
-                field("state", "string", "Workflow state"), field("state_task_owner", "string", "Task owner"),
-                field("assigners", "json", "Roles allowed to assign"), field("record_text", "string", "Record label", size="m"),
-            ]
-            concepts.extend([
-                internal_concept("_user_directory", "user_directory", "Workflow user discovery cache", ["email"], directory_fields, "table"),
-                internal_concept("_workflow_tasks", "workflow_tasks", "Unified workflow task view", ["record_text"], task_fields, "view"),
-            ])
+            concepts.append(internal_concept(
+                "_user_directory", "user_directory", "Workflow user discovery cache", ["email"], directory_fields,
+            ))
+            states = sorted({
+                state["name"] for workflow in concept_workflow.values() for state in workflow["states"]
+            })
+
+            def task_fields():
+                return [
+                    field("concept", "enum", "Concept the task belongs to", enum_values=sorted(concept_workflow)),
+                    field("concept_id", "integer", "Identifier of the record"),
+                    field("record", "string", "Record the task belongs to", size="m"),
+                    field("state", "enum", "Workflow state", enum_values=states),
+                    field("updated_at", "datetime", "Last change of the record", precision="second"),
+                ]
+
+            for name, plural, description, query in (
+                ("_assignable_task", "assignable_tasks", "Unassigned workflow tasks the user may assign",
+                 self._workflow_task_query(concept_workflow, assignable=True)),
+                ("_my_task", "my_tasks", "Workflow tasks assigned to the user",
+                 self._workflow_task_query(concept_workflow, assignable=False)),
+            ):
+                concepts.append(internal_concept(
+                    name, plural, description, ["concept", "record"], task_fields(), query,
+                ))
+                self.presentation_config.setdefault("list_sort", {})[name] = "updated_at DESC"
+                self.presentation_config.setdefault("list_field_rules_level_3", {})[name] = (
+                    "!*,concept,record,state,updated_at"
+                )
+            # Claiming a task is a standard list row action on the assignable view.
+            self.presentation_config.setdefault("list_row_actions", {}).setdefault(
+                "_assignable_task", ["_task_assign_to_me"]
+            )
             for role in all_roles:
-                level3.append({"concept": "_user_directory", "role": role, "access": "read", "field": "*"})
-                level3.append({"concept": "_workflow_tasks", "role": role, "access": "read", "field": "*"})
+                for name in ("_user_directory", "_assignable_task", "_my_task"):
+                    level3.append({"concept": name, "role": role, "access": "read", "field": "*"})
+
+    def _concept_workflow(self, concepts: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Workflow rule per concept name, as the processor resolves it later."""
+        from .schema_processor import workflow_rule_concepts
+
+        names = {concept["name"] for concept in concepts}
+        resolved = {}
+        for rule in self.workflow_config["workflow_rules"]:
+            for name in workflow_rule_concepts(rule, sorted(names)):
+                if name in names:
+                    resolved[name] = rule
+        return resolved
+
+    def _workflow_task_query(self, concept_workflow: Dict[str, Any], assignable: bool) -> str:
+        """SELECT behind the two workflow task views.
+
+        Both scope their rows to the caller in SQL (the views run with
+        security_invoker, so row-level security still applies on top): the
+        assignable one keeps the unassigned records the caller's roles may
+        assign in the record's current state, and the other one the records
+        assigned to the caller. Nothing is filtered in the frontend.
+        """
+        selects = []
+        for concept_name, workflow in sorted(concept_workflow.items()):
+            if assignable:
+                arms = "\n".join(
+                    f"           WHEN {_sql_literal(state['name'])} THEN "
+                    f"ARRAY[{', '.join(_sql_literal(role) for role in state['assigners'])}]::text[]"
+                    for state in workflow["states"]
+                )
+                condition = (
+                    f'''t."state_task_owner" IS NULL
+     AND coalesce(auth.jwt() -> 'app_metadata' -> 'roles', '[]'::jsonb) ?| (
+         CASE t."state"
+{arms}
+           ELSE ARRAY[]::text[]
+         END)'''
+                )
+            else:
+                condition = (
+                    't."state_task_owner" IS NOT NULL\n'
+                    '     AND lower(t."state_task_owner") = lower(auth.jwt() ->> \'email\')'
+                )
+            selects.append(f'''SELECT
+     {_sql_literal(concept_name)}::text AS "concept",
+     t."id" AS "concept_id",
+     t."id_presentation" AS "record",
+     t."state" AS "state",
+     t."_updated_at" AS "updated_at"
+   FROM {_quote_ident(concept_name)} t
+   WHERE {condition}''')
+        return "\n   UNION ALL\n   ".join(selects)
 
     def _validate_backend_action_sources(self, business_schema: Dict[str, Any], model_dir: Path):
         for concept in business_schema["concepts"]:

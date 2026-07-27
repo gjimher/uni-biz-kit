@@ -275,6 +275,38 @@ def test_anon_role_name_raises_error():
             SchemaLoader().load_and_validate(str(temp_path))
 
 
+@pytest.mark.parametrize("view_fields, expected_error", [
+    # A view row must say which record it stands for: that pair is what the
+    # generator turns into the row id and into the link back to the record.
+    ([{"name": "concept", "type": "string"}], "concept_id"),
+    # Relations need join tables and foreign keys, which a view cannot have.
+    (
+        [
+            {"name": "concept", "type": "string"},
+            {"name": "concept_id", "type": "integer"},
+            {"name": "item", "type": "relation_to_one", "subtype": "related_to", "target": "item"},
+        ],
+        "relation_to_one",
+    ),
+])
+def test_view_concept_contract_is_enforced(view_fields, expected_error):
+    schema = json.loads(json.dumps(_MINIMAL_CONCEPTS))
+    schema["concepts"].append({
+        "name": "item_summary",
+        "id_presentation": {"fields": ["concept"]},
+        "view": {"query": "SELECT 'item'::text AS concept, i.id AS concept_id FROM item i"},
+        "fields": view_fields,
+    })
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        (root / "concepts.jsonc").write_text(json.dumps(schema))
+        (root / "presentation.jsonc").write_text("{}")
+        (root / "security.jsonc").write_text('{"authentication_required":false}')
+        _write_deployment(root)
+        with pytest.raises(SchemaValidationError, match=expected_error):
+            SchemaLoader().load_and_validate(str(root / "concepts.jsonc"))
+
+
 def test_security_rules_accept_none_access():
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)

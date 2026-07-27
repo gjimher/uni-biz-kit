@@ -91,6 +91,34 @@ export const LIST_ROW_ACTIONS = {{
 """
 
 
+def generate_task_assign_to_me() -> str:
+    """Claim a workflow task from the assignable tasks list.
+
+    The update goes to the record's own concept (the view is read-only): the
+    security trigger is what authorizes the assignment, and the row leaves the
+    list as soon as it has an owner.
+    """
+    return r'''import HowToRegIcon from '@mui/icons-material/HowToReg';
+import { getUser } from '../lib/auth';
+
+export const Icon = HowToRegIcon;
+export const tooltip = 'Assign to me';
+export const visible = ({ record }) => Boolean(record?.concept);
+export const execute = async ({ record, dataProvider, notify, refresh }) => {
+  const user = await getUser();
+  const email = (user?.email || '').toLowerCase();
+  if (!email) return notify('Could not resolve the signed-in user', { type: 'warning' });
+  await dataProvider.update(record.concept, {
+    id: record.concept_id,
+    data: { state_task_owner: email },
+    previousData: { id: record.concept_id },
+  });
+  notify('Task assigned to you', { type: 'info' });
+  refresh();
+};
+'''
+
+
 def generate_version_details() -> str:
     return r'''import VisibilityIcon from '@mui/icons-material/Visibility';
 import { VersionDetail } from '../../components/record_history';

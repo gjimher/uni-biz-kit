@@ -311,8 +311,10 @@ def _sort_concepts_for_seed_data(ctx: Context) -> List[Dict[str, Any]]:
                     visit(target_concept)
         sorted_concepts.append(concept)
 
+    # Views hold no data of their own: they are seeded through their sources.
     for concept in ctx.concepts:
-        visit(concept)
+        if concept["_be_storage"] == "table":
+            visit(concept)
 
     return sorted_concepts
 

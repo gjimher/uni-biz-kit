@@ -194,9 +194,11 @@ import {{
     History as VersionsIcon,
 {custom_icons}}} from '@mui/icons-material';
 
+// The built-in task pages are generated resources like any other; the menu
+// keeps naming them by what they are, not by their internal concept name.
 const WORKFLOW_PAGE_ROUTES = {{
-    assignable_tasks: '/workflow/assignable',
-    my_tasks: '/workflow/mine',
+    assignable_tasks: '/_assignable_task',
+    my_tasks: '/_my_task',
 }};
 
 const menuItems = {menu_items_json};

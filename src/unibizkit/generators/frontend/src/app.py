@@ -15,13 +15,8 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
         customization_close = ""
     import_statements = []
     resource_components = []
-    has_workflows = bool(ctx.workflow_config["_concept_workflow"])
     has_integrations = bool(ctx.integrations_config["integrations"])
-    # 'workflow' is the path segment of the built-in task pages; the custom
-    # router must prefix it with /admin like any resource route.
     admin_route_segments = [concept["name"] for concept in ctx.concepts]
-    if has_workflows:
-        admin_route_segments.append("workflow")
     if has_integrations:
         admin_route_segments.extend(["_integration", "_integration_run"])
     admin_resource_names = json.dumps(admin_route_segments)
@@ -67,18 +62,6 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
     sso_redirect_helpers = ""
     sso_redirect_element = ""
     ra_extra_imports = "AdminContext, AdminUI, Resource, localStorageStore"
-    workflow_pages_import = ""
-    workflow_routes_block = ""
-    if has_workflows:
-        ra_extra_imports += ", CustomRoutes"
-        workflow_pages_import = (
-            "import { WORKFLOW_ASSIGNABLE_TASKS, WORKFLOW_MY_TASKS } "
-            "from './components/workflow_tasks';"
-        )
-        workflow_routes_block = """                <CustomRoutes>
-                  <Route path="/workflow/assignable" element={<WORKFLOW_ASSIGNABLE_TASKS />} />
-                  <Route path="/workflow/mine" element={<WORKFLOW_MY_TASKS />} />
-                </CustomRoutes>"""
     profile_gate_element = ""
     if has_auth_provider:
         sso_enabled = ctx.security_config["sso"]["enabled"]
@@ -187,7 +170,6 @@ import {{ dataProvider }} from './dataProvider';
 {auth_import}
 {sso_redirect_import}
 import {{ PresentationRouter }} from './presentation/PresentationRouter';
-{workflow_pages_import}
 {chr(10).join(import_statements)}
 {i18n_provider_def}
 // Custom routerProvider so that React-Admin links and navigation prepend /admin
@@ -252,7 +234,6 @@ const App = () => (
             {{permissions => (
               <>
 {chr(10).join(resource_components)}
-{workflow_routes_block}
               </>
             )}}
           </AdminUI>

@@ -70,6 +70,19 @@
             "description": "Whether changes to this concept are recorded. Defaults to false. A non-recursive part_of concept inherits this value from its parent and must not declare it.",
             "default": false
           },
+          "view": {
+            "type": "object",
+            "description": "Turns the concept into a read-only SQL view instead of a table: no table, no create/edit/delete UI, and write access is never granted (INSERT/UPDATE/DELETE are revoked from the API roles, since a simple view would otherwise be updatable). Everything else — list, filters, columns, search, export, row actions — is generated as for any other concept.",
+            "additionalProperties": false,
+            "required": ["query"],
+            "properties": {
+              "query": {
+                "type": "string",
+                "minLength": 1,
+                "description": "SELECT returning one row per view record, wrapped by the generator into the view (concept names are the table names). It must return a 'concept' column with the name of the concept each row stands for, a 'concept_id' column with that record's id, and one column per declared field; both may be NULL together for aggregate rows that stand for no record. The generator adds 'id' (concept-concept_id, or the row's id_presentation when there is no record — it must never be null or empty) and 'id_presentation' (composed from id_presentation.fields), and clicking a row opens /<concept>/<concept_id> unless concept is null. The query runs with security_invoker, so every caller only sees the rows their row-level security already allows; a view over another view must be declared after it."
+              }
+            }
+          },
           "id_presentation": {
             "type": "object",
             "properties": {

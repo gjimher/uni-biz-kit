@@ -17,7 +17,7 @@ from .src.layout import (
 from .src.components import (
     title, reorderable_datagrid, recursive_parent_selector,
     custom_edit_toolbar, document_tab, workflow_selector, field_help_icon,
-    markdown_input, import_export, quick_edit, workflow_tasks, deleted_snapshot_reference,
+    markdown_input, import_export, quick_edit, deleted_snapshot_reference,
     concept_actions, precision_datetime_input, customization, record_history, list_row_actions
 )
 from .src.devtools import (
@@ -184,7 +184,6 @@ class ReactAdminGenerator:
             _write(ctx.output_dir / "src" / "components" / "deleted_snapshot_reference.jsx", deleted_snapshot_reference.generate())
         if ctx.workflow_config["_concept_workflow"]:
             _write(ctx.output_dir / "src" / "workflowConfig.js", workflow_config.generate(ctx))
-            _write(ctx.output_dir / "src" / "components" / "workflow_tasks.jsx", workflow_tasks.generate(ctx.customization))
         if any(c.get("documents") and c["documents"]["enabled"] for c in ctx.concepts):
             _write(ctx.output_dir / "src" / "components" / "document_tab.jsx", document_tab.generate())
         if any(f["type"] == "markdown" for c in ctx.concepts for f in c["fields"]):
@@ -241,10 +240,10 @@ class ReactAdminGenerator:
                 concept["name"] for concept in ctx.concepts
                 if concept.get("_be_version_history")
             ), None)
-            builtins = {
-                f"{history_resource}_details": list_row_actions.generate_version_details,
-                f"{history_resource}_revert": list_row_actions.generate_version_revert,
-            } if history_resource else {}
+            builtins = {"_task_assign_to_me": list_row_actions.generate_task_assign_to_me}
+            if history_resource:
+                builtins[f"{history_resource}_details"] = list_row_actions.generate_version_details
+                builtins[f"{history_resource}_revert"] = list_row_actions.generate_version_revert
             for name, generate_addon in builtins.items():
                 if name in action_names:
                     _write(addons_dir / f"{name}.jsx", generate_addon())

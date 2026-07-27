@@ -110,6 +110,52 @@ def test_anon_not_required_in_roles_list():
     assert acl["item"]["_main"].get("_anon") == "read"
 
 
+_VIEW_CONCEPT = {
+    "name": "item_summary",
+    "plural_name": "item_summaries",
+    "fields": [
+        {"name": "concept", "type": "string", "size": "s", "required": False},
+        {"name": "concept_id", "type": "integer", "size": "s", "required": False},
+    ],
+    "id_presentation": {"fields": []},
+    "view": {"query": "SELECT 'item'::text AS concept, i.id AS concept_id FROM item i"},
+}
+
+
+def _make_view_processor(rules_level_2=None):
+    security_config = {
+        "authentication_required": True,
+        "rules_level_1": [
+            {"role": "admin", "concept": "*", "access": "write"},
+            {"role": "user",  "concept": "*", "access": "read"},
+        ],
+        "rules_level_2": rules_level_2 or [],
+    }
+    schema = {"concepts": [_MINIMAL_CONCEPT, json.loads(json.dumps(_VIEW_CONCEPT))]}
+    return SchemaProcessor(schema, security_config=security_config)
+
+
+def test_wildcard_write_is_narrowed_to_read_on_a_view():
+    """A view cannot be written through: the default level 1 grants '*' write to
+    admin, and that must reach a view concept as plain read (the frontend hides
+    every write affordance from the ACL alone)."""
+    processor = _make_view_processor()
+    processor.process()
+    acl = processor.security_extended["_acl"]
+    assert acl["item_summary"]["_main"] == {"admin": "read", "user": "read"}
+    assert acl["item"]["_main"]["admin"] == "write"
+
+
+def test_write_rule_on_a_view_raises_error():
+    """Naming a view in a write rule is a modeling error, not something to narrow
+    silently: the model asked for something the database will never allow."""
+    processor = _make_view_processor(
+        rules_level_2=[{"role": "admin", "concept": "item_summary", "access": "write"}]
+    )
+    with pytest.raises(ValueError, match="item_summary"):
+        processor.process()
+
+
 def test_role_profile_concept_injects_user_link_fields():
     schema = {
         "concepts": [
@@ -624,6 +670,62 @@ def test_owner_write_rls():
             
         finally:
             cur.execute("ROLLBACK;")
+
+@pytest.mark.integration
+def test_view_concepts_are_read_only_and_scoped_to_the_caller():
+    """A view is read-only in the database, not only in the UI: PostgreSQL makes
+    a simple view auto-updatable, so the API roles must not hold INSERT/UPDATE/
+    DELETE on it. Reads go through security_invoker, so each caller only sees
+    what their row-level security already allows on the underlying tables."""
+    load_dotenv("test-app/backend/.env")
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        pytest.skip("No DB_URL found, skipping integration test.")
+
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, email FROM auth.users WHERE email IN ('user1@test.com', 'admin@test.com')")
+        user_ids = {email: uid for uid, email in cur.fetchall()}
+        if len(user_ids) != 2:
+            pytest.skip(f"Required users not found in DB. Found: {user_ids}")
+
+        def as_user(email, roles):
+            cur.execute("SET LOCAL ROLE authenticated;")
+            cur.execute(
+                "SELECT set_config('request.jwt.claims', %s, true)",
+                (json.dumps({"sub": str(user_ids[email]), "email": email,
+                             "app_metadata": {"roles": roles}}),),
+            )
+
+        # The API roles hold no write privilege on the view. This is what stops
+        # a write on a view PostgreSQL would otherwise accept: customer_totals
+        # aggregates, so it is not auto-updatable to begin with, but a view over
+        # a single table is, and it must be protected by the grant alone.
+        for role in ("anon", "authenticated", "service_role"):
+            for privilege in ("INSERT", "UPDATE", "DELETE"):
+                cur.execute(
+                    "SELECT has_table_privilege(%s, 'customer_totals', %s)", (role, privilege)
+                )
+                assert cur.fetchone()[0] is False, f"{role} must not hold {privilege} on a view"
+
+        try:
+            cur.execute("BEGIN;")
+            as_user("admin@test.com", ["admin"])
+            cur.execute("SELECT count(*) FROM customer_totals")
+            all_customers = cur.fetchone()[0]
+            assert all_customers > 0
+            cur.execute("ROLLBACK;")
+
+            # user1 only owns their own customer profile, so that is all the
+            # view aggregates for them.
+            cur.execute("BEGIN;")
+            as_user("user1@test.com", ["user"])
+            cur.execute("SELECT count(*) FROM customer_totals")
+            assert cur.fetchone()[0] < all_customers
+        finally:
+            cur.execute("ROLLBACK;")
+
 
 @pytest.mark.integration
 def test_security_owner_id_is_not_updatable():

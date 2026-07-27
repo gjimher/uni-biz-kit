@@ -36,4 +36,19 @@ export const ConceptBulkActions = ({ allowDelete = true }) => {
     {allowDelete && canDelete && <BulkDeleteButton mutationMode="pessimistic" />}
   </>;
 };
+
+// Default bulk action bar of a generated list, or false when this user has
+// nothing to do with a selection. React-Admin renders the row checkboxes for
+// anything other than false, so a read-only role would get a selection column
+// and an empty toolbar (its own <BulkDeleteButton> default does not check
+// permissions either).
+export const useConceptBulkActions = ({ allowDelete = true } = {}) => {
+  const resource = useResourceContext();
+  const { permissions } = usePermissions();
+  const canDelete = allowDelete
+    && (permissions?.[resource]?.includes('write') || permissions?.['*']?.includes('write'));
+  const hasListActions = (BACKEND_ACTIONS[resource] || []).some(action => action.placement.includes('list'));
+  if (!canDelete && !hasListActions) return false;
+  return <ConceptBulkActions allowDelete={allowDelete} />;
+};
 '''

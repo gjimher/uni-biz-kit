@@ -2,7 +2,7 @@
   "properties": {
     "concepts": {
       "items": {
-        "optional_properties": ["_prefill_groups", "_profile_for_roles", "_be_storage", "_be_version_history", "_fe_allow_create", "_fe_allow_edit", "_fe_allow_delete"],
+        "optional_properties": ["_prefill_groups", "_profile_for_roles", "_be_version_history", "_fe_allow_create", "_fe_allow_edit", "_fe_allow_delete"],
         "properties": {
           "_type": {
             "type": "string",
@@ -11,7 +11,7 @@
           },
           "_be_storage": {
             "type": "string",
-            "description": "Physical backend representation of the concept.",
+            "description": "Physical backend representation of the concept: 'view' when the concept declares a 'view' query (read-only), 'table' otherwise.",
             "enum": ["table", "view"]
           },
           "_be_version_history": {

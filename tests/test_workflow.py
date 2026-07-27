@@ -101,7 +101,6 @@ def test_task_owner_security_trigger_sql():
 def test_user_directory_and_email_trigger_sql():
     from unibizkit.generators.backend.schema_parts.workflow_tasks import (
         generate_user_directory, generate_task_assignment_email_triggers,
-        generate_workflow_tasks_view,
     )
 
     _, security_config, workflow_config = _task_assignment_fixture()
@@ -116,18 +115,63 @@ def test_user_directory_and_email_trigger_sql():
     assert "task-assigned-email" in email_sql
     assert '"02_notify_task_assignment_trigger" ON "order"' in email_sql
 
-    # workflow_tasks view: caller RLS, per-state assigners as text[], stable ids.
-    view_sql = "\n".join(generate_workflow_tasks_view(workflow_config, security_config))
-    assert 'CREATE VIEW "_workflow_tasks" WITH (security_invoker = true)' in view_sql
-    assert "'order' || '-' || t.\"id\"::text" in view_sql
-    assert "WHEN 'ordered' THEN ARRAY['admin']::text[]" in view_sql
-    assert "WHEN 'initial' THEN ARRAY[]::text[]" in view_sql
-
     # Nothing is generated without workflows or without authentication.
     assert generate_user_directory({"_concept_workflow": {}}, security_config) == []
     no_auth = dict(security_config, authentication_required=False)
     assert generate_task_assignment_email_triggers(workflow_config, no_auth) == []
-    assert generate_workflow_tasks_view(workflow_config, no_auth) == []
+
+
+def _load_workflow_model(tmp_path, authenticated=True):
+    from unibizkit.schema_loader import SchemaLoader
+
+    (tmp_path / "concepts.jsonc").write_text(json.dumps({
+        "version": "1.0.0", "name": "Tasks",
+        "concepts": [{
+            "name": "order", "id_presentation": {"fields": ["note"]},
+            "fields": [{"name": "note", "type": "string"}],
+        }],
+    }))
+    (tmp_path / "presentation.jsonc").write_text("{}")
+    (tmp_path / "security.jsonc").write_text(json.dumps({"authentication_required": authenticated}))
+    (tmp_path / "deployment.jsonc").write_text('{"prod_versioning": "dev"}')
+    (tmp_path / "workflow.jsonc").write_text(json.dumps({"workflow_rules": [{
+        "name": "order_flow", "concepts": "order", "states": [
+            {"name": "initial", "owners": ["user"], "assigners": []},
+            {"name": "ordered", "owners": ["admin"], "assigners": ["admin"]},
+        ],
+    }]}))
+    loader = SchemaLoader()
+    schema = loader.load_and_validate(str(tmp_path / "concepts.jsonc"))
+    return schema, loader
+
+
+def test_task_views_scope_their_rows_to_the_caller(tmp_path):
+    """The two task views must select their rows by the caller in SQL, not in the
+    frontend: the assignable one keeps the unassigned records the caller's roles
+    may assign in the record's current state, and my_task the records assigned to
+    their email. Both are plain view concepts in the model, so the standard list
+    pages and the read-only ACL follow from that."""
+    schema, loader = _load_workflow_model(tmp_path)
+    views = {c["name"]: c["view"]["query"] for c in schema["concepts"] if "view" in c}
+
+    assignable = views["_assignable_task"]
+    assert 't."state_task_owner" IS NULL' in assignable
+    assert "auth.jwt() -> 'app_metadata' -> 'roles'" in assignable
+    # Per-state assigners: 'initial' has none, so nobody can claim those tasks.
+    assert "WHEN 'ordered' THEN ARRAY['admin']::text[]" in assignable
+    assert "WHEN 'initial' THEN ARRAY[]::text[]" in assignable
+
+    assert "lower(t.\"state_task_owner\") = lower(auth.jwt() ->> 'email')" in views["_my_task"]
+
+    # Claiming a task is a standard list row action of the assignable view.
+    assert "_task_assign_to_me" in loader.presentation_config["list_row_actions"]["_assignable_task"]
+
+
+def test_task_views_need_authentication(tmp_path):
+    """Both views select by the caller's identity, so without authentication
+    there is nobody to scope them to and they are not generated at all."""
+    schema, _ = _load_workflow_model(tmp_path, authenticated=False)
+    assert not [c for c in schema["concepts"] if c["name"].endswith("_task")]
 
 
 def test_workflow_transition_handles_retain_task_owner():
@@ -241,6 +285,20 @@ def test_workflow_task_assignment_permissions():
             )
             assert returncode == 0, f"user1 should move order to 'ordered': {result}"
 
+            # Unassigned in 'ordered': the record is assignable for admin (an
+            # assigner of that state) and not for user1, who owns the record.
+            for user_id, email, roles, expected in (
+                (admin_id, 'admin@test.com', ["admin"], 1),
+                (user1_id, 'user1@test.com', ["user"], 0),
+            ):
+                cur.execute("BEGIN;")
+                set_jwt(cur, user_id, email, roles)
+                cur.execute(
+                    'SELECT count(*) FROM _assignable_task WHERE concept_id = %s', (order_id,)
+                )
+                assert cur.fetchone()[0] == expected
+                cur.execute("ROLLBACK;")
+
             # 2. user1 is not an assigner of 'ordered'
             cur.execute("BEGIN;")
             set_jwt(cur, user1_id, 'user1@test.com', ["user"])
@@ -262,17 +320,22 @@ def test_workflow_task_assignment_permissions():
             cur.execute("SELECT state_task_owner FROM \"order\" WHERE id = %s", (order_id,))
             assert cur.fetchone()[0] == 'user1@test.com'
 
-            # The workflow_tasks view exposes the row with the state's assigners
+            # The two task views scope their rows to the caller: the record is
+            # now user1's task, and it is no longer assignable by anyone.
+            cur.execute("BEGIN;")
+            set_jwt(cur, user1_id, 'user1@test.com', ["user"])
+            cur.execute(
+                'SELECT "id", concept, state FROM _my_task WHERE concept_id = %s', (order_id,)
+            )
+            assert cur.fetchone() == (f'order-{order_id}', 'order', 'ordered')
+            cur.execute("ROLLBACK;")
+
             cur.execute("BEGIN;")
             set_jwt(cur, admin_id, 'admin@test.com', ["admin"])
-            cur.execute(
-                "SELECT concept, state, state_task_owner, assigners FROM _workflow_tasks "
-                "WHERE concept = 'order' AND record_id = %s",
-                (order_id,),
-            )
-            concept, state, task_owner, assigners = cur.fetchone()
-            assert (concept, state, task_owner) == ('order', 'ordered', 'user1@test.com')
-            assert assigners == ['admin']
+            cur.execute('SELECT count(*) FROM _my_task WHERE concept_id = %s', (order_id,))
+            assert cur.fetchone()[0] == 0
+            cur.execute('SELECT count(*) FROM _assignable_task WHERE concept_id = %s', (order_id,))
+            assert cur.fetchone()[0] == 0
             cur.execute("ROLLBACK;")
 
             # 4. Transition clears the task owner ('accepted' has no retain_task_owner)

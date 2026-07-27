@@ -172,6 +172,26 @@
         { "name": "city", "type": "string" },
         { "name": "country", "type": "string" }
       ]
+    },
+    {
+      // A view concept: no table, no create/edit/delete, read-only for every role.
+      // The query returns 'concept' and 'concept_id' (the record each row stands
+      // for, so clicking the row opens the customer) plus one column per declared
+      // field; the generator adds id and id_presentation.
+      "name": "customer_totals",
+      "plural_name": "customer_totals",
+      "description": "Orders and amount ordered per customer",
+      "id_presentation": { "fields": ["customer"] },
+      "view": {
+        "query": "SELECT 'customer'::text AS concept, c.id AS concept_id, c.id_presentation AS customer, count(o.id)::int AS order_count, coalesce(sum(o.total_amount), 0) AS ordered_amount FROM customer c LEFT JOIN \"order\" o ON o.customer = c.id GROUP BY c.id, c.id_presentation"
+      },
+      "fields": [
+        { "name": "concept", "type": "string", "description": "Concept each row stands for" },
+        { "name": "concept_id", "type": "integer", "description": "Identifier of the customer" },
+        { "name": "customer", "type": "string", "size": "m", "description": "Customer" },
+        { "name": "order_count", "type": "integer", "description": "Orders placed" },
+        { "name": "ordered_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "description": "Total amount ordered" }
+      ]
     }
   ]
 }

@@ -5,17 +5,17 @@ from .schema_parts.documents import generate_document_tables
 from .schema_parts.internal_columns import generate_id_insert_privileges, generate_internal_column_protection, generate_system_timestamp_triggers
 from .schema_parts.triggers import generate_presentation_triggers, generate_rollup_triggers, generate_copy_triggers
 from .schema_parts.security import generate_security_policies
+from .schema_parts.views import generate_views
 from .schema_parts.workflow_tasks import (
     generate_user_directory,
     generate_task_assignment_email_triggers,
-    generate_workflow_tasks_view,
 )
 from .schema_parts.versioning import generate_versioning_access_sql, generate_versioning_sql
 from . import integrations, rules
 
 
 def _generated_table_names(ctx: Context) -> list[str]:
-    table_names = [concept["name"] for concept in ctx.concepts if concept.get("_be_storage", "table") == "table"]
+    table_names = [concept["name"] for concept in ctx.concepts if concept["_be_storage"] == "table"]
     table_names.extend(get_join_table_names(ctx.concepts, ctx.concept_map))
     table_names.extend(
         f"{concept['name']}_document"
@@ -31,7 +31,7 @@ def generate(ctx: Context) -> str:
     sql_parts.append("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
 
     for concept in ctx.concepts:
-        if concept.get("_be_storage", "table") != "table":
+        if concept["_be_storage"] != "table":
             continue
         sql_parts.append(generate_table_sql(concept))
 
@@ -68,13 +68,13 @@ def generate(ctx: Context) -> str:
     sql_parts.extend(generate_presentation_triggers(ctx.concepts))
     sql_parts.extend(rules.generate_async_rule_execution_sql(ctx))
     sql_parts.extend(generate_user_directory(ctx.workflow_config, ctx.security_config))
-    sql_parts.extend(generate_workflow_tasks_view(ctx.workflow_config, ctx.security_config))
     sql_parts.extend(generate_task_assignment_email_triggers(ctx.workflow_config, ctx.security_config))
+    sql_parts.extend(generate_views(ctx.concepts))
     sql_parts.extend(integrations.generate_integration_sql(ctx))
     sql_parts.extend(generate_versioning_sql(ctx.concepts, ctx.concept_map))
 
     if ctx.security_config["authentication_required"]:
-        table_concepts = [c for c in ctx.concepts if c.get("_be_storage", "table") == "table"]
+        table_concepts = [c for c in ctx.concepts if c["_be_storage"] == "table"]
         sql_parts.extend(generate_security_policies(
             table_concepts, ctx.concept_map, ctx.security_config, ctx.workflow_config
         ))

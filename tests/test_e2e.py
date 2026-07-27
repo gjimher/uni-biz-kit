@@ -421,6 +421,32 @@ def test_presentation_customization_as_user(page: Page, app_server, request):
     expect(page.get_by_role("radio", name="accepted")).to_have_count(0)
 
 
+def test_list_selection_follows_delete_permission(page: Page, app_server):
+    """A list must not offer a selection a role cannot act on: React-Admin's
+    default bulk action bar is a <BulkDeleteButton> that ignores permissions, so
+    without the generated default a read-only role would get row checkboxes and
+    a Delete that always fails in the database.
+    """
+    with open(os.path.abspath("test-app/security_extended.json")) as f:
+        user1 = next(u for u in json.load(f)["users"] if "user" in u["roles"])
+
+    page.set_default_timeout(10000)
+    page.goto(app_server + "/#/admin")
+    page.locator('input[name="email"]').fill(user1["email"])
+    page.locator('input[name="password"]').fill(user1["password"])
+    page.get_by_role("button", name="Sign in").click()
+    expect(page.get_by_text("Sales")).to_be_visible()
+
+    # product is read-only for users, order is theirs to write (owner_write).
+    page.goto(app_server + "/#/admin/product")
+    expect(page.locator("table tbody tr").first).to_be_visible()
+    expect(page.locator("table thead input[type=checkbox]")).to_have_count(0)
+
+    page.goto(app_server + "/#/admin/order")
+    expect(page.locator("table tbody tr").first).to_be_visible()
+    expect(page.locator("table thead input[type=checkbox]")).to_have_count(1)
+
+
 def test_personal_designer_end_user(page: Page, app_server, request):
     """designer 'production' per-user personalization on the production bundle:
     a user edits and saves their own design (stored in the _design table), it
