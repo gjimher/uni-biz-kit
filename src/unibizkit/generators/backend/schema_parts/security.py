@@ -129,13 +129,23 @@ def _generate_profile_sync_function(
     concept_map: Dict[str, Any],
     security_config: Dict[str, Any],
 ) -> str:
-    sync_parts = []
+    # Several roles may share one profile concept (a manager, a rep and a marketer can
+    # all be people in the same directory). The sync is therefore grouped by concept,
+    # not by role: a user keeps the profile while they hold ANY of the roles bound to
+    # it, and only loses it when they hold none — one block per role would let the
+    # roles a user does not hold deactivate the profile another role just claimed.
+    roles_by_concept: Dict[str, List[str]] = {}
     for mapping in security_config["_profile_concepts"]:
-        role_name = mapping["role"]
-        concept_name = mapping["concept"]
+        roles = roles_by_concept.setdefault(mapping["concept"], [])
+        if mapping["role"] not in roles:
+            roles.append(mapping["role"])
+
+    sync_parts = []
+    for concept_name, role_names in roles_by_concept.items():
         concept = concept_map[concept_name]
         table_sql = _quote_ident(concept_name)
-        role_sql = _sql_literal(role_name)
+        roles_sql = "array[" + ", ".join(_sql_literal(role) for role in role_names) + "]"
+        roles_label = ", ".join(role_names)
         has_security_owner_id = any(f["name"] == "_security_owner_id" for f in concept["fields"])
         insert_columns = _profile_insert_columns(concept)
         metadata_values = _profile_metadata_column_values(concept)
@@ -161,8 +171,8 @@ def _generate_profile_sync_function(
         owner_backfill = _owner_backfill_sql(concept_name, concept_map)
 
         sync_parts.append(f"""
-  -- Sync {role_name} profiles in {concept_name}.
-  IF target_roles ? {role_sql} THEN
+  -- Sync {concept_name} profiles (roles: {roles_label}).
+  IF target_roles ?| {roles_sql} THEN
     IF NOT EXISTS (SELECT 1 FROM {table_sql} WHERE "_user" = target_user_id) THEN
       -- A same-email login with a different UUID supersedes the previously linked profile.
       UPDATE {table_sql} AS profile
@@ -207,7 +217,7 @@ def _generate_profile_sync_function(
       -- claimed profile (seeded or admin-prepared) and still have no owner.{owner_backfill}
     END IF;
   ELSE
-    -- User no longer holds the role: deactivate their profile.
+    -- The user holds none of the roles this profile belongs to: deactivate it.
     UPDATE {table_sql}
     SET "_user_prev"       = "_user",
         "_user_email_prev" = "_user_email",
