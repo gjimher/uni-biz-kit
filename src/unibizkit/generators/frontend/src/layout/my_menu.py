@@ -11,11 +11,33 @@ _CUSTOM_ICONS = """    Palette as CustomizationIcon,
     Brush as DesignerIcon,
 """
 
+_VISIBILITY_HELPERS = """// An entry pointing at a resource the role cannot read would navigate to a
+// route App.jsx never registered ("URL not found"), so it is not shown at all.
+// The condition mirrors the resource registration there; a group disappears
+// once every entry under it is hidden.
+const canReadResource = (permissions, resource) => Boolean(
+    permissions?.[resource]?.includes('read')
+    || permissions?.[resource]?.includes('edit')
+    || permissions?.[resource]?.includes('write')
+    || permissions?.['*']?.includes('read')
+    || permissions?.['*']?.includes('write')
+);
+
+const isMenuItemVisible = (item, permissions) => {
+    if (item.children) return item.children.some((child) => isMenuItemVisible(child, permissions));
+    if (item.workflow) return canReadResource(permissions, WORKFLOW_PAGE_ROUTES[item.workflow].slice(1));
+    return canReadResource(permissions, item.concept);
+};"""
+
 _RENDER_MENU_CUSTOM = """// Each entry carries its own design badge (targeting the item by path) and
 // every level ends with a design-mode-only "Add entry" row — the menu edits
 // stay WYSIWYG right in the sidebar.
-const RenderMenu = ({ items, state, handleToggle, path = [] }) => {
+const RenderMenu = ({ items, state, handleToggle, permissions, path = [] }) => {
   return items.map((item, index) => {
+     // Hidden entries render as null instead of being filtered out of the
+     // array: a design badge targets an item by its index in the model's menu,
+     // so the indices must stay the same whatever the role can see.
+     if (!isMenuItemVisible(item, permissions)) return null;
      const itemPath = path.concat(index);
      const badge = <DesignBadge target={{ kind: 'menuItem', path: itemPath, name: item.label }} />;
      if (item.children) {
@@ -31,7 +53,7 @@ const RenderMenu = ({ items, state, handleToggle, path = [] }) => {
                 isOpen={state[item.label]}
                 handleToggle={() => handleToggle(item.label)}
              >
-                <RenderMenu items={item.children} state={state} handleToggle={handleToggle} path={itemPath} />
+                <RenderMenu items={item.children} state={state} handleToggle={handleToggle} permissions={permissions} path={itemPath} />
                 <DesignBadge target={{ kind: 'menuAdd', path: itemPath }} />
              </SubMenu>
          );
@@ -67,8 +89,9 @@ const RenderMenu = ({ items, state, handleToggle, path = [] }) => {
   });
 };"""
 
-_RENDER_MENU_PLAIN = """const RenderMenu = ({ items, state, handleToggle }) => {
+_RENDER_MENU_PLAIN = """const RenderMenu = ({ items, state, handleToggle, permissions }) => {
   return items.map((item, index) => {
+     if (!isMenuItemVisible(item, permissions)) return null;
      if (item.children) {
          let Icon = SubMenuIcon;
          if (item.label === 'Security') Icon = SecurityIcon;
@@ -81,7 +104,7 @@ _RENDER_MENU_PLAIN = """const RenderMenu = ({ items, state, handleToggle }) => {
                 isOpen={state[item.label]}
                 handleToggle={() => handleToggle(item.label)}
              >
-                <RenderMenu items={item.children} state={state} handleToggle={handleToggle} />
+                <RenderMenu items={item.children} state={state} handleToggle={handleToggle} permissions={permissions} />
              </SubMenu>
          );
      } else if (item.workflow) {
@@ -175,7 +198,7 @@ def generate(ctx: Context) -> str:
         root_add_badge = ""
         customization_submenu = ""
     return f"""import * as React from 'react';
-import {{ Menu, useGetIdentity, useTranslate }} from 'react-admin';
+import {{ Menu, useGetIdentity, usePermissions, useTranslate }} from 'react-admin';
 {custom_import}import {{ Collapse, List, ListItemButton, ListItemIcon, ListItemText }} from '@mui/material';
 import Tooltip from '@mui/material/Tooltip';
 import {{
@@ -208,6 +231,8 @@ const hasIntegrations = {has_integrations};
 const versionResource = {json.dumps(version_resource)};
 const versionAdminRole = {json.dumps(version_admin_role)};
 {designer_admin_const}
+{_VISIBILITY_HELPERS}
+
 const SubMenu = ({{ handleToggle, isOpen, name, icon{submenu_badge_param}, children, dense }}) => {{
     const translate = useTranslate();
     const header = (
@@ -245,6 +270,9 @@ const SubMenu = ({{ handleToggle, isOpen, name, icon{submenu_badge_param}, child
 
 export const MyMenu = () => {{
     const {{ identity }} = useGetIdentity();
+    // Until the permissions resolve nothing is shown, so no entry can flash and
+    // then vanish once the role is known.
+    const {{ permissions }} = usePermissions();
     const [state, setState] = React.useState({{}});
     const handleToggle = (menu) => {{
         setState(state => ({{ ...state, [menu]: !state[menu] }}));
@@ -260,7 +288,7 @@ export const MyMenu = () => {{
                 </ListItemIcon>
                 <ListItemText primary="Home" />
             </ListItemButton>
-             <RenderMenu items={{{render_items}}} state={{state}} handleToggle={{handleToggle}} />{root_add_badge}
+             <RenderMenu items={{{render_items}}} state={{state}} handleToggle={{handleToggle}} permissions={{permissions}} />{root_add_badge}
              {{(canOperateIntegrations || canOperateVersions) && <SubMenu
                 name="Operations"
                 icon={{<OperationsIcon />}}

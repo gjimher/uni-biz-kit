@@ -40,7 +40,7 @@
     },
     "menu": {
       "type": "array",
-      "description": "Custom left menu structure. If not provided, a flat list of all resources is shown.",
+      "description": "Custom left menu structure. If not provided, a flat list of all resources is shown. The same menu is used for every role: entries whose resource the signed-in role cannot read are hidden, and a group disappears once all of its entries are hidden.",
       "items": {
         "$ref": "#/definitions/menuItem"
       }

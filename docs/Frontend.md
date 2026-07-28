@@ -45,7 +45,7 @@ A concept's `id_presentation` (declared in `concepts.jsonc`) is the human-readab
 Configuration in `presentation.jsonc`:
 
 * `locale`, `number_locale`, `currency` — UI language and number/currency formatting.
-* `menu` — custom left menu; defaults to a flat list of all resources.
+* `menu` — custom left menu; defaults to a flat list of all resources. Entries the signed-in role cannot read are hidden (and a group disappears once all of its entries are), so one menu can serve every role without offering dead links.
 * `list_field_rules_level_1..3`, `list_sort` — which columns list views show and their default sort (see below).
 * `list_row_actions` — model-provided buttons rendered on individual list rows (see below).
 * `authenticated_pages` — which custom pages require login (see below).
