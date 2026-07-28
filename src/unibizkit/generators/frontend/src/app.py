@@ -166,6 +166,9 @@ import {{
   useNavigate as rrUseNavigate,
 }} from 'react-router-dom';
 import {{ dataProvider }} from './dataProvider';
+// Backoffice look & feel, built from the model's design tokens (see
+// presentation/style/theme.js).
+import {{ adminTheme }} from './presentation/style/theme';
 {customization_import}{layout_import}
 {auth_import}
 {sso_redirect_import}
@@ -223,6 +226,7 @@ const App = () => (
   <HashRouter future={{{{ v7_startTransition: true, v7_relativeSplatPath: true }}}}>{sso_redirect_element}
     <AdminContext
       dataProvider={{dataProvider}}{auth_prop}{i18n_prop}
+      theme={{adminTheme}}
       basename="/admin"
       routerProvider={{adminRouterProvider}}
       store={{store}}

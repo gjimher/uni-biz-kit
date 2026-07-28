@@ -27,6 +27,7 @@ from .src.devtools import (
 from .src.resources import resource
 from .src.presentation import model_js, router, custom_page
 from .src.presentation.style import auth as style_auth
+from .src.presentation.style import theme as style_theme
 from .src.presentation.lib import (
     auth as lib_auth, validations as lib_validations, format as lib_format,
     workflow as lib_workflow, storage as lib_storage, index as lib_index,
@@ -265,6 +266,9 @@ class ReactAdminGenerator:
         style_dir = pres_dir / "style"
         style_dir.mkdir(exist_ok=True)
         _write(style_dir / "auth.jsx", style_auth.generate())
+        # The backoffice theme reads its palette from those same tokens, so the
+        # rebrand above reaches the generated admin screens too.
+        _write(style_dir / "theme.js", style_theme.generate())
 
         # Shared helper library for custom presentation pages (presentation/*.jsx).
         lib_dir = pres_dir / "lib"
