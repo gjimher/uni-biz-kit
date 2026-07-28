@@ -48,7 +48,7 @@
     }
   ],
   "list_field_rules_level_2": {
-    // Issue list = the Jira issue navigator: key, type, summary, state, priority,
+    // Issue list = the issue navigator: key, type, summary, state, priority,
     // assignee, estimate and sprint. Everything else (description, links, rollups,
     // ranking) belongs to the issue page, not to a column.
     "issue": "!*, id_presentation, type, summary, state, priority, assignee, story_points, sprint",

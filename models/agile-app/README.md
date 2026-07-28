@@ -1,6 +1,6 @@
 # Agile App — Software Project Management Demo
 
-A **Jira-style agile project manager**: software projects with their boards, components and releases, issues of every type identified by the familiar `AGL-12` key, sprint planning with story points, and a kanban lifecycle enforced by the backend. It is the largest of the demo models — twelve concepts, two workflows and a custom portal on top of the generated backoffice.
+An **agile software project manager**: software projects with their boards, components and releases, issues of every type identified by the familiar `AGL-12` key, sprint planning with story points, and a kanban lifecycle enforced by the backend. It is the largest of the demo models — twelve concepts, two workflows and a custom portal on top of the generated backoffice.
 
 ## Domain
 

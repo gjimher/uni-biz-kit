@@ -31,7 +31,7 @@ experience where it matters, without rebuilding the admin side or the security b
 - [**Intranet**](/intranet/) — an employee portal covering people, time & absence, an IT
   helpdesk and internal content, with each concept scoped to the role that owns it (HR, IT,
   employee).
-- [**Agile board**](/agile/) — Jira-style software project management: projects, epics and
+- [**Agile board**](/agile/) — agile software project management: projects, epics and
   issues with their own keys, a kanban board you drag cards across, sprint planning and
   reports. Dropping a card runs the model's workflow rules in the backend, so an issue with
   no assignee refuses to enter "in progress".

@@ -2,8 +2,8 @@
   "$schema": "../../schemas/concepts_schema.json",
   "version": "1.0.0",
   "name": "Agile App",
-  "description": "Agile software project management (Jira-style): projects with their boards, components and releases, issues of every type (epic, story, task, bug, subtask) identified by a project key, sprint planning with story points, a kanban lifecycle workflow, comments, work logs, issue links and attachments.",
-  // Issue history is a core Jira feature: 'project' is versioned and every concept
+  "description": "Agile software project management: projects with their boards, components and releases, issues of every type (epic, story, task, bug, subtask) identified by a project key, sprint planning with story points, a kanban lifecycle workflow, comments, work logs, issue links and attachments.",
+  // Issue history is a core auditing feature: 'project' is versioned and every concept
   // that is part_of it inherits the flag, so the whole project aggregate is audited.
   // admin_role opens the global Operations > Versions resource.
   "versioning": { "admin_role": "admin" },
@@ -116,7 +116,7 @@
     {
       "name": "issue",
       "plural_name": "issues",
-      "description": "Unit of work: epic, story, task, bug or subtask (issue_workflow: backlog → todo → in_progress → in_review → done). Identified by the Jira-style key <project key>-<number>.",
+      "description": "Unit of work: epic, story, task, bug or subtask (issue_workflow: backlog → todo → in_progress → in_review → done). Identified by the project-scoped key <project key>-<number>.",
       "data_size": "m",
       // project_key is a copy of the parent project's key, so the label is the familiar
       // AGL-12 and stays stable in list views, pickers and board cards.

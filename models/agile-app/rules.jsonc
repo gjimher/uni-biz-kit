@@ -7,7 +7,7 @@
   //
   // FEEL context: db.<concept> = current record; auth.<concept> = logged-in user's profile
   //
-  // These are the workflow guards a Jira administrator would configure as transition
+  // These are the workflow guards a project administrator would configure as transition
   // conditions/validators. They run wherever the transition comes from — the backoffice
   // workflow selector or a card dropped on the board page — because both go through the
   // same workflow-transition backend function.

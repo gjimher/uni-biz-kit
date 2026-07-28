@@ -36,7 +36,7 @@ export const STATE_COLORS = {
   planned: '#8993a4', active: '#0c66e4', completed: '#22a06b',
 };
 
-// Issue types and priorities render as the small coloured marks Jira users read
+// Issue types and priorities render as small coloured marks that users read
 // at a glance on a card, without pulling in an icon dependency.
 export const TYPE_MARK = {
   epic: { symbol: '◈', color: '#8b5cf6', label: 'Epic' },
