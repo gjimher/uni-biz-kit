@@ -1,0 +1,679 @@
+// Demo dataset: a software vendor selling a CRM suite. Eight accounts in different
+// shapes (a group with a subsidiary, three prospects, a partner), a pipeline with deals
+// in every stage — including two won and one lost, so the forecast and the win/loss
+// analysis have something to say — plus quotes, contracts, orders, installed assets,
+// support entitlements, open cases and the activity trail behind all of it.
+//
+// Seed ids are model-local aliases used to wire the records together; the database
+// assigns the real numeric ids and works out the insertion order from the relations.
+// Calculated fields (probability, expected revenue, line totals, rollups) are never
+// seeded — the database computes them.
+{
+  "$schema": "../../schemas/seed_data_schema.json",
+  // Real, coherent demo data only — no faker rows on top of it.
+  "include_test_data": false,
+  "records": {
+    // _user_pending_link claims the seeded profile for that seed user the first time they
+    // sign in, so manager@crm.com *is* Laura rather than an empty auto-created profile.
+    "sales_rep": [
+      { "id": "laura", "first_name": "Laura", "last_name": "Ortega", "title": "Sales Manager", "department": "sales", "phone": "+34 910 000 101", "quota_annual": 2400000, "is_active": true, "_user_pending_link": "manager@crm.com" },
+      { "id": "carlos", "first_name": "Carlos", "last_name": "Núñez", "title": "Account Executive", "department": "sales", "phone": "+34 910 000 102", "quota_annual": 900000, "is_active": true, "manager": "laura", "_user_pending_link": "rep1@crm.com" },
+      { "id": "mei", "first_name": "Mei", "last_name": "Tanaka", "title": "Account Executive", "department": "sales", "phone": "+34 910 000 103", "quota_annual": 850000, "is_active": true, "manager": "laura", "_user_pending_link": "rep2@crm.com" },
+      { "id": "sofia", "first_name": "Sofía", "last_name": "Ferrer", "title": "Marketing Manager", "department": "marketing", "phone": "+34 910 000 104", "is_active": true, "manager": "laura", "_user_pending_link": "marketing@crm.com" },
+      { "id": "ravi", "first_name": "Ravi", "last_name": "Menon", "title": "Support Engineer", "department": "service", "phone": "+34 910 000 105", "is_active": true, "manager": "laura", "_user_pending_link": "support@crm.com" },
+      { "id": "iker", "first_name": "Iker", "last_name": "Salaverría", "title": "Field Service Technician", "department": "service", "phone": "+34 910 000 107", "is_active": true, "manager": "laura", "_user_pending_link": "tech@crm.com" },
+      { "id": "anna", "first_name": "Anna", "last_name": "Kowalski", "title": "Solutions Consultant", "department": "sales", "phone": "+34 910 000 106", "quota_annual": 300000, "is_active": true, "manager": "laura" }
+    ],
+    "campaign": [
+      { "id": "webinar-q2", "name": "Q2 Webinar — Pipeline that forecasts itself", "type": "webinar", "status": "completed", "owner": "sofia", "start_date": "2026-04-14", "end_date": "2026-04-14", "budgeted_cost": 4000, "actual_cost": 3450, "expected_revenue": 180000, "target_audience": "Sales operations leads in mid-market companies",
+        "description": "Live product session on forecast categories, followed by a nurture sequence for every attendee." },
+      { "id": "crm-expo", "name": "CRM Expo Madrid 2026", "type": "trade_show", "status": "completed", "owner": "sofia", "start_date": "2026-05-19", "end_date": "2026-05-21", "budgeted_cost": 38000, "actual_cost": 41200, "expected_revenue": 750000, "target_audience": "Enterprise buyers visiting the sales technology hall",
+        "description": "Booth, two speaking slots and 140 badge scans. The scans came in as leads with the trade_show source." },
+      { "id": "nurture-h2", "name": "H2 Nurture — Migration stories", "type": "email", "status": "in_progress", "owner": "sofia", "start_date": "2026-07-01", "end_date": "2026-12-20", "budgeted_cost": 6000, "actual_cost": 1800, "expected_revenue": 240000, "target_audience": "Contacts and leads that went quiet after a demo",
+        "description": "Monthly email with a customer migration story and an offer to re-run the demo." }
+    ],
+    "account": [
+      { "id": "northwind", "name": "Northwind Logistics", "type": "customer", "industry": "transportation", "rating": "hot", "owner": "carlos", "website": "https://northwind-logistics.example", "phone": "+34 915 220 100", "employees": 2400, "annual_revenue": 480000000,
+        "billing_street": "Calle de Alcalá 145", "billing_city": "Madrid", "billing_state": "Madrid", "billing_postal_code": "28009", "billing_country": "Spain",
+        "description": "# Northwind Logistics\n\nRoad and rail freight across Iberia. Bought the Professional edition in 2024 and is now standardising every regional office on the Enterprise edition.\n\n* Renewal every March\n* Sponsor: COO" },
+      { "id": "helios", "name": "Helios Energy Group", "type": "customer", "industry": "energy", "rating": "warm", "owner": "mei", "website": "https://helios-energy.example", "phone": "+34 934 110 200", "employees": 8600, "annual_revenue": 1900000000,
+        "billing_street": "Avinguda Diagonal 611", "billing_city": "Barcelona", "billing_state": "Barcelona", "billing_postal_code": "08028", "billing_country": "Spain",
+        "description": "Renewables group. Central procurement in Barcelona; each country subsidiary buys through the frame agreement." },
+      { "id": "helios-iberia", "name": "Helios Energy Iberia", "type": "customer", "industry": "energy", "rating": "warm", "owner": "mei", "parent_account": "helios", "website": "https://iberia.helios-energy.example", "phone": "+34 963 400 210", "employees": 1200, "annual_revenue": 320000000,
+        "billing_street": "Carrer de Colón 32", "billing_city": "Valencia", "billing_state": "Valencia", "billing_postal_code": "46004", "billing_country": "Spain",
+        "description": "Iberian subsidiary of the Helios group. Runs its own service desk, buys under the group contract." },
+      { "id": "brightbank", "name": "Brightbank", "type": "prospect", "industry": "banking", "rating": "hot", "owner": "carlos", "website": "https://brightbank.example", "phone": "+44 20 7100 3000", "employees": 5400, "annual_revenue": 1250000000,
+        "billing_street": "12 Bishopsgate", "billing_city": "London", "billing_state": "England", "billing_postal_code": "EC2N 3AR", "billing_country": "United Kingdom",
+        "description": "Digital-first bank replacing a legacy CRM. Security review is the gate to any purchase." },
+      { "id": "lumen", "name": "Lumen Health", "type": "prospect", "industry": "healthcare", "rating": "warm", "owner": "mei", "website": "https://lumen-health.example", "phone": "+49 89 4000 500", "employees": 900, "annual_revenue": 210000000,
+        "billing_street": "Leopoldstraße 21", "billing_city": "Munich", "billing_state": "Bayern", "billing_postal_code": "80802", "billing_country": "Germany",
+        "description": "Private clinic network. Data residency in the EU is a hard requirement." },
+      { "id": "cascade", "name": "Cascade Retail Group", "type": "customer", "industry": "retail", "rating": "warm", "owner": "carlos", "website": "https://cascade-retail.example", "phone": "+33 1 4400 7000", "employees": 15000, "annual_revenue": 3100000000,
+        "billing_street": "8 Rue de la Paix", "billing_city": "Paris", "billing_state": "Ile-de-France", "billing_postal_code": "75002", "billing_country": "France",
+        "description": "Fashion retailer, 480 stores. Uses the CRM for clienteling in the flagship stores." },
+      { "id": "atlas", "name": "Atlas Manufacturing", "type": "prospect", "industry": "manufacturing", "rating": "cold", "owner": "mei", "website": "https://atlas-mfg.example", "phone": "+1 312 555 0180", "employees": 3200, "annual_revenue": 720000000,
+        "billing_street": "540 W Madison St", "billing_city": "Chicago", "billing_state": "Illinois", "billing_postal_code": "60661", "billing_country": "United States",
+        "description": "Industrial equipment maker. Evaluated us in 2025 and stayed with the incumbent." },
+      { "id": "veritas", "name": "Veritas Consulting Partners", "type": "partner", "industry": "consulting", "rating": "warm", "owner": "laura", "website": "https://veritas-consulting.example", "phone": "+31 20 700 4000", "employees": 260, "annual_revenue": 44000000,
+        "billing_street": "Herengracht 420", "billing_city": "Amsterdam", "billing_state": "Noord-Holland", "billing_postal_code": "1017 BZ", "billing_country": "Netherlands",
+        "description": "Implementation partner. Resells under the partner price book and delivers the rollouts." }
+    ],
+    "contact": [
+      { "id": "n-elena", "account": "northwind", "salutation": "ms", "first_name": "Elena", "last_name": "Barros", "title": "Chief Operating Officer", "department": "Operations", "email": "elena.barros@northwind-logistics.example", "phone": "+34 915 220 110", "mobile": "+34 600 110 220", "owner": "carlos", "lead_source": "partner_referral", "description": "Economic buyer. Cares about adoption in the regional offices, not about features." },
+      { "id": "n-pablo", "account": "northwind", "salutation": "mr", "first_name": "Pablo", "last_name": "Herrera", "title": "IT Director", "department": "IT", "email": "pablo.herrera@northwind-logistics.example", "phone": "+34 915 220 118", "owner": "carlos", "reports_to": "n-elena", "lead_source": "partner_referral", "description": "Runs the integration with the transport management system." },
+      { "id": "h-jordi", "account": "helios", "salutation": "mr", "first_name": "Jordi", "last_name": "Puig", "title": "Head of Digital Sales", "department": "Commercial", "email": "jordi.puig@helios-energy.example", "phone": "+34 934 110 210", "mobile": "+34 620 300 400", "owner": "mei", "lead_source": "trade_show", "description": "Sponsor of the group-wide rollout." },
+      { "id": "h-marta", "account": "helios", "salutation": "ms", "first_name": "Marta", "last_name": "Sales", "title": "Procurement Manager", "department": "Procurement", "email": "marta.sales@helios-energy.example", "phone": "+34 934 110 240", "owner": "mei", "reports_to": "h-jordi", "description": "Owns the frame agreement and every renewal negotiation." },
+      { "id": "hi-nuria", "account": "helios-iberia", "salutation": "ms", "first_name": "Núria", "last_name": "Camps", "title": "Service Desk Lead", "department": "Customer Service", "email": "nuria.camps@iberia.helios-energy.example", "phone": "+34 963 400 220", "owner": "mei", "description": "Day-to-day contact for every support case from the Iberian subsidiary." },
+      { "id": "b-oliver", "account": "brightbank", "salutation": "mr", "first_name": "Oliver", "last_name": "Grant", "title": "Head of Customer Platforms", "department": "Technology", "email": "oliver.grant@brightbank.example", "phone": "+44 20 7100 3040", "mobile": "+44 7700 900 123", "owner": "carlos", "lead_source": "webinar", "description": "Champion. Wants the migration done before the retail relaunch." },
+      { "id": "b-priya", "account": "brightbank", "salutation": "ms", "first_name": "Priya", "last_name": "Nair", "title": "Chief Information Security Officer", "department": "Security", "email": "priya.nair@brightbank.example", "phone": "+44 20 7100 3090", "owner": "carlos", "description": "Gatekeeper: no purchase without the security questionnaire and a pen-test report." },
+      { "id": "l-stefan", "account": "lumen", "salutation": "dr", "first_name": "Stefan", "last_name": "Weber", "title": "Chief Medical Information Officer", "department": "Medical Systems", "email": "stefan.weber@lumen-health.example", "phone": "+49 89 4000 540", "owner": "mei", "lead_source": "webinar", "description": "Evaluates the patient-relationship use case." },
+      { "id": "l-katrin", "account": "lumen", "salutation": "ms", "first_name": "Katrin", "last_name": "Hoffmann", "title": "Data Protection Officer", "department": "Legal", "email": "katrin.hoffmann@lumen-health.example", "owner": "mei", "email_opt_out": true, "description": "Reviews the data processing agreement." },
+      { "id": "c-amelie", "account": "cascade", "salutation": "ms", "first_name": "Amélie", "last_name": "Rousseau", "title": "Retail Innovation Director", "department": "Retail", "email": "amelie.rousseau@cascade-retail.example", "phone": "+33 1 4400 7040", "mobile": "+33 6 12 34 56 78", "owner": "carlos", "lead_source": "trade_show", "description": "Sponsors the clienteling programme in the flagship stores." },
+      { "id": "c-thomas", "account": "cascade", "salutation": "mr", "first_name": "Thomas", "last_name": "Lambert", "title": "CRM Product Owner", "department": "Digital", "email": "thomas.lambert@cascade-retail.example", "phone": "+33 1 4400 7055", "owner": "carlos", "reports_to": "c-amelie", "description": "Writes the requirements and runs the user acceptance tests." },
+      { "id": "a-jenna", "account": "atlas", "salutation": "ms", "first_name": "Jenna", "last_name": "Whitfield", "title": "VP Sales Operations", "department": "Sales Operations", "email": "jenna.whitfield@atlas-mfg.example", "phone": "+1 312 555 0184", "owner": "mei", "do_not_call": true, "description": "Chose the incumbent in 2025; open to talking again after the renewal in 2027." },
+      { "id": "v-daan", "account": "veritas", "salutation": "mr", "first_name": "Daan", "last_name": "Visser", "title": "Managing Partner", "department": "Management", "email": "daan.visser@veritas-consulting.example", "phone": "+31 20 700 4010", "owner": "laura", "description": "Signs the partner agreement and the joint business plan." },
+      { "id": "v-ines", "account": "veritas", "salutation": "ms", "first_name": "Inés", "last_name": "Moreau", "title": "Delivery Lead", "department": "Delivery", "email": "ines.moreau@veritas-consulting.example", "phone": "+31 20 700 4022", "owner": "laura", "reports_to": "v-daan", "description": "Staffs the implementation projects." },
+      { "id": "hi-marc", "account": "helios-iberia", "salutation": "mr", "first_name": "Marc", "last_name": "Ferrán", "title": "IT Operations Manager", "department": "IT", "email": "marc.ferran@iberia.helios-energy.example", "phone": "+34 963 400 231", "owner": "mei", "reports_to": "hi-nuria", "description": "Owns the sandbox and the release windows." },
+      { "id": "n-sara", "account": "northwind", "salutation": "ms", "first_name": "Sara", "last_name": "Mendes", "title": "Regional Sales Manager", "department": "Sales", "email": "sara.mendes@northwind-logistics.example", "phone": "+351 21 900 4000", "owner": "carlos", "reports_to": "n-elena", "description": "Represents the Portuguese offices in the rollout." }
+    ],
+    "lead": [
+      { "id": "l-ferrovia", "first_name": "Bruno", "last_name": "Almeida", "salutation": "mr", "company": "Ferrovia Atlântica", "title": "Head of Sales", "status": "new", "rating": "warm", "owner": "carlos", "lead_source": "trade_show", "campaign": "crm-expo", "email": "bruno.almeida@ferrovia-atlantica.example", "phone": "+351 21 300 1000", "website": "https://ferrovia-atlantica.example", "industry": "transportation", "num_employees": 1800, "annual_revenue": 260000000, "city": "Porto", "country": "Portugal", "description": "Scanned at the booth. Asked for the logistics customer story." },
+      { "id": "l-solaris", "first_name": "Ingrid", "last_name": "Larsen", "salutation": "ms", "company": "Solaris Wind", "title": "Commercial Director", "status": "working", "rating": "hot", "owner": "mei", "lead_source": "webinar", "campaign": "webinar-q2", "email": "ingrid.larsen@solaris-wind.example", "phone": "+49 40 3000 200", "industry": "energy", "num_employees": 620, "annual_revenue": 145000000, "city": "Hamburg", "country": "Germany", "description": "Attended the whole webinar and asked two questions about forecast categories. Discovery call booked." },
+      { "id": "l-medira", "first_name": "Pierre", "last_name": "Dubois", "salutation": "mr", "company": "Medira Clinics", "title": "Operations Manager", "status": "working", "rating": "warm", "owner": "mei", "lead_source": "web", "email": "pierre.dubois@medira.example", "phone": "+33 4 7200 3000", "industry": "healthcare", "num_employees": 310, "city": "Lyon", "country": "France", "description": "Downloaded the pricing guide and requested a callback." },
+      { "id": "l-vega", "first_name": "Alicia", "last_name": "Rey", "salutation": "ms", "company": "Vega Retail", "title": "Head of Customer Experience", "status": "nurturing", "rating": "cold", "owner": "carlos", "lead_source": "purchased_list", "campaign": "nurture-h2", "email": "alicia.rey@vega-retail.example", "industry": "retail", "num_employees": 4200, "city": "Sevilla", "country": "Spain", "description": "No budget this year; wants to be contacted again for the 2027 planning." },
+      { "id": "l-orbita", "first_name": "Tomás", "last_name": "Gil", "salutation": "mr", "company": "Órbita Telecom", "title": "CRM Programme Manager", "status": "qualified", "rating": "hot", "owner": "carlos", "lead_source": "partner_referral", "email": "tomas.gil@orbita-telecom.example", "phone": "+34 917 700 900", "website": "https://orbita-telecom.example", "industry": "telecommunications", "num_employees": 2600, "annual_revenue": 540000000, "city": "Madrid", "country": "Spain", "description": "Referred by Veritas. Budget approved, 400 users, decision before the end of the quarter — ready to convert." },
+      { "id": "l-kestrel", "first_name": "Grace", "last_name": "O'Neill", "salutation": "ms", "company": "Kestrel Insurance", "title": "Director of Distribution", "status": "qualified", "rating": "warm", "owner": "mei", "lead_source": "webinar", "campaign": "webinar-q2", "email": "grace.oneill@kestrel-insurance.example", "phone": "+353 1 400 5000", "industry": "insurance", "num_employees": 1100, "annual_revenue": 300000000, "city": "Dublin", "country": "Ireland", "description": "Broker network of 300 agents. Needs the partner portal use case." },
+      { "id": "l-arcadia", "first_name": "Miguel", "last_name": "Santos", "salutation": "mr", "company": "Arcadia Hotels", "title": "Guest Experience Lead", "status": "unqualified", "rating": "cold", "owner": "carlos", "lead_source": "web", "email": "miguel.santos@arcadia-hotels.example", "industry": "hospitality", "num_employees": 180, "city": "Malaga", "country": "Spain", "disqualification_reason": "no_budget", "description": "Looking for a booking system, not a CRM." },
+      { "id": "l-nordata", "first_name": "Karin", "last_name": "Berg", "salutation": "ms", "company": "Nordata Systems", "title": "Head of Revenue Operations", "status": "unqualified", "rating": "cold", "owner": "mei", "lead_source": "purchased_list", "email": "karin.berg@nordata.example", "industry": "technology", "num_employees": 90, "city": "Rotterdam", "country": "Netherlands", "disqualification_reason": "chose_competitor", "description": "Signed with the incumbent two weeks before we called." },
+      { "id": "l-terrafirma", "first_name": "Luis", "last_name": "Ibarra", "salutation": "mr", "company": "Terrafirma Construcciones", "title": "Commercial Manager", "status": "new", "rating": "warm", "owner": "carlos", "lead_source": "trade_show", "campaign": "crm-expo", "email": "luis.ibarra@terrafirma.example", "phone": "+34 954 220 300", "industry": "construction", "num_employees": 740, "city": "Sevilla", "country": "Spain", "description": "Badge scan, asked about mobile access for site managers." },
+      { "id": "l-brightbank-2", "first_name": "Hannah", "last_name": "Cole", "salutation": "ms", "company": "Brightbank", "title": "Head of Wealth Distribution", "status": "nurturing", "rating": "warm", "owner": "carlos", "lead_source": "webinar", "campaign": "nurture-h2", "email": "hannah.cole@brightbank.example", "industry": "banking", "num_employees": 5400, "city": "London", "country": "United Kingdom", "description": "Second business unit at an account we already sell to: converting her should reuse the existing Brightbank account." }
+    ],
+    "campaign_member": [
+      { "campaign": "webinar-q2", "lead": "l-solaris", "status": "attended", "response_date": "2026-04-14" },
+      { "campaign": "webinar-q2", "lead": "l-kestrel", "status": "attended", "response_date": "2026-04-14" },
+      { "campaign": "webinar-q2", "contact": "b-oliver", "status": "attended", "response_date": "2026-04-14" },
+      { "campaign": "webinar-q2", "contact": "l-stefan", "status": "registered", "response_date": "2026-04-10" },
+      { "campaign": "crm-expo", "lead": "l-ferrovia", "status": "responded", "response_date": "2026-05-20" },
+      { "campaign": "crm-expo", "lead": "l-terrafirma", "status": "responded", "response_date": "2026-05-21" },
+      { "campaign": "crm-expo", "contact": "c-amelie", "status": "converted", "response_date": "2026-05-19" },
+      { "campaign": "crm-expo", "contact": "h-jordi", "status": "attended", "response_date": "2026-05-20" },
+      { "campaign": "nurture-h2", "lead": "l-vega", "status": "sent" },
+      { "campaign": "nurture-h2", "lead": "l-brightbank-2", "status": "opened" },
+      { "campaign": "nurture-h2", "contact": "a-jenna", "status": "bounced" }
+    ],
+    "product": [
+      { "id": "crm-ent", "code": "CRM-ENT", "name": "CRM Enterprise Licence", "family": "software", "list_price": 1200, "cost": 180, "is_subscription": true, "term_months": 12, "is_active": true, "is_bundle": true, "description": "Full suite per user and year: pipeline, forecasting, service console and the automation engine." },
+      { "id": "crm-pro", "code": "CRM-PRO", "name": "CRM Professional Licence", "family": "software", "list_price": 600, "cost": 95, "is_subscription": true, "term_months": 12, "is_active": true, "description": "Sales and service essentials per user and year, without the automation engine." },
+      { "id": "int-conn", "code": "INT-CONN", "name": "Integration Connector", "family": "software", "list_price": 4500, "cost": 900, "is_active": true, "description": "Certified connector to ERP and billing systems, one per source system." },
+      { "id": "an-insight", "code": "AN-INSIGHT", "name": "Analytics Insights Add-on", "family": "subscription", "list_price": 400, "cost": 60, "is_subscription": true, "term_months": 12, "is_active": true, "description": "Forecast accuracy, pipeline movement and win/loss dashboards." },
+      { "id": "sup-prem", "code": "SUP-PREM", "name": "Premier Support", "family": "support", "list_price": 15000, "cost": 4200, "is_subscription": true, "term_months": 12, "is_active": true, "description": "24×7 support with a two-hour response target and a named support engineer." },
+      { "id": "svc-impl", "code": "SVC-IMPL", "name": "Implementation Services", "family": "services", "list_price": 950, "cost": 520, "is_active": true, "description": "Consulting day: data migration, process design and go-live support." },
+      { "id": "trn-adm", "code": "TRN-ADM", "name": "Administrator Training", "family": "training", "list_price": 750, "cost": 240, "is_active": true, "description": "Two-day course for administrators, per attendee." },
+      { "id": "hw-gate", "code": "HW-GATE", "name": "Edge Gateway", "family": "hardware", "list_price": 320, "cost": 210, "is_active": true, "description": "On-site appliance for telephony and depot scanners." }
+    ],
+    "price_book": [
+      { "id": "pb-standard", "name": "Standard Catalogue 2026", "owner": "laura", "is_standard": true, "is_active": true, "valid_from": "2026-01-01", "valid_until": "2026-12-31", "description": "List prices used by default for every direct deal." },
+      { "id": "pb-partner", "name": "Partner Price List 2026", "owner": "laura", "is_standard": false, "is_active": true, "valid_from": "2026-01-01", "valid_until": "2026-12-31", "description": "Prices for certified partners who resell and implement; 20% off licences." }
+    ],
+    "price_book_entry": [
+      { "id": "pbe-ent", "price_book": "pb-standard", "product": "crm-ent", "unit_price": 1200, "is_active": true },
+      { "id": "pbe-pro", "price_book": "pb-standard", "product": "crm-pro", "unit_price": 600, "is_active": true },
+      { "id": "pbe-int", "price_book": "pb-standard", "product": "int-conn", "unit_price": 4500, "is_active": true },
+      { "id": "pbe-ana", "price_book": "pb-standard", "product": "an-insight", "unit_price": 400, "is_active": true },
+      { "id": "pbe-sup", "price_book": "pb-standard", "product": "sup-prem", "unit_price": 15000, "is_active": true },
+      { "id": "pbe-svc", "price_book": "pb-standard", "product": "svc-impl", "unit_price": 950, "is_active": true },
+      { "id": "pbe-trn", "price_book": "pb-standard", "product": "trn-adm", "unit_price": 750, "is_active": true },
+      { "id": "pbe-hw", "price_book": "pb-standard", "product": "hw-gate", "unit_price": 320, "is_active": true },
+      { "id": "pbe-p-ent", "price_book": "pb-partner", "product": "crm-ent", "unit_price": 960, "is_active": true },
+      { "id": "pbe-p-pro", "price_book": "pb-partner", "product": "crm-pro", "unit_price": 480, "is_active": true },
+      { "id": "pbe-p-svc", "price_book": "pb-partner", "product": "svc-impl", "unit_price": 780, "is_active": true },
+      { "id": "pbe-p-sup", "price_book": "pb-partner", "product": "sup-prem", "unit_price": 12000, "is_active": true }
+    ],
+    // 'state' is the workflow field: seeding it puts each deal in its stage, and the
+    // calculated probability, forecast category and expected revenue follow from it.
+    "opportunity": [
+      { "id": "opp-northwind-ent", "account": "northwind", "name": "Northwind — Enterprise upgrade 600 users", "type": "upsell", "state": "negotiation", "amount": 861200, "close_date": "2026-09-15", "owner": "carlos", "primary_contact": "n-elena", "price_book": "pb-standard", "lead_source": "partner_referral", "next_step": "Legal review of the volume discount clause", "competitor": "Dynamix CRM",
+        "description": "Upgrade of the 600 Professional seats to Enterprise plus the analytics add-on. The COO wants a single contract for every regional office." },
+      { "id": "opp-helios-group", "account": "helios", "name": "Helios — Group frame agreement", "type": "new_business", "state": "proposal", "amount": 370800, "close_date": "2026-10-01", "owner": "mei", "primary_contact": "h-jordi", "campaign": "crm-expo", "price_book": "pb-standard", "lead_source": "trade_show", "next_step": "Present the offer to the procurement committee on 5 August",
+        "description": "Group-wide agreement covering 400 seats, the integration connector and premier support." },
+      { "id": "opp-helios-iberia", "account": "helios-iberia", "name": "Helios Iberia — Service desk seats", "type": "existing_business", "state": "qualification", "amount": 96000, "close_date": "2026-11-20", "owner": "mei", "primary_contact": "hi-nuria", "price_book": "pb-standard", "next_step": "Confirm how many agents the service desk really needs",
+        "description": "Extension of the group agreement to the 80 service desk agents of the Iberian subsidiary." },
+      { "id": "opp-brightbank", "account": "brightbank", "name": "Brightbank — CRM migration 900 users", "type": "new_business", "state": "needs_analysis", "amount": 1080000, "close_date": "2026-12-18", "owner": "carlos", "primary_contact": "b-oliver", "campaign": "webinar-q2", "price_book": "pb-standard", "lead_source": "webinar", "next_step": "Answer the security questionnaire", "competitor": "Dynamix CRM",
+        "description": "Replacement of the legacy CRM before the retail relaunch. The security review is the real gate." },
+      { "id": "opp-lumen", "account": "lumen", "name": "Lumen Health — Patient relationship pilot", "type": "new_business", "state": "qualification", "amount": 84000, "close_date": "2026-10-30", "owner": "mei", "primary_contact": "l-stefan", "campaign": "webinar-q2", "price_book": "pb-standard", "lead_source": "webinar", "next_step": "Send the EU data residency statement",
+        "description": "Pilot with 70 users in two clinics, with an option to extend to the whole network." },
+      { "id": "opp-cascade-clientel", "account": "cascade", "name": "Cascade — Clienteling flagship stores", "type": "upsell", "state": "proposal", "amount": 162080, "close_date": "2026-09-30", "owner": "carlos", "primary_contact": "c-amelie", "campaign": "crm-expo", "price_book": "pb-standard", "lead_source": "trade_show", "next_step": "Agree the pilot scope for the Paris flagship",
+        "description": "Clienteling for 220 store associates in the flagship stores, with the edge gateways for the in-store telephony." },
+      { "id": "opp-cascade-analytics", "account": "cascade", "name": "Cascade — Analytics add-on", "type": "cross_sell", "state": "prospecting", "amount": 48000, "close_date": "2026-12-05", "owner": "carlos", "primary_contact": "c-thomas", "price_book": "pb-standard", "next_step": "Show the win/loss dashboard to the product owner",
+        "description": "Analytics add-on for the 120 head-office users." },
+      { "id": "opp-atlas", "account": "atlas", "name": "Atlas — Sales operations replacement", "type": "new_business", "state": "prospecting", "amount": 300000, "close_date": "2027-02-26", "owner": "mei", "primary_contact": "a-jenna", "price_book": "pb-standard", "next_step": "Check when the incumbent contract comes up for renewal", "competitor": "Dynamix CRM",
+        "description": "Second attempt after losing in 2025. Their contract renews in early 2027." },
+      { "id": "opp-veritas-partner", "account": "veritas", "name": "Veritas — Partner enablement pack", "type": "new_business", "state": "needs_analysis", "amount": 61800, "close_date": "2026-10-15", "owner": "laura", "primary_contact": "v-daan", "price_book": "pb-partner", "lead_source": "partner_referral", "next_step": "Size the enablement for 40 consultants",
+        "description": "Licences and training so the partner can demo and implement on its own." },
+      { "id": "opp-northwind-support", "account": "northwind", "name": "Northwind — Premier support renewal", "type": "renewal", "state": "proposal", "amount": 15000, "close_date": "2026-08-31", "owner": "carlos", "primary_contact": "n-pablo", "price_book": "pb-standard", "next_step": "Send the renewal quote with the new response times",
+        "description": "Yearly renewal of premier support, expiring at the end of August." },
+      { "id": "opp-helios-training", "account": "helios", "name": "Helios — Administrator training", "type": "cross_sell", "state": "negotiation", "amount": 9000, "close_date": "2026-08-14", "owner": "mei", "primary_contact": "h-marta", "price_book": "pb-standard", "next_step": "Confirm the twelve attendees and the two dates",
+        "description": "Two training sessions for the administrators of the group and the subsidiaries." },
+      { "id": "opp-northwind-2024", "account": "northwind", "name": "Northwind — Professional 600 seats", "type": "new_business", "state": "closed", "outcome": "won", "amount": 327700, "close_date": "2026-03-20", "owner": "carlos", "primary_contact": "n-elena", "price_book": "pb-standard", "lead_source": "partner_referral", "next_step": "Closed",
+        "description": "The original deal: 600 Professional seats plus implementation. Renewed every March." },
+      { "id": "opp-cascade-2026", "account": "cascade", "name": "Cascade — Head office rollout", "type": "new_business", "state": "closed", "outcome": "won", "amount": 76500, "close_date": "2026-05-29", "owner": "carlos", "primary_contact": "c-thomas", "campaign": "crm-expo", "price_book": "pb-standard", "lead_source": "trade_show", "next_step": "Closed",
+        "description": "120 head-office users and the ERP connector. Went live in June." },
+      { "id": "opp-atlas-2025", "account": "atlas", "name": "Atlas — CRM selection 2025", "type": "new_business", "state": "closed", "outcome": "lost", "loss_reason": "competitor", "amount": 280000, "close_date": "2026-01-30", "owner": "mei", "primary_contact": "a-jenna", "price_book": "pb-standard", "next_step": "Closed", "competitor": "Dynamix CRM",
+        "description": "Lost on the manufacturing-specific functionality the incumbent already had. Revisit at their renewal." }
+    ],
+    "opportunity_line": [
+      { "id": "ol-nw-ent", "opportunity": "opp-northwind-ent", "price_book_entry": "pbe-ent", "quantity": 600, "unit_price": 1080, "discount_percent": 10, "description": "600 Enterprise seats, volume discount agreed with the COO" },
+      { "opportunity": "opp-northwind-ent", "price_book_entry": "pbe-ana", "quantity": 600, "unit_price": 400, "discount_percent": 0, "description": "Analytics add-on for every seat" },
+      { "opportunity": "opp-northwind-ent", "price_book_entry": "pbe-svc", "quantity": 40, "unit_price": 950, "discount_percent": 0, "description": "Migration and process redesign, 40 consulting days" },
+      { "id": "ol-helios-ent", "opportunity": "opp-helios-group", "price_book_entry": "pbe-ent", "quantity": 400, "unit_price": 1020, "discount_percent": 15, "description": "400 Enterprise seats under the frame agreement" },
+      { "opportunity": "opp-helios-group", "price_book_entry": "pbe-int", "quantity": 2, "unit_price": 4500, "discount_percent": 0, "description": "Connectors to SAP and to the billing platform" },
+      { "opportunity": "opp-helios-group", "price_book_entry": "pbe-sup", "quantity": 1, "unit_price": 15000, "discount_percent": 0, "description": "Premier support for the group" },
+      { "opportunity": "opp-cascade-clientel", "price_book_entry": "pbe-pro", "quantity": 220, "unit_price": 570, "discount_percent": 5, "description": "220 Professional seats for the store associates" },
+      { "opportunity": "opp-cascade-clientel", "price_book_entry": "pbe-hw", "quantity": 60, "unit_price": 320, "discount_percent": 0, "description": "Edge gateways for the flagship stores" },
+      { "opportunity": "opp-cascade-clientel", "price_book_entry": "pbe-svc", "quantity": 25, "unit_price": 950, "discount_percent": 0, "description": "Clienteling process design and rollout" },
+      { "opportunity": "opp-northwind-support", "price_book_entry": "pbe-sup", "quantity": 1, "unit_price": 15000, "discount_percent": 0, "description": "Premier support, 12 months" },
+      { "opportunity": "opp-helios-training", "price_book_entry": "pbe-trn", "quantity": 12, "unit_price": 750, "discount_percent": 0, "description": "Twelve administrator seats across two sessions" },
+      { "opportunity": "opp-veritas-partner", "price_book_entry": "pbe-p-ent", "quantity": 40, "unit_price": 960, "discount_percent": 0, "description": "Enablement licences for the consultants" },
+      { "opportunity": "opp-veritas-partner", "price_book_entry": "pbe-p-svc", "quantity": 30, "unit_price": 780, "discount_percent": 0, "description": "Joint delivery days for the first two projects" },
+      { "opportunity": "opp-northwind-2024", "price_book_entry": "pbe-pro", "quantity": 600, "unit_price": 540, "discount_percent": 10, "description": "600 Professional seats" },
+      { "opportunity": "opp-northwind-2024", "price_book_entry": "pbe-svc", "quantity": 38, "unit_price": 950, "discount_percent": 0, "description": "Implementation" },
+      { "opportunity": "opp-cascade-2026", "price_book_entry": "pbe-pro", "quantity": 120, "unit_price": 600, "discount_percent": 0, "description": "120 head-office seats" },
+      { "opportunity": "opp-cascade-2026", "price_book_entry": "pbe-int", "quantity": 1, "unit_price": 4500, "discount_percent": 0, "description": "ERP connector" }
+    ],
+    "quote": [
+      { "id": "q-northwind-ent", "opportunity": "opp-northwind-ent", "name": "Rev. C — 3-year term", "status": "presented", "contact": "n-elena", "prepared_by": "carlos", "quote_date": "2026-07-10", "expiration_date": "2026-09-30", "payment_terms": "net_30", "discount_percent": 5, "tax_percent": 21,
+        "notes": "Three-year commitment with the price held for the whole term. Includes the migration of the historical data." },
+      { "id": "q-helios-group", "opportunity": "opp-helios-group", "name": "Frame agreement — 400 seats", "status": "in_review", "contact": "h-marta", "prepared_by": "mei", "quote_date": "2026-07-21", "expiration_date": "2026-10-15", "payment_terms": "net_60", "discount_percent": 0, "tax_percent": 21,
+        "notes": "Prices per subsidiary, invoiced centrally. Legal is reviewing the liability cap." },
+      { "id": "q-cascade-clientel", "opportunity": "opp-cascade-clientel", "name": "Clienteling pilot + rollout", "status": "draft", "contact": "c-amelie", "prepared_by": "carlos", "quote_date": "2026-07-24", "expiration_date": "2026-09-15", "payment_terms": "net_30", "discount_percent": 0, "tax_percent": 20,
+        "notes": "Two phases: pilot in the Paris flagship, then the remaining stores." },
+      { "id": "q-northwind-support", "opportunity": "opp-northwind-support", "name": "Premier support renewal 2026-2027", "status": "accepted", "contact": "n-pablo", "prepared_by": "carlos", "quote_date": "2026-07-02", "expiration_date": "2026-08-31", "payment_terms": "net_30", "discount_percent": 0, "tax_percent": 21,
+        "notes": "Same scope as last year with the two-hour response target." }
+    ],
+    "quote_line": [
+      { "quote": "q-northwind-ent", "price_book_entry": "pbe-ent", "quantity": 600, "unit_price": 1080, "discount_percent": 10 },
+      { "quote": "q-northwind-ent", "price_book_entry": "pbe-ana", "quantity": 600, "unit_price": 400, "discount_percent": 0 },
+      { "quote": "q-northwind-ent", "price_book_entry": "pbe-svc", "quantity": 40, "unit_price": 950, "discount_percent": 0 },
+      { "quote": "q-helios-group", "price_book_entry": "pbe-ent", "quantity": 400, "unit_price": 1020, "discount_percent": 15 },
+      { "quote": "q-helios-group", "price_book_entry": "pbe-int", "quantity": 2, "unit_price": 4500, "discount_percent": 0 },
+      { "quote": "q-helios-group", "price_book_entry": "pbe-sup", "quantity": 1, "unit_price": 15000, "discount_percent": 0 },
+      { "quote": "q-cascade-clientel", "price_book_entry": "pbe-pro", "quantity": 220, "unit_price": 570, "discount_percent": 5 },
+      { "quote": "q-cascade-clientel", "price_book_entry": "pbe-hw", "quantity": 60, "unit_price": 320, "discount_percent": 0 },
+      { "quote": "q-northwind-support", "price_book_entry": "pbe-sup", "quantity": 1, "unit_price": 15000, "discount_percent": 0 }
+    ],
+    "contract": [
+      { "id": "ct-northwind", "account": "northwind", "reference": "CT-2026-014", "opportunity": "opp-northwind-2024", "status": "activated", "owner": "carlos", "signed_date": "2026-03-24", "start_date": "2026-04-01", "end_date": "2027-03-31", "term_months": 12, "contract_value": 342700, "billing_frequency": "annual", "auto_renew": true,
+        "terms": "Prices held for the term. Premier support billed separately. 60 days' notice to stop the automatic renewal." },
+      { "id": "ct-cascade", "account": "cascade", "reference": "CT-2026-021", "opportunity": "opp-cascade-2026", "status": "activated", "owner": "carlos", "signed_date": "2026-06-02", "start_date": "2026-06-15", "end_date": "2027-06-14", "term_months": 12, "contract_value": 76500, "billing_frequency": "quarterly", "auto_renew": false,
+        "terms": "Quarterly invoicing. Extension to the stores to be agreed as an annex." },
+      { "id": "ct-veritas", "account": "veritas", "reference": "CT-2026-005", "status": "in_approval", "owner": "laura", "start_date": "2026-09-01", "end_date": "2027-08-31", "term_months": 12, "contract_value": 61800, "billing_frequency": "annual", "auto_renew": true,
+        "terms": "Partner agreement: 20% off the licence list price, certification of four consultants required." }
+    ],
+    "sales_order": [
+      { "id": "so-northwind", "account": "northwind", "reference": "SO-2026-108", "contract": "ct-northwind", "opportunity": "opp-northwind-2024", "status": "invoiced", "order_date": "2026-03-26", "activated_date": "2026-04-01", "purchase_order_number": "NW-PO-88120" },
+      { "id": "so-cascade", "account": "cascade", "reference": "SO-2026-119", "contract": "ct-cascade", "opportunity": "opp-cascade-2026", "status": "activated", "order_date": "2026-06-04", "activated_date": "2026-06-15", "purchase_order_number": "CRG-2026-4471" },
+      { "id": "so-helios-iberia", "account": "helios-iberia", "reference": "SO-2026-124", "status": "draft", "order_date": "2026-07-20" }
+    ],
+    "order_line": [
+      { "id": "orl-nw-pro", "sales_order": "so-northwind", "price_book_entry": "pbe-pro", "quantity": 600, "delivered_quantity": 600, "unit_price": 540, "discount_percent": 10 },
+      { "id": "orl-nw-svc", "sales_order": "so-northwind", "price_book_entry": "pbe-svc", "quantity": 38, "delivered_quantity": 38, "unit_price": 950, "discount_percent": 0 },
+      { "sales_order": "so-northwind", "price_book_entry": "pbe-sup", "quantity": 1, "delivered_quantity": 1, "unit_price": 15000, "discount_percent": 0 },
+      { "id": "orl-cas-pro", "sales_order": "so-cascade", "price_book_entry": "pbe-pro", "quantity": 120, "delivered_quantity": 120, "unit_price": 600, "discount_percent": 0 },
+      { "id": "orl-cas-int", "sales_order": "so-cascade", "price_book_entry": "pbe-int", "quantity": 1, "delivered_quantity": 1, "unit_price": 4500, "discount_percent": 0 },
+      { "sales_order": "so-helios-iberia", "price_book_entry": "pbe-trn", "quantity": 6, "delivered_quantity": 0, "unit_price": 750, "discount_percent": 0 }
+    ],
+    "asset": [
+      { "id": "as-nw-pro", "account": "northwind", "product": "crm-pro", "serial_number": "NW-PRO-600-2026", "status": "installed", "contact": "n-pablo", "sales_order": "so-northwind", "quantity": 600, "price": 291600, "purchase_date": "2026-03-26", "install_date": "2026-04-12", "usage_end_date": "2027-03-31" },
+      { "id": "as-nw-sup", "account": "northwind", "product": "sup-prem", "serial_number": "NW-SUP-2026", "status": "registered", "contact": "n-pablo", "sales_order": "so-northwind", "quantity": 1, "price": 15000, "purchase_date": "2026-03-26", "install_date": "2026-04-01", "usage_end_date": "2026-08-31" },
+      { "id": "as-cas-pro", "account": "cascade", "product": "crm-pro", "serial_number": "CRG-PRO-120-2026", "status": "installed", "contact": "c-thomas", "sales_order": "so-cascade", "quantity": 120, "price": 72000, "purchase_date": "2026-06-04", "install_date": "2026-06-15", "usage_end_date": "2027-06-14" },
+      { "id": "as-cas-int", "account": "cascade", "product": "int-conn", "serial_number": "CRG-INT-ERP-01", "status": "installed", "contact": "c-thomas", "sales_order": "so-cascade", "quantity": 1, "price": 4500, "purchase_date": "2026-06-04", "install_date": "2026-06-28" },
+      { "id": "as-hi-legacy", "account": "helios-iberia", "product": "crm-pro", "serial_number": "HI-PRO-80-2025", "status": "obsolete", "contact": "hi-marc", "quantity": 80, "price": 44000, "purchase_date": "2025-09-10", "install_date": "2025-10-01", "usage_end_date": "2026-09-30" },
+      { "id": "as-atlas-comp", "account": "atlas", "serial_number": "ATL-DYNAMIX-2025", "status": "installed", "contact": "a-jenna", "quantity": 1, "purchase_date": "2026-01-30", "is_competitor_product": true }
+    ],
+    "entitlement": [
+      { "id": "ent-northwind", "account": "northwind", "name": "Premier Support 2026-2027", "type": "premier_support", "contract": "ct-northwind", "start_date": "2026-04-01", "end_date": "2027-03-31", "sla_response_hours": 2, "cases_per_entitlement": 200, "cases_used": 34 },
+      { "id": "ent-cascade", "account": "cascade", "name": "Standard Web Support 2026", "type": "web_support", "contract": "ct-cascade", "start_date": "2026-06-15", "end_date": "2027-06-14", "sla_response_hours": 24, "cases_per_entitlement": 60, "cases_used": 9 },
+      { "id": "ent-helios-iberia", "account": "helios-iberia", "name": "Group Phone Support", "type": "phone_support", "start_date": "2026-01-01", "end_date": "2026-12-31", "sla_response_hours": 8, "cases_used": 21 }
+    ],
+    // 'state' is the case workflow field. Two cases sit escalated so the escalated column
+    // of the service queue is not empty, and the closed ones carry their resolution code.
+    "support_case": [
+      { "id": "case-nw-sync", "account": "northwind", "contact": "n-pablo", "subject": "Depot scanners stopped syncing after the 4.2 release", "state": "escalated", "type": "incident", "reason": "breakdown", "origin": "phone", "priority": "critical", "owner": "ravi", "asset": "as-nw-pro", "entitlement": "ent-northwind", "escalation_reason": "Twelve depots offline; the two-hour response target is at risk", "opened_date": "2026-07-24",
+        "description": "After the 4.2 release the handheld scanners in twelve depots stopped pushing deliveries. The web client works." },
+      { "id": "case-nw-report", "account": "northwind", "contact": "n-elena", "subject": "Regional pipeline report shows last week's numbers", "state": "working", "type": "problem", "reason": "performance", "origin": "email", "priority": "high", "owner": "ravi", "entitlement": "ent-northwind", "opened_date": "2026-07-22",
+        "description": "The regional pipeline report seems to be served from a stale cache. Refreshing does not help." },
+      { "id": "case-cas-import", "account": "cascade", "contact": "c-thomas", "subject": "Store associate import fails on accented names", "state": "working", "type": "problem", "reason": "user_error", "origin": "web", "priority": "medium", "owner": "ravi", "asset": "as-cas-pro", "entitlement": "ent-cascade", "opened_date": "2026-07-20",
+        "description": "The CSV import rejects rows with accented characters. The file is exported from the HR system as latin-1." },
+      { "id": "case-cas-erp", "account": "cascade", "contact": "c-thomas", "subject": "ERP connector times out on the nightly run", "state": "escalated", "type": "incident", "reason": "performance", "origin": "email", "priority": "high", "owner": "ravi", "asset": "as-cas-int", "entitlement": "ent-cascade", "escalation_reason": "Third night in a row; the integration team has to look at the batch size", "opened_date": "2026-07-19",
+        "description": "The nightly synchronisation with the ERP times out after 30 minutes and leaves the orders half imported." },
+      { "id": "case-hi-access", "account": "helios-iberia", "contact": "hi-nuria", "subject": "New service desk agents cannot see the case queue", "state": "new", "type": "question", "reason": "installation", "origin": "web", "priority": "medium", "entitlement": "ent-helios-iberia", "opened_date": "2026-07-26",
+        "description": "Six agents were created yesterday and only see their own cases." },
+      { "id": "case-hi-training", "account": "helios-iberia", "contact": "hi-marc", "subject": "How do we schedule the administrator training?", "state": "new", "type": "question", "origin": "email", "priority": "low", "entitlement": "ent-helios-iberia", "opened_date": "2026-07-25",
+        "description": "Asks for available dates for the two training sessions agreed with the group." },
+      { "id": "case-nw-invoice", "account": "northwind", "contact": "n-elena", "subject": "Duplicate invoice for the March renewal", "state": "closed", "type": "problem", "reason": "user_error", "origin": "email", "priority": "medium", "owner": "ravi", "entitlement": "ent-northwind", "resolution_code": "solved", "opened_date": "2026-06-30", "closed_date": "2026-07-03",
+        "description": "Two invoices were issued for the same renewal period.",
+        "resolution": "The renewal was activated twice in the billing system. The duplicate was credited and the automatic renewal job now checks for an existing invoice." },
+      { "id": "case-cas-mobile", "account": "cascade", "contact": "c-amelie", "subject": "Clienteling app crashes on the older store tablets", "state": "closed", "type": "incident", "reason": "design_defect", "origin": "phone", "priority": "high", "owner": "ravi", "asset": "as-cas-pro", "entitlement": "ent-cascade", "resolution_code": "workaround", "opened_date": "2026-06-18", "closed_date": "2026-06-27",
+        "description": "The app closes when opening a customer card on the tablets from 2019.",
+        "resolution": "Caused by the image cache size on devices with 2 GB of RAM. Workaround: disable the high-resolution product images on those devices. A fix ships in 4.3." }
+    ],
+    "case_comment": [
+      { "support_case": "case-nw-sync", "author": "ravi", "is_public": true, "body": "Confirmed on our side: the scanner API rejects the new authentication header. We are preparing a hotfix and will keep you posted every hour." },
+      { "support_case": "case-nw-sync", "author": "laura", "is_public": false, "body": "Escalated to engineering. This account is in the middle of the Enterprise upgrade negotiation — treat it as the top priority of the week." },
+      { "support_case": "case-nw-report", "author": "ravi", "is_public": true, "body": "We can reproduce it with more than 500 opportunities in the region. Investigating the report cache invalidation." },
+      { "support_case": "case-cas-import", "author": "ravi", "is_public": true, "body": "Re-export the file as UTF-8 and the import goes through. We are adding latin-1 detection so the extra step is not needed." },
+      { "support_case": "case-cas-erp", "author": "ravi", "is_public": false, "body": "The batch is pulling 50,000 orders in one go. Proposing to page it in blocks of 5,000 and to move the run to 02:00." },
+      { "support_case": "case-cas-erp", "author": "ravi", "is_public": true, "body": "Tonight's run is limited to 5,000 orders per block. Please confirm tomorrow whether the synchronisation completed." },
+      { "support_case": "case-nw-invoice", "author": "ravi", "is_public": true, "body": "Credit note issued and the duplicate cancelled. Sorry for the noise." },
+      { "support_case": "case-cas-mobile", "author": "ravi", "is_public": true, "body": "The high-resolution images are now disabled for the 2019 tablets. The permanent fix ships with release 4.3 in September." }
+    ],
+    "account_address": [
+      { "account": "northwind", "label": "Head office", "address_type": "office", "street_line_1": "Calle de Alcalá 145", "city": "Madrid", "state_province": "Madrid", "postal_code": "28009", "country": "Spain", "contact_phone": "+34 915 220 100", "is_primary": true, "access_notes": "Reception on the ground floor; ask for the IT department" },
+      { "account": "northwind", "label": "Madrid depot", "address_type": "service", "street_line_1": "Polígono Industrial Las Mercedes, nave 12", "city": "Madrid", "state_province": "Madrid", "postal_code": "28022", "country": "Spain", "contact_phone": "+34 915 220 140", "access_notes": "Deliveries and site visits through gate 3, 07:00–15:00" },
+      { "account": "northwind", "label": "Porto depot", "address_type": "service", "street_line_1": "Rua da Estação 44", "city": "Porto", "state_province": "Porto", "postal_code": "4300-171", "country": "Portugal", "contact_phone": "+351 22 900 4100", "access_notes": "Ask for the shift supervisor at the weighbridge" },
+      { "account": "helios", "label": "Group headquarters", "address_type": "office", "street_line_1": "Avinguda Diagonal 611", "city": "Barcelona", "state_province": "Barcelona", "postal_code": "08028", "country": "Spain", "is_primary": true },
+      { "account": "helios-iberia", "label": "Valencia service desk", "address_type": "office", "street_line_1": "Carrer de Colón 32", "city": "Valencia", "state_province": "Valencia", "postal_code": "46004", "country": "Spain", "contact_phone": "+34 963 400 220", "is_primary": true, "access_notes": "Third floor; the service desk sits by the lifts" },
+      { "account": "brightbank", "label": "London office", "address_type": "office", "street_line_1": "12 Bishopsgate", "city": "London", "state_province": "England", "postal_code": "EC2N 3AR", "country": "United Kingdom", "is_primary": true, "access_notes": "Security desk issues visitor badges; photo ID required" },
+      { "account": "lumen", "label": "Munich clinic", "address_type": "service", "street_line_1": "Leopoldstraße 21", "city": "Munich", "state_province": "Bayern", "postal_code": "80802", "country": "Germany", "is_primary": true, "access_notes": "No visits during consultation hours (09:00–13:00)" },
+      { "account": "cascade", "label": "Head office", "address_type": "billing", "street_line_1": "8 Rue de la Paix", "city": "Paris", "state_province": "Ile-de-France", "postal_code": "75002", "country": "France", "is_primary": true },
+      { "account": "cascade", "label": "Paris flagship store", "address_type": "service", "street_line_1": "112 Avenue des Champs-Élysées", "city": "Paris", "state_province": "Ile-de-France", "postal_code": "75008", "country": "France", "contact_phone": "+33 1 4400 7080", "access_notes": "Staff entrance at the back; work outside opening hours" },
+      { "account": "atlas", "label": "Chicago plant", "address_type": "office", "street_line_1": "540 W Madison St", "city": "Chicago", "state_province": "Illinois", "postal_code": "60661", "country": "United States", "is_primary": true },
+      { "account": "veritas", "label": "Amsterdam office", "address_type": "office", "street_line_1": "Herengracht 420", "city": "Amsterdam", "state_province": "Noord-Holland", "postal_code": "1017 BZ", "country": "Netherlands", "is_primary": true }
+    ],
+    "opportunity_contact_role": [
+      { "opportunity": "opp-northwind-ent", "contact": "n-elena", "role": "economic_buyer", "is_primary": true, "stance": "champion", "notes": "Wants one contract for every regional office; measures us on adoption" },
+      { "opportunity": "opp-northwind-ent", "contact": "n-pablo", "role": "technical_buyer", "stance": "supportive", "notes": "Owns the integration with the transport management system" },
+      { "opportunity": "opp-northwind-ent", "contact": "n-sara", "role": "influencer", "stance": "neutral", "notes": "Speaks for the Portuguese offices; worried about training time" },
+      { "opportunity": "opp-brightbank", "contact": "b-oliver", "role": "decision_maker", "is_primary": true, "stance": "champion", "notes": "Wants the migration finished before the retail relaunch" },
+      { "opportunity": "opp-brightbank", "contact": "b-priya", "role": "blocker", "stance": "sceptical", "notes": "No purchase without the security questionnaire and a pen-test report" },
+      { "opportunity": "opp-helios-group", "contact": "h-jordi", "role": "decision_maker", "is_primary": true, "stance": "champion", "notes": "Sponsors the group-wide rollout" },
+      { "opportunity": "opp-helios-group", "contact": "h-marta", "role": "economic_buyer", "stance": "sceptical", "notes": "Negotiates every renewal down; will push on the liability cap" },
+      { "opportunity": "opp-cascade-clientel", "contact": "c-amelie", "role": "decision_maker", "is_primary": true, "stance": "champion", "notes": "Owns the clienteling programme" },
+      { "opportunity": "opp-cascade-clientel", "contact": "c-thomas", "role": "evaluator", "stance": "supportive", "notes": "Runs the user acceptance tests in the flagship store" },
+      { "opportunity": "opp-lumen", "contact": "l-stefan", "role": "evaluator", "is_primary": true, "stance": "neutral", "notes": "Evaluates the patient-relationship use case" },
+      { "opportunity": "opp-lumen", "contact": "l-katrin", "role": "blocker", "stance": "sceptical", "notes": "Reviews the data processing agreement; EU residency is a hard requirement" }
+    ],
+    "opportunity_competitor": [
+      { "opportunity": "opp-northwind-ent", "name": "Dynamix CRM", "is_primary": true, "strengths": "Already used by two regional offices; cheaper per seat", "weaknesses": "No usable mobile client for the depots", "quoted_amount": 780000 },
+      { "opportunity": "opp-brightbank", "name": "Dynamix CRM", "is_primary": true, "strengths": "Existing framework agreement with the bank", "weaknesses": "Migration tooling is manual; no EU-only hosting option" },
+      { "opportunity": "opp-brightbank", "name": "Vantage Cloud", "strengths": "Strong security certifications", "weaknesses": "Service console is a separate purchase" },
+      { "opportunity": "opp-helios-group", "name": "Solaris Suite", "is_primary": true, "strengths": "Energy-sector templates out of the box", "weaknesses": "Cannot bill the subsidiaries centrally" },
+      { "opportunity": "opp-atlas", "name": "Dynamix CRM", "is_primary": true, "strengths": "Incumbent since 2025, manufacturing-specific functionality", "weaknesses": "Renewal is expensive and the users complain about the interface" }
+    ],
+    "opportunity_team_member": [
+      { "opportunity": "opp-northwind-ent", "sales_rep": "anna", "team_role": "solution_architect", "contribution": "Designs the migration of the 600 seats and the depot integration" },
+      { "opportunity": "opp-northwind-ent", "sales_rep": "laura", "team_role": "executive_sponsor", "contribution": "Sponsors the discount and signs off the three-year term" },
+      { "opportunity": "opp-brightbank", "sales_rep": "anna", "team_role": "sales_engineer", "contribution": "Answers the security questionnaire with the platform team" },
+      { "opportunity": "opp-brightbank", "sales_rep": "laura", "team_role": "executive_sponsor", "contribution": "Executive cover for the security review" },
+      { "opportunity": "opp-helios-group", "sales_rep": "anna", "team_role": "solution_architect", "contribution": "Sizes the frame agreement across the subsidiaries" },
+      { "opportunity": "opp-cascade-clientel", "sales_rep": "anna", "team_role": "sales_engineer", "contribution": "Runs the in-store pilot design" }
+    ],
+    "opportunity_split": [
+      { "opportunity": "opp-northwind-ent", "sales_rep": "carlos", "split_type": "revenue", "split_percent": 100 },
+      { "opportunity": "opp-northwind-ent", "sales_rep": "anna", "split_type": "overlay", "split_percent": 20 },
+      { "opportunity": "opp-helios-group", "sales_rep": "mei", "split_type": "revenue", "split_percent": 100 },
+      { "opportunity": "opp-brightbank", "sales_rep": "carlos", "split_type": "revenue", "split_percent": 70 },
+      { "opportunity": "opp-brightbank", "sales_rep": "anna", "split_type": "revenue", "split_percent": 30 }
+    ],
+    "account_team_member": [
+      { "account": "northwind", "sales_rep": "laura", "team_role": "executive_sponsor", "since": "2026-01-15", "notes": "Quarterly business review with the COO" },
+      { "account": "northwind", "sales_rep": "ravi", "team_role": "support_engineer", "since": "2026-04-01", "notes": "Named engineer under the premier support plan" },
+      { "account": "cascade", "sales_rep": "ravi", "team_role": "support_engineer", "since": "2026-06-15" },
+      { "account": "cascade", "sales_rep": "anna", "team_role": "customer_success", "since": "2026-06-20", "notes": "Drives adoption in the flagship stores" },
+      { "account": "helios", "sales_rep": "laura", "team_role": "executive_sponsor", "since": "2026-05-20" },
+      { "account": "brightbank", "sales_rep": "anna", "team_role": "customer_success", "since": "2026-07-01", "notes": "Will run the migration once the deal closes" }
+    ],
+    "contract_contact_role": [
+      { "contract": "ct-northwind", "contact": "n-elena", "role": "signatory", "is_primary": true },
+      { "contract": "ct-northwind", "contact": "n-pablo", "role": "technical", "is_primary": true },
+      { "contract": "ct-cascade", "contact": "c-amelie", "role": "signatory", "is_primary": true },
+      { "contract": "ct-cascade", "contact": "c-thomas", "role": "technical" },
+      { "contract": "ct-veritas", "contact": "v-daan", "role": "signatory", "is_primary": true }
+    ],
+    "partner": [
+      { "account": "northwind", "partner_account": "veritas", "role": "system_integrator", "tier": "gold", "is_primary": true, "since": "2026-02-10" },
+      { "account": "cascade", "partner_account": "veritas", "role": "system_integrator", "tier": "gold", "since": "2026-06-01" },
+      { "account": "brightbank", "partner_account": "veritas", "role": "referral", "tier": "silver", "since": "2026-05-04" }
+    ],
+    "territory": [
+      { "id": "t-emea", "name": "EMEA", "type": "sales", "manager": "laura", "is_active": true, "description": "Everything sold in Europe, the Middle East and Africa" },
+      { "id": "t-iberia", "parent": "t-emea", "name": "Iberia", "type": "sales", "manager": "carlos", "is_active": true, "description": "Spain and Portugal" },
+      { "id": "t-france", "parent": "t-emea", "name": "France", "type": "sales", "manager": "carlos", "is_active": true },
+      { "id": "t-uk-nordics", "parent": "t-emea", "name": "UK & Nordics", "type": "sales", "manager": "mei", "is_active": true },
+      { "id": "t-dach", "parent": "t-emea", "name": "DACH", "type": "sales", "manager": "mei", "is_active": true, "description": "Germany, Austria and Switzerland" },
+      { "id": "t-americas", "name": "Americas", "type": "sales", "manager": "mei", "is_active": true, "description": "North and South America, worked from Madrid until a local team is hired" },
+      { "id": "t-svc", "name": "Field Service", "type": "service", "manager": "ravi", "is_active": true, "description": "Root of the service territories" },
+      { "id": "t-svc-iberia", "parent": "t-svc", "name": "Field Service — Iberia", "type": "service", "manager": "ravi", "is_active": true, "description": "Technicians covering Spain and Portugal" },
+      { "id": "t-svc-central", "parent": "t-svc", "name": "Field Service — Central Europe", "type": "service", "manager": "ravi", "is_active": true, "description": "France, Germany and the Benelux, partly through contractors" }
+    ],
+    "territory_assignment": [
+      { "territory": "t-iberia", "account": "northwind", "assignment_type": "primary", "assigned_on": "2026-01-15" },
+      { "territory": "t-iberia", "account": "helios", "assignment_type": "primary", "assigned_on": "2026-05-20" },
+      { "territory": "t-iberia", "account": "helios-iberia", "assignment_type": "primary", "assigned_on": "2026-05-20" },
+      { "territory": "t-france", "account": "cascade", "assignment_type": "primary", "assigned_on": "2026-03-02" },
+      { "territory": "t-uk-nordics", "account": "brightbank", "assignment_type": "primary", "assigned_on": "2026-04-14" },
+      { "territory": "t-dach", "account": "lumen", "assignment_type": "primary", "assigned_on": "2026-04-14" },
+      { "territory": "t-americas", "account": "atlas", "assignment_type": "primary", "assigned_on": "2026-01-08" },
+      { "territory": "t-emea", "account": "veritas", "assignment_type": "primary", "assigned_on": "2026-02-10" },
+      { "territory": "t-svc-iberia", "account": "northwind", "assignment_type": "secondary", "assigned_on": "2026-04-01" },
+      { "territory": "t-svc-central", "account": "cascade", "assignment_type": "secondary", "assigned_on": "2026-06-15" }
+    ],
+    "quota_period": [
+      { "sales_rep": "carlos", "label": "2026-Q3", "period_start": "2026-07-01", "period_end": "2026-09-30", "amount": 225000, "notes": "A quarter of the annual quota; the Northwind upgrade is expected to land here" },
+      { "sales_rep": "carlos", "label": "2026-Q4", "period_start": "2026-10-01", "period_end": "2026-12-31", "amount": 225000 },
+      { "sales_rep": "mei", "label": "2026-Q3", "period_start": "2026-07-01", "period_end": "2026-09-30", "amount": 212500 },
+      { "sales_rep": "mei", "label": "2026-Q4", "period_start": "2026-10-01", "period_end": "2026-12-31", "amount": 212500, "notes": "Carries the Helios frame agreement" },
+      { "sales_rep": "laura", "label": "2026-Q3", "period_start": "2026-07-01", "period_end": "2026-09-30", "amount": 600000, "notes": "Team quota, not a personal one" },
+      { "sales_rep": "laura", "label": "2026-Q4", "period_start": "2026-10-01", "period_end": "2026-12-31", "amount": 600000 },
+      { "sales_rep": "anna", "label": "2026-Q3", "period_start": "2026-07-01", "period_end": "2026-09-30", "amount": 75000, "notes": "Overlay quota on the deals she architects" },
+      { "sales_rep": "anna", "label": "2026-Q4", "period_start": "2026-10-01", "period_end": "2026-12-31", "amount": 75000 }
+    ],
+    "campaign_influence": [
+      { "opportunity": "opp-helios-group", "campaign": "crm-expo", "model": "primary", "influence_percent": 60 },
+      { "opportunity": "opp-cascade-clientel", "campaign": "crm-expo", "model": "even", "influence_percent": 40 },
+      { "opportunity": "opp-cascade-2026", "campaign": "crm-expo", "model": "primary", "influence_percent": 100 },
+      { "opportunity": "opp-brightbank", "campaign": "webinar-q2", "model": "first_touch", "influence_percent": 50 },
+      { "opportunity": "opp-lumen", "campaign": "webinar-q2", "model": "primary", "influence_percent": 100 }
+    ],
+    "knowledge_category": [
+      { "id": "kc-start", "name": "Getting started", "sort_order": 10, "description": "First steps for new administrators and new users" },
+      { "id": "kc-int", "name": "Integrations", "sort_order": 20, "description": "Connectors to ERP, billing and telephony systems" },
+      { "id": "kc-trouble", "name": "Troubleshooting", "sort_order": 30, "description": "Known problems and how to get around them" },
+      { "id": "kc-admin", "name": "Administration", "sort_order": 40, "description": "Users, permissions, data model and migrations" }
+    ],
+    "knowledge_article": [
+      { "id": "ka-forecast", "title": "Forecast categories explained", "category": "kc-start", "status": "published", "language": "en", "is_public": true, "author": "anna", "published_on": "2026-02-18", "keywords": "forecast, commit, best case, pipeline", "view_count": 412, "helpful_count": 118,
+        "summary": "What each forecast category means and how the stage of a deal decides it.",
+        "body": "# Forecast categories\n\nThe category is derived from the stage, never typed by hand:\n\n| Stage | Category |\n|---|---|\n| Prospecting, Qualification | Pipeline |\n| Needs analysis, Proposal | Best case |\n| Negotiation | Commit |\n| Closed won | Closed |\n| Closed lost | Omitted |\n\nMove the deal and the forecast follows. There is nothing else to update." },
+      { "id": "ka-import", "title": "Importing users from a CSV exported as latin-1", "category": "kc-admin", "status": "published", "language": "en", "is_public": true, "author": "ravi", "published_on": "2026-07-21", "keywords": "import, csv, encoding, accents, latin-1", "view_count": 96, "helpful_count": 41,
+        "summary": "Accented names are rejected when the file is not UTF-8. Re-export it or convert it in one command.",
+        "body": "## Symptom\n\nThe import stops on rows with accented characters (`Núñez`, `Ferrán`).\n\n## Cause\n\nThe file was exported as latin-1 by the HR system.\n\n## Fix\n\nRe-export as UTF-8, or convert it:\n\n```bash\niconv -f latin1 -t utf-8 users.csv > users-utf8.csv\n```\n\nRelease 4.3 detects latin-1 automatically." },
+      { "id": "ka-erp-batch", "title": "Tuning the ERP connector batch size", "category": "kc-int", "status": "published", "language": "en", "is_public": false, "author": "ravi", "published_on": "2026-07-22", "keywords": "erp, connector, timeout, batch, nightly", "view_count": 63, "helpful_count": 28,
+        "summary": "A nightly run that times out is almost always pulling too many records in one page.",
+        "body": "The connector pages the source in blocks. Above ~20,000 records per block the run does not finish inside the 30-minute window.\n\n**Recommended settings**\n\n* Block size: 5,000 records\n* Window: 02:00–04:00 local time\n* Retries: 3, with exponential backoff\n\nAfter changing the block size, watch two consecutive nights before closing the case." },
+      { "id": "ka-scanner", "title": "Depot scanners stop syncing after release 4.2", "category": "kc-trouble", "status": "in_review", "language": "en", "is_public": false, "author": "ravi", "keywords": "scanner, sync, 4.2, authentication header", "view_count": 22, "helpful_count": 5,
+        "summary": "Known issue: the scanner API rejects the new authentication header. A hotfix is on its way.",
+        "body": "Handheld scanners running firmware below 3.4 reject the authentication header introduced in 4.2.\n\n**Workaround**: keep the depot on the previous client until the hotfix ships.\n\n**Status**: hotfix in engineering, tracked from the Northwind incident." },
+      { "id": "ka-queue-access", "title": "Granting service desk agents access to the case queue", "category": "kc-admin", "status": "published", "language": "en", "is_public": true, "author": "ravi", "published_on": "2026-05-30", "keywords": "permissions, queue, agents, visibility", "view_count": 145, "helpful_count": 62,
+        "summary": "New agents only see their own cases until they are added to the support role.",
+        "body": "A new agent sees only the cases assigned to them. To let them work the whole queue:\n\n1. Add the user to the **support** role.\n2. Check the account team of the customer, if the queue is scoped by account.\n3. Ask the agent to sign out and back in so the new permissions are loaded." },
+      { "id": "ka-admin-first", "title": "First steps as a CRM administrator", "category": "kc-start", "status": "published", "language": "en", "is_public": true, "author": "anna", "published_on": "2026-01-20", "keywords": "administrator, setup, first steps", "view_count": 388, "helpful_count": 151,
+        "summary": "The five things to set up before letting the sales team in.",
+        "body": "1. **People**: create the users and put them in the right role.\n2. **Territories**: build the tree and assign the accounts.\n3. **Price books**: load the catalogue and the partner list.\n4. **Quotas**: set the period quotas so the forecast means something.\n5. **Business hours**: define the calendar the service commitments are measured against." },
+      { "id": "ka-migration", "title": "Migrating from a legacy CRM without losing history", "category": "kc-admin", "status": "draft", "language": "en", "is_public": false, "author": "anna", "keywords": "migration, legacy, history, mapping",
+        "summary": "Draft: the mapping approach we use on migration projects.",
+        "body": "Work in progress. Covers the field mapping sheet, the two-pass load (accounts and contacts first, then the pipeline) and how to keep the closed deals of the last three years for the forecast history." },
+      { "id": "ka-clienteling-es", "title": "Clienteling en tienda: guía rápida para el personal", "category": "kc-start", "status": "published", "language": "es", "is_public": true, "author": "anna", "published_on": "2026-06-25", "keywords": "clienteling, tienda, tablet, ficha de cliente", "view_count": 210, "helpful_count": 87,
+        "summary": "Cómo consultar la ficha de un cliente y registrar una visita desde la tablet de la tienda.",
+        "body": "## En la tienda\n\n1. Busca al cliente por email o teléfono.\n2. Abre su ficha: verás sus últimas compras y sus preferencias.\n3. Registra la visita como una actividad antes de cerrar la ficha.\n\n**Nota**: en las tablets de 2019 conviene desactivar las imágenes de alta resolución." }
+    ],
+    "case_milestone": [
+      { "support_case": "case-nw-sync", "name": "Critical first response", "target_hours": 1, "started_at": "2026-07-24T08:05:00", "target_at": "2026-07-24T09:05:00", "completed_at": "2026-07-24T08:41:00", "notes": "Answered by the duty engineer inside the hour" },
+      { "support_case": "case-nw-sync", "name": "Critical resolution", "target_hours": 8, "started_at": "2026-07-24T08:05:00", "target_at": "2026-07-24T16:05:00", "notes": "Hotfix still in engineering; the clock is running" },
+      { "support_case": "case-nw-report", "name": "First response", "target_hours": 4, "started_at": "2026-07-22T10:20:00", "target_at": "2026-07-22T14:20:00", "completed_at": "2026-07-22T11:05:00" },
+      { "support_case": "case-nw-report", "name": "Resolution", "target_hours": 72, "started_at": "2026-07-22T10:20:00", "target_at": "2026-07-25T10:20:00" },
+      { "support_case": "case-cas-import", "name": "First response", "target_hours": 24, "started_at": "2026-07-20T09:00:00", "target_at": "2026-07-21T09:00:00", "completed_at": "2026-07-20T16:30:00" },
+      { "support_case": "case-cas-erp", "name": "First response", "target_hours": 4, "started_at": "2026-07-19T07:40:00", "target_at": "2026-07-19T11:40:00", "completed_at": "2026-07-19T13:10:00", "notes": "Missed by an hour and a half: the alert landed in the wrong queue" },
+      { "support_case": "case-cas-erp", "name": "Workaround provided", "target_hours": 24, "started_at": "2026-07-19T07:40:00", "target_at": "2026-07-20T07:40:00", "completed_at": "2026-07-19T22:15:00", "notes": "Batch size reduced the same night" },
+      { "support_case": "case-hi-access", "name": "First response", "target_hours": 24, "started_at": "2026-07-26T08:30:00", "target_at": "2026-07-27T08:30:00" },
+      { "support_case": "case-hi-training", "name": "First response", "target_hours": 24, "started_at": "2026-07-25T12:00:00", "target_at": "2026-07-26T12:00:00" },
+      { "support_case": "case-nw-invoice", "name": "First response", "target_hours": 4, "started_at": "2026-06-30T09:15:00", "target_at": "2026-06-30T13:15:00", "completed_at": "2026-06-30T10:02:00" },
+      { "support_case": "case-nw-invoice", "name": "Resolution", "target_hours": 72, "started_at": "2026-06-30T09:15:00", "target_at": "2026-07-03T09:15:00", "completed_at": "2026-07-03T08:40:00" },
+      { "support_case": "case-cas-mobile", "name": "Resolution", "target_hours": 72, "started_at": "2026-06-18T11:00:00", "target_at": "2026-06-21T11:00:00", "completed_at": "2026-06-27T15:20:00", "notes": "Breached: the workaround took six days to agree with the store team" }
+    ],
+    "case_team_member": [
+      { "support_case": "case-nw-sync", "sales_rep": "ravi", "role": "specialist", "is_visible_to_customer": true },
+      { "support_case": "case-nw-sync", "sales_rep": "laura", "role": "duty_manager", "is_visible_to_customer": false },
+      { "support_case": "case-nw-sync", "sales_rep": "carlos", "role": "account_owner", "is_visible_to_customer": false },
+      { "support_case": "case-cas-erp", "sales_rep": "ravi", "role": "specialist", "is_visible_to_customer": true },
+      { "support_case": "case-cas-erp", "sales_rep": "laura", "role": "duty_manager", "is_visible_to_customer": false }
+    ],
+    "email_message": [
+      { "support_case": "case-nw-sync", "direction": "inbound", "from_address": "pablo.herrera@northwind-logistics.example", "to_address": "support@crm.com", "subject": "URGENT: scanners offline in twelve depots", "sent_at": "2026-07-24T08:02:00", "has_attachment": true,
+        "body": "Since the 4.2 release went out last night the handhelds cannot push deliveries. Twelve depots are writing on paper. Screenshots of the error attached." },
+      { "support_case": "case-nw-sync", "direction": "outbound", "from_address": "support@crm.com", "to_address": "pablo.herrera@northwind-logistics.example", "subject": "Re: URGENT: scanners offline in twelve depots", "sent_at": "2026-07-24T08:41:00",
+        "body": "Confirmed on our side: the scanner API is rejecting the new authentication header. Engineering is preparing a hotfix and I will write to you every hour until it is out." },
+      { "support_case": "case-nw-report", "direction": "inbound", "from_address": "elena.barros@northwind-logistics.example", "to_address": "support@crm.com", "subject": "Regional pipeline numbers are a week old", "sent_at": "2026-07-22T10:18:00",
+        "body": "The regional report still shows last Monday's figures. Refreshing does not change anything. I need it right for Thursday's board meeting." },
+      { "support_case": "case-cas-import", "direction": "inbound", "from_address": "thomas.lambert@cascade-retail.example", "to_address": "support@crm.com", "subject": "Store associate import fails", "sent_at": "2026-07-20T08:55:00", "has_attachment": true,
+        "body": "The import rejects every row with an accent. The file comes straight out of our HR system." },
+      { "support_case": "case-cas-import", "direction": "outbound", "from_address": "support@crm.com", "to_address": "thomas.lambert@cascade-retail.example", "subject": "Re: Store associate import fails", "sent_at": "2026-07-20T16:30:00",
+        "body": "Your file is encoded as latin-1. Re-export it as UTF-8 (or run iconv on it) and the import goes through — see the attached article. We are adding automatic detection in 4.3." },
+      { "support_case": "case-cas-erp", "direction": "inbound", "from_address": "thomas.lambert@cascade-retail.example", "to_address": "support@crm.com", "subject": "Nightly ERP sync timed out again", "sent_at": "2026-07-19T07:35:00",
+        "body": "Third night in a row. Orders are half imported and the store team finds duplicates in the morning." },
+      { "support_case": "case-hi-training", "direction": "inbound", "from_address": "marc.ferran@iberia.helios-energy.example", "to_address": "support@crm.com", "subject": "Dates for the administrator training", "sent_at": "2026-07-25T11:58:00",
+        "body": "We agreed two sessions with the group. Which dates do you have in September? We are twelve people." },
+      { "support_case": "case-nw-invoice", "direction": "outbound", "from_address": "support@crm.com", "to_address": "elena.barros@northwind-logistics.example", "subject": "Re: Duplicate invoice for the March renewal", "sent_at": "2026-07-03T08:40:00",
+        "body": "The renewal was activated twice in the billing system. The duplicate has been credited and the job now checks for an existing invoice before issuing one. Sorry for the noise." }
+    ],
+    "business_hours": [
+      { "id": "bh-iberia", "name": "Iberia office hours", "time_zone": "Europe/Madrid", "weekday_open_hour": 9, "weekday_close_hour": 18, "saturday_open_hour": 10, "saturday_close_hour": 14, "is_24x7": false, "is_default": true },
+      { "id": "bh-critical", "name": "Mission critical cover", "time_zone": "Europe/Madrid", "weekday_open_hour": 0, "weekday_close_hour": 24, "is_24x7": true, "is_default": false }
+    ],
+    "holiday": [
+      { "business_hours": "bh-iberia", "name": "Año Nuevo", "holiday_date": "2026-01-01", "is_recurring": true, "description": "Closed" },
+      { "business_hours": "bh-iberia", "name": "Fiesta del Trabajo", "holiday_date": "2026-05-01", "is_recurring": true, "description": "Closed" },
+      { "business_hours": "bh-iberia", "name": "Asunción", "holiday_date": "2026-08-15", "is_recurring": true, "description": "Closed; critical cases go to the mission critical calendar" },
+      { "business_hours": "bh-iberia", "name": "Fiesta Nacional", "holiday_date": "2026-10-12", "is_recurring": true, "description": "Closed" },
+      { "business_hours": "bh-iberia", "name": "Navidad", "holiday_date": "2026-12-25", "is_recurring": true, "description": "Closed" }
+    ],
+    "service_contract": [
+      { "id": "sc-northwind", "account": "northwind", "name": "Premier service agreement 2026-2027", "contract": "ct-northwind", "status": "activated", "support_level": "mission_critical", "response_hours": 1, "coverage": "24x7", "owner": "ravi", "start_date": "2026-04-01", "end_date": "2027-03-31", "total_value": 15000 },
+      { "id": "sc-cascade", "account": "cascade", "name": "Standard web support 2026", "contract": "ct-cascade", "status": "activated", "support_level": "standard", "response_hours": 24, "coverage": "business_hours", "owner": "ravi", "start_date": "2026-06-15", "end_date": "2027-06-14", "total_value": 6000 },
+      { "id": "sc-helios-iberia", "account": "helios-iberia", "name": "Group phone support", "status": "activated", "support_level": "premium", "response_hours": 8, "coverage": "extended", "owner": "ravi", "start_date": "2026-01-01", "end_date": "2026-12-31", "total_value": 9000 }
+    ],
+    "service_contract_line": [
+      { "service_contract": "sc-northwind", "product": "crm-pro", "asset": "as-nw-pro", "quantity": 600, "unit_price": 18, "start_date": "2026-04-01", "end_date": "2027-03-31" },
+      { "service_contract": "sc-northwind", "product": "hw-gate", "quantity": 12, "unit_price": 35, "start_date": "2026-04-01", "end_date": "2027-03-31" },
+      { "service_contract": "sc-cascade", "product": "crm-pro", "asset": "as-cas-pro", "quantity": 120, "unit_price": 40, "start_date": "2026-06-15", "end_date": "2027-06-14" },
+      { "service_contract": "sc-cascade", "product": "int-conn", "asset": "as-cas-int", "quantity": 1, "unit_price": 1200, "start_date": "2026-06-15", "end_date": "2027-06-14" },
+      { "service_contract": "sc-helios-iberia", "product": "crm-pro", "quantity": 80, "unit_price": 112.5, "start_date": "2026-01-01", "end_date": "2026-12-31" }
+    ],
+    "skill": [
+      { "id": "sk-gateway", "name": "Gateway installation", "category": "technical", "description": "Mounting, wiring and commissioning the edge gateway on site" },
+      { "id": "sk-network", "name": "Network troubleshooting", "category": "technical", "description": "Diagnosing connectivity between the gateway, the depot and the platform" },
+      { "id": "sk-crmadmin", "name": "CRM administration", "category": "product", "description": "Configuring the suite: users, permissions, layouts and automation" },
+      { "id": "sk-migration", "name": "Data migration", "category": "product", "description": "Moving customer data from a legacy CRM without losing history" },
+      { "id": "sk-integration", "name": "Integration development", "category": "technical", "description": "Building and debugging ERP and billing connectors" },
+      { "id": "sk-electrical", "name": "Electrical safety certificate", "category": "certification", "description": "Legally required to work on powered equipment at customer sites" },
+      { "id": "sk-es", "name": "Spanish", "category": "language", "description": "Able to run a visit and write the report in Spanish" },
+      { "id": "sk-fr", "name": "French", "category": "language", "description": "Able to run a visit and write the report in French" }
+    ],
+    "work_type": [
+      { "id": "wt-gateway", "name": "Gateway installation", "estimated_duration_minutes": 120, "required_skills": ["sk-gateway", "sk-electrical"], "default_priority": "medium", "requires_signature": true,
+        "description": "Mount the gateway, wire it to the depot network and register it against the account." },
+      { "id": "wt-network", "name": "On-site network diagnosis", "estimated_duration_minutes": 90, "required_skills": ["sk-network"], "default_priority": "high", "requires_signature": false,
+        "description": "Trace connectivity between the handhelds, the gateway and the platform, and leave the readings in the report." },
+      { "id": "wt-training", "name": "Administrator training on site", "estimated_duration_minutes": 240, "required_skills": ["sk-crmadmin", "sk-es"], "default_priority": "low", "requires_signature": true,
+        "description": "Half-day session for administrators, with their own data in a sandbox." },
+      { "id": "wt-migration", "name": "Migration workshop", "estimated_duration_minutes": 480, "required_skills": ["sk-migration", "sk-integration"], "default_priority": "medium", "requires_signature": false,
+        "description": "Full-day workshop to agree the field mapping and the cut-over plan." }
+    ],
+    "service_resource": [
+      { "id": "sr-iker", "name": "Iker Salaverría", "sales_rep": "iker", "resource_type": "technician", "territory": "t-svc-iberia", "phone": "+34 600 700 801", "capacity_hours_per_week": 38, "is_active": true },
+      { "id": "sr-nuria", "name": "Núria Bosch", "resource_type": "technician", "territory": "t-svc-iberia", "phone": "+34 600 700 802", "capacity_hours_per_week": 40, "is_active": true },
+      { "id": "sr-crew-levante", "name": "Levante install crew", "resource_type": "crew", "territory": "t-svc-iberia", "phone": "+34 600 700 803", "capacity_hours_per_week": 80, "is_active": true },
+      { "id": "sr-tecnoserv", "name": "TecnoServ (contractor)", "resource_type": "contractor", "territory": "t-svc-central", "phone": "+33 6 11 22 33 44", "capacity_hours_per_week": 60, "is_active": true }
+    ],
+    "resource_skill": [
+      { "service_resource": "sr-iker", "skill": "sk-gateway", "level": "expert", "certified_on": "2025-03-10", "certified_until": "2027-03-10" },
+      { "service_resource": "sr-iker", "skill": "sk-electrical", "level": "competent", "certified_on": "2024-11-05", "certified_until": "2026-11-05" },
+      { "service_resource": "sr-iker", "skill": "sk-es", "level": "expert" },
+      { "service_resource": "sr-nuria", "skill": "sk-network", "level": "expert", "certified_on": "2025-06-01", "certified_until": "2027-06-01" },
+      { "service_resource": "sr-nuria", "skill": "sk-gateway", "level": "competent" },
+      { "service_resource": "sr-crew-levante", "skill": "sk-gateway", "level": "competent" },
+      { "service_resource": "sr-tecnoserv", "skill": "sk-network", "level": "competent" },
+      { "service_resource": "sr-tecnoserv", "skill": "sk-fr", "level": "expert" }
+    ],
+    "work_order": [
+      { "id": "wo-nw-scanners", "account": "northwind", "state": "dispatched", "subject": "Diagnose the handhelds at the Madrid depot", "support_case": "case-nw-sync", "work_type": "wt-network", "asset": "as-nw-pro", "contact": "n-pablo", "territory": "t-svc-iberia", "owner": "ravi", "priority": "critical", "scheduled_start": "2026-07-28T08:00:00", "scheduled_end": "2026-07-28T10:00:00",
+        "description": "Take the readings from three handhelds and the gateway, and confirm whether the authentication header is the only cause." },
+      { "id": "wo-cas-gateways", "account": "cascade", "state": "in_progress", "subject": "Install 12 gateways in the Paris flagship", "work_type": "wt-gateway", "contact": "c-amelie", "territory": "t-svc-central", "owner": "ravi", "priority": "medium", "scheduled_start": "2026-07-27T07:00:00", "scheduled_end": "2026-07-27T15:00:00",
+        "description": "Install outside opening hours, staff entrance at the back. The store manager signs the job off." },
+      { "id": "wo-hi-training", "account": "helios-iberia", "state": "new", "subject": "Administrator training for the service desk", "work_type": "wt-training", "contact": "hi-marc", "territory": "t-svc-iberia", "owner": "ravi", "priority": "low",
+        "description": "Twelve attendees over two sessions; needs a sandbox with their own data." },
+      { "id": "wo-nw-install", "account": "northwind", "state": "completed", "subject": "Gateway installation at the Porto depot", "work_type": "wt-gateway", "contact": "n-sara", "territory": "t-svc-iberia", "owner": "ravi", "priority": "medium", "scheduled_start": "2026-06-11T08:00:00", "scheduled_end": "2026-06-11T11:00:00", "duration_hours": 3.5,
+        "description": "First gateway of the Portuguese offices.",
+        "resolution": "Gateway mounted and registered, handhelds paired and tested with two deliveries. Left the spare antenna in the depot office." },
+      { "id": "wo-cas-erp", "account": "cascade", "state": "new", "subject": "On-site check of the ERP link before the next run", "support_case": "case-cas-erp", "work_type": "wt-network", "contact": "c-thomas", "territory": "t-svc-central", "owner": "ravi", "priority": "high",
+        "description": "Only if the paged synchronisation fails again tonight." }
+    ],
+    "work_order_line": [
+      { "work_order": "wo-nw-scanners", "description": "Network diagnosis on the depot handhelds", "product": "svc-impl", "status": "new", "quantity": 2, "unit_price": 0, "duration_hours": 2 },
+      { "work_order": "wo-cas-gateways", "description": "Gateway installation and commissioning", "product": "hw-gate", "status": "in_progress", "quantity": 12, "unit_price": 320, "duration_hours": 6 },
+      { "work_order": "wo-cas-gateways", "description": "In-store network testing", "product": "svc-impl", "status": "new", "quantity": 1, "unit_price": 950, "duration_hours": 2 },
+      { "work_order": "wo-hi-training", "description": "Administrator training, session 1", "product": "trn-adm", "status": "new", "quantity": 6, "unit_price": 750, "duration_hours": 4 },
+      { "work_order": "wo-hi-training", "description": "Administrator training, session 2", "product": "trn-adm", "status": "new", "quantity": 6, "unit_price": 750, "duration_hours": 4 },
+      { "id": "wol-nw-install", "work_order": "wo-nw-install", "description": "Gateway mounting and commissioning", "product": "hw-gate", "status": "completed", "quantity": 1, "unit_price": 320, "duration_hours": 2.5 },
+      { "id": "wol-nw-pairing", "work_order": "wo-nw-install", "description": "Handheld pairing and delivery test", "product": "svc-impl", "status": "completed", "quantity": 1, "unit_price": 950, "duration_hours": 1 }
+    ],
+    "service_appointment": [
+      { "work_order": "wo-nw-scanners", "service_resource": "sr-nuria", "status": "dispatched", "scheduled_start": "2026-07-28T08:00:00", "scheduled_end": "2026-07-28T10:00:00", "travel_minutes": 35, "contact": "n-pablo", "notes": "Depot gate 3; ask for the shift supervisor" },
+      { "work_order": "wo-cas-gateways", "service_resource": "sr-tecnoserv", "status": "in_progress", "scheduled_start": "2026-07-27T07:00:00", "scheduled_end": "2026-07-27T15:00:00", "actual_start": "2026-07-27T07:10:00", "travel_minutes": 45, "contact": "c-amelie", "notes": "Seven of twelve gateways mounted by midday" },
+      { "work_order": "wo-cas-gateways", "service_resource": "sr-tecnoserv", "status": "scheduled", "scheduled_start": "2026-07-29T07:00:00", "scheduled_end": "2026-07-29T11:00:00", "travel_minutes": 45, "contact": "c-amelie", "notes": "Second visit for the remaining five" },
+      { "work_order": "wo-nw-install", "service_resource": "sr-iker", "status": "completed", "scheduled_start": "2026-06-11T08:00:00", "scheduled_end": "2026-06-11T11:00:00", "actual_start": "2026-06-11T08:05:00", "actual_end": "2026-06-11T11:35:00", "travel_minutes": 90, "contact": "n-sara", "notes": "Signed off by the depot manager" },
+      { "work_order": "wo-hi-training", "service_resource": "sr-iker", "status": "none", "scheduled_start": "2026-09-15T09:00:00", "scheduled_end": "2026-09-15T13:00:00", "contact": "hi-marc", "notes": "Date still to confirm with the customer" }
+    ],
+    "product_consumed": [
+      { "work_order_line": "wol-nw-install", "product": "hw-gate", "quantity": 1, "unit_price": 320, "is_billable": true },
+      { "work_order_line": "wol-nw-pairing", "product": "svc-impl", "quantity": 1, "unit_price": 950, "is_billable": true },
+      { "work_order_line": "wol-nw-install", "product": "hw-gate", "quantity": 1, "unit_price": 0, "is_billable": false }
+    ],
+    "invoice": [
+      { "id": "inv-nw-licences", "account": "northwind", "state": "paid", "reference": "INV-2026-0101", "sales_order": "so-northwind", "contract": "ct-northwind", "contact": "n-elena", "issue_date": "2026-04-02", "due_date": "2026-05-02", "payment_terms": "net_30", "tax_percent": 21,
+        "notes": "Licences and implementation of the 2026 renewal. Customer PO NW-PO-88120." },
+      { "id": "inv-nw-support", "account": "northwind", "state": "issued", "reference": "INV-2026-0128", "contract": "ct-northwind", "contact": "n-pablo", "issue_date": "2026-06-25", "due_date": "2026-07-10", "payment_terms": "net_15", "tax_percent": 21,
+        "notes": "Premier support, annual fee. Overdue: chased twice by email." },
+      { "id": "inv-cas-rollout", "account": "cascade", "state": "issued", "reference": "INV-2026-0112", "sales_order": "so-cascade", "contract": "ct-cascade", "contact": "c-thomas", "issue_date": "2026-06-18", "due_date": "2026-08-17", "payment_terms": "net_60", "tax_percent": 20,
+        "notes": "Head office rollout, first of two instalments agreed with procurement." },
+      { "id": "inv-cas-clienteling", "account": "cascade", "state": "issued", "reference": "INV-2026-0133", "contact": "c-amelie", "issue_date": "2026-07-15", "due_date": "2026-09-13", "payment_terms": "net_60", "tax_percent": 20,
+        "notes": "Clienteling pilot: seats and the in-store gateways." },
+      { "id": "inv-veritas-enablement", "account": "veritas", "state": "paid", "reference": "INV-2026-0090", "contact": "v-daan", "issue_date": "2026-03-05", "due_date": "2026-04-04", "payment_terms": "net_30", "tax_percent": 21,
+        "notes": "Partner enablement licences at the partner price." },
+      { "id": "inv-hi-training", "account": "helios-iberia", "state": "draft", "reference": "INV-2026-0140", "contact": "hi-marc", "payment_terms": "net_30", "tax_percent": 21,
+        "notes": "Draft for the two training sessions; waiting for the dates to be confirmed before issuing it." }
+    ],
+    "invoice_line": [
+      { "invoice": "inv-nw-licences", "description": "CRM Professional licences 2026-2027 (600 seats)", "product": "crm-pro", "order_line": "orl-nw-pro", "quantity": 600, "unit_price": 540, "period_label": "2026-2027" },
+      { "invoice": "inv-nw-licences", "description": "Implementation services", "product": "svc-impl", "order_line": "orl-nw-svc", "quantity": 38, "unit_price": 950 },
+      { "invoice": "inv-nw-support", "description": "Premier support 2026-2027", "product": "sup-prem", "quantity": 1, "unit_price": 15000, "period_label": "2026-2027" },
+      { "invoice": "inv-cas-rollout", "description": "CRM Professional licences (120 seats)", "product": "crm-pro", "order_line": "orl-cas-pro", "quantity": 120, "unit_price": 600, "period_label": "2026-2027" },
+      { "invoice": "inv-cas-rollout", "description": "ERP integration connector", "product": "int-conn", "order_line": "orl-cas-int", "quantity": 1, "unit_price": 4500 },
+      { "invoice": "inv-cas-clienteling", "description": "Clienteling seats for store associates", "product": "crm-pro", "quantity": 220, "unit_price": 570 },
+      { "invoice": "inv-cas-clienteling", "description": "Edge gateways for the flagship stores", "product": "hw-gate", "quantity": 60, "unit_price": 320 },
+      { "invoice": "inv-veritas-enablement", "description": "Enablement licences (partner price)", "product": "crm-ent", "quantity": 40, "unit_price": 960 },
+      { "invoice": "inv-hi-training", "description": "Administrator training, 12 attendees", "product": "trn-adm", "quantity": 12, "unit_price": 750 }
+    ],
+    "payment": [
+      { "invoice": "inv-nw-licences", "reference": "TRF-2026-04-29-8841", "amount": 435721, "method": "transfer", "status": "cleared", "paid_on": "2026-04-29", "notes": "Paid in full, three days before the due date" },
+      { "invoice": "inv-cas-rollout", "reference": "TRF-2026-07-01-2210", "amount": 45900, "method": "transfer", "status": "cleared", "paid_on": "2026-07-01", "notes": "First instalment, half of the invoice" },
+      { "invoice": "inv-cas-clienteling", "reference": "TRF-2026-07-24-3390", "amount": 50000, "method": "transfer", "status": "cleared", "paid_on": "2026-07-24", "notes": "Advance agreed to start the pilot" },
+      { "invoice": "inv-veritas-enablement", "reference": "SEPA-2026-03-28-004", "amount": 46464, "method": "direct_debit", "status": "cleared", "paid_on": "2026-03-28" },
+      { "invoice": "inv-nw-support", "reference": "CARD-2026-07-26-0001", "amount": 2000, "method": "card", "status": "failed", "paid_on": "2026-07-26", "notes": "Card declined by the bank; the customer will pay by transfer" }
+    ],
+    "credit_memo": [
+      { "invoice": "inv-cas-rollout", "reference": "CN-2026-0007", "amount": 1500, "reason": "service_credit", "issued_on": "2026-07-05", "approved_by": "laura",
+        "notes": "Credit agreed after the nightly ERP synchronisation failed three nights running." },
+      { "invoice": "inv-nw-licences", "reference": "CN-2026-0003", "amount": 605, "reason": "duplicate", "issued_on": "2026-07-03", "approved_by": "laura",
+        "notes": "Duplicate renewal invoice issued by the billing job and credited the same week." }
+    ],
+    "subscription": [
+      { "account": "northwind", "product": "crm-pro", "contract": "ct-northwind", "status": "active", "quantity": 600, "unit_price": 540, "billing_frequency": "annual", "start_date": "2026-04-01", "end_date": "2027-03-31", "renewal_date": "2027-02-28", "auto_renew": true, "owner": "carlos" },
+      { "account": "northwind", "product": "sup-prem", "contract": "ct-northwind", "status": "active", "quantity": 1, "unit_price": 15000, "billing_frequency": "annual", "start_date": "2026-04-01", "end_date": "2027-03-31", "renewal_date": "2026-08-31", "auto_renew": false, "owner": "carlos" },
+      { "account": "cascade", "product": "crm-pro", "contract": "ct-cascade", "status": "active", "quantity": 120, "unit_price": 600, "billing_frequency": "quarterly", "start_date": "2026-06-15", "end_date": "2027-06-14", "renewal_date": "2027-05-15", "auto_renew": true, "owner": "carlos" },
+      { "account": "helios-iberia", "product": "crm-pro", "status": "expired", "quantity": 80, "unit_price": 550, "billing_frequency": "annual", "start_date": "2025-10-01", "end_date": "2026-09-30", "renewal_date": "2026-08-31", "auto_renew": false, "owner": "mei" },
+      { "account": "veritas", "product": "crm-ent", "status": "active", "quantity": 40, "unit_price": 960, "billing_frequency": "annual", "start_date": "2026-09-01", "end_date": "2027-08-31", "renewal_date": "2027-07-31", "auto_renew": true, "owner": "laura" }
+    ],
+    "revenue_schedule": [
+      { "opportunity_line": "ol-nw-ent", "period_label": "2026-Q4", "schedule_date": "2026-10-01", "amount": 145800, "quantity": 150, "status": "planned" },
+      { "opportunity_line": "ol-nw-ent", "period_label": "2027-Q1", "schedule_date": "2027-01-01", "amount": 145800, "quantity": 150, "status": "planned" },
+      { "opportunity_line": "ol-nw-ent", "period_label": "2027-Q2", "schedule_date": "2027-04-01", "amount": 145800, "quantity": 150, "status": "planned" },
+      { "opportunity_line": "ol-nw-ent", "period_label": "2027-Q3", "schedule_date": "2027-07-01", "amount": 145800, "quantity": 150, "status": "planned" },
+      { "opportunity_line": "ol-helios-ent", "period_label": "2026-Q4", "schedule_date": "2026-10-01", "amount": 173400, "quantity": 200, "status": "planned" },
+      { "opportunity_line": "ol-helios-ent", "period_label": "2027-Q2", "schedule_date": "2027-04-01", "amount": 173400, "quantity": 200, "status": "planned" }
+    ],
+    "discount_schedule": [
+      { "id": "ds-seats", "name": "Enterprise seat volume", "type": "range", "applies_to": "quantity", "product": "crm-ent", "is_active": true, "description": "Standard volume grid for Enterprise seats; anything beyond it needs an approval" },
+      { "id": "ds-services", "name": "Services day rate", "type": "slab", "applies_to": "quantity", "product": "svc-impl", "is_active": true, "description": "Consulting days booked in one go" }
+    ],
+    "discount_tier": [
+      { "discount_schedule": "ds-seats", "label": "1-49 seats", "lower_bound": 1, "upper_bound": 49, "discount_percent": 0 },
+      { "discount_schedule": "ds-seats", "label": "50-199 seats", "lower_bound": 50, "upper_bound": 199, "discount_percent": 10 },
+      { "discount_schedule": "ds-seats", "label": "200-499 seats", "lower_bound": 200, "upper_bound": 499, "discount_percent": 15 },
+      { "discount_schedule": "ds-seats", "label": "500+ seats", "lower_bound": 500, "discount_percent": 20 },
+      { "discount_schedule": "ds-services", "label": "1-9 days", "lower_bound": 1, "upper_bound": 9, "discount_percent": 0 },
+      { "discount_schedule": "ds-services", "label": "10+ days", "lower_bound": 10, "discount_percent": 8 }
+    ],
+    "product_feature": [
+      { "id": "pf-support", "product": "crm-ent", "name": "Support level", "min_options": 1, "max_options": 1, "sort_order": 10, "description": "Every Enterprise deal carries a support plan" },
+      { "id": "pf-addons", "product": "crm-ent", "name": "Add-ons", "min_options": 0, "max_options": 3, "sort_order": 20, "description": "Analytics and the connectors to the customer's systems" },
+      { "id": "pf-enablement", "product": "crm-ent", "name": "Enablement", "min_options": 0, "sort_order": 30, "description": "Training and implementation days sold with the licences" }
+    ],
+    "product_option": [
+      { "product_feature": "pf-support", "optional_product": "sup-prem", "quantity": 1, "is_required": true, "discount_percent": 0, "sort_order": 10 },
+      { "product_feature": "pf-addons", "optional_product": "an-insight", "quantity": 1, "is_required": false, "discount_percent": 10, "sort_order": 10 },
+      { "product_feature": "pf-addons", "optional_product": "int-conn", "quantity": 1, "is_required": false, "discount_percent": 0, "sort_order": 20 },
+      { "product_feature": "pf-addons", "optional_product": "hw-gate", "quantity": 1, "is_required": false, "discount_percent": 5, "sort_order": 30 },
+      { "product_feature": "pf-enablement", "optional_product": "trn-adm", "quantity": 2, "is_required": false, "discount_percent": 0, "sort_order": 10 },
+      { "product_feature": "pf-enablement", "optional_product": "svc-impl", "quantity": 10, "is_required": false, "discount_percent": 5, "sort_order": 20 }
+    ],
+    "quote_approval": [
+      { "quote": "q-northwind-ent", "requested_by": "carlos", "approver": "laura", "status": "pending", "requested_discount_percent": 15, "requested_on": "2026-07-10",
+        "reason": "The competitor quoted 780.000 € for the same scope and the COO wants a single contract for every regional office." },
+      { "quote": "q-helios-group", "requested_by": "mei", "approver": "laura", "status": "approved", "requested_discount_percent": 15, "requested_on": "2026-07-21", "decided_on": "2026-07-22",
+        "reason": "Group frame agreement: 400 seats committed for three years across five subsidiaries.",
+        "decision_notes": "Approved on the three-year commitment; revert to 10% if the term drops to one year." },
+      { "quote": "q-cascade-clientel", "requested_by": "carlos", "approver": "laura", "status": "rejected", "requested_discount_percent": 20, "requested_on": "2026-07-24", "decided_on": "2026-07-25",
+        "reason": "Store associate seats are only used four hours a day.",
+        "decision_notes": "Rejected: 5% is what the volume grid gives. Sell the pilot first and revisit at the rollout." }
+    ],
+    "note": [
+      { "title": "Northwind: board meeting on Thursday", "author": "carlos", "is_private": false, "account": "northwind", "opportunity": "opp-northwind-ent",
+        "body": "Elena presents the upgrade to the board on Thursday. She asked for a one-page summary with the cost per depot and the adoption figures of the current deployment. Anna is preparing it." },
+      { "title": "Brightbank security review — what is left", "author": "anna", "is_private": false, "account": "brightbank", "opportunity": "opp-brightbank",
+        "body": "Twelve questions still open, all about data residency and key management. Priya wants the pen-test report of the last release, not the summary. Oliver will push internally once the answers are in." },
+      { "title": "Helios: procurement plays hardball on the liability cap", "author": "mei", "is_private": true, "account": "helios", "opportunity": "opp-helios-group",
+        "body": "Marta has rejected the standard cap twice. Legal is fine going to 12 months of fees. Do not offer it before the committee meeting: Jordi thinks he can close it without touching the cap." },
+      { "title": "Cascade: the 2019 tablets are the real blocker", "author": "ravi", "is_private": false, "account": "cascade", "support_case": "case-cas-mobile",
+        "body": "Around 60 tablets in the older stores have 2 GB of RAM. The image cache fix ships in 4.3, but the rollout to the remaining stores should assume the workaround until then." },
+      { "title": "Atlas: revisit at the incumbent renewal", "author": "mei", "is_private": false, "account": "atlas", "opportunity": "opp-atlas",
+        "body": "Jenna will not take calls before the end of the year (do_not_call is set on purpose). Their Dynamix contract renews in early 2027; the plan is to reach out in November through the partner." }
+    ],
+    "event": [
+      { "subject": "Northwind — legal review of the discount clause", "event_type": "meeting", "start_at": "2026-07-30T10:00:00", "end_at": "2026-07-30T11:00:00", "location": "Video call", "owner": "carlos", "account": "northwind", "contact": "n-elena", "opportunity": "opp-northwind-ent", "attendees": ["n-pablo"],
+        "description": "Legal on both sides to close the wording of the volume discount." },
+      { "subject": "Helios — procurement committee", "event_type": "meeting", "start_at": "2026-08-05T09:30:00", "end_at": "2026-08-05T11:00:00", "location": "Barcelona, Diagonal 611", "owner": "mei", "account": "helios", "contact": "h-marta", "opportunity": "opp-helios-group", "attendees": ["h-jordi"],
+        "description": "Pricing, liability cap and the rollout calendar for the five subsidiaries." },
+      { "subject": "Cascade — pilot scoping workshop", "event_type": "workshop", "start_at": "2026-08-11T09:00:00", "end_at": "2026-08-11T13:00:00", "location": "Paris flagship, back office", "owner": "carlos", "account": "cascade", "contact": "c-amelie", "opportunity": "opp-cascade-clientel", "attendees": ["c-thomas"],
+        "description": "Agree what the Paris pilot includes and how success is measured." },
+      { "subject": "Brightbank — platform team demo", "event_type": "demo", "start_at": "2026-07-08T15:00:00", "end_at": "2026-07-08T16:15:00", "location": "12 Bishopsgate, London", "owner": "carlos", "account": "brightbank", "contact": "b-oliver", "opportunity": "opp-brightbank",
+        "description": "Migration path and the service console. Very good reception." },
+      { "subject": "Kestrel Insurance — partner portal walkthrough", "event_type": "demo", "start_at": "2026-08-06T11:00:00", "end_at": "2026-08-06T12:00:00", "location": "Video call", "owner": "mei", "lead": "l-kestrel",
+        "description": "Show how the 300 brokers would work in the portal." },
+      { "subject": "Q3 pipeline review", "event_type": "meeting", "start_at": "2026-07-29T09:00:00", "end_at": "2026-07-29T10:30:00", "location": "Madrid office, room Sur", "owner": "laura",
+        "description": "Deal by deal review of everything closing this quarter, with the forecast committed by rep." }
+    ],
+    "activity": [
+      { "subject": "Discovery call with the COO", "type": "call", "status": "completed", "priority": "high", "owner": "carlos", "due_date": "2026-06-10", "completed_date": "2026-06-10", "duration_minutes": 45, "account": "northwind", "contact": "n-elena", "opportunity": "opp-northwind-ent", "description": "Confirmed the 600 seats and the wish for a single contract. Volume discount raised for the first time." },
+      { "subject": "Send the volume discount proposal", "type": "email", "status": "completed", "priority": "normal", "owner": "carlos", "due_date": "2026-07-10", "completed_date": "2026-07-10", "account": "northwind", "contact": "n-elena", "opportunity": "opp-northwind-ent", "description": "Rev. C sent with the three-year term." },
+      { "subject": "Legal review call on the discount clause", "type": "meeting", "status": "not_started", "priority": "high", "owner": "carlos", "due_date": "2026-07-30", "duration_minutes": 60, "account": "northwind", "contact": "n-elena", "opportunity": "opp-northwind-ent", "attendees": ["n-pablo"], "description": "Legal on both sides to close the wording of the volume discount." },
+      { "subject": "Prepare the procurement committee deck", "type": "task", "status": "in_progress", "priority": "high", "owner": "mei", "due_date": "2026-08-03", "account": "helios", "opportunity": "opp-helios-group", "description": "Business case with the savings per subsidiary and the rollout plan." },
+      { "subject": "Present the frame agreement to procurement", "type": "meeting", "status": "not_started", "priority": "high", "owner": "mei", "due_date": "2026-08-05", "duration_minutes": 90, "account": "helios", "contact": "h-marta", "opportunity": "opp-helios-group", "attendees": ["h-jordi"], "description": "Committee session: pricing, liability cap and rollout calendar." },
+      { "subject": "Security questionnaire follow-up", "type": "email", "status": "not_started", "priority": "high", "owner": "carlos", "due_date": "2026-07-29", "account": "brightbank", "contact": "b-priya", "opportunity": "opp-brightbank", "description": "Chase the remaining twelve answers and attach the latest pen-test report." },
+      { "subject": "Product demo for the platform team", "type": "demo", "status": "completed", "priority": "normal", "owner": "carlos", "due_date": "2026-07-08", "completed_date": "2026-07-08", "duration_minutes": 75, "account": "brightbank", "contact": "b-oliver", "opportunity": "opp-brightbank", "description": "Migration path and the service console. Very good reception from the platform team." },
+      { "subject": "Send the EU data residency statement", "type": "email", "status": "not_started", "priority": "normal", "owner": "mei", "due_date": "2026-07-28", "account": "lumen", "contact": "l-katrin", "opportunity": "opp-lumen", "description": "Data processing agreement plus the hosting region statement." },
+      { "subject": "Pilot scoping workshop", "type": "meeting", "status": "not_started", "priority": "normal", "owner": "carlos", "due_date": "2026-08-11", "duration_minutes": 120, "account": "cascade", "contact": "c-amelie", "opportunity": "opp-cascade-clientel", "attendees": ["c-thomas"], "description": "Agree what the Paris flagship pilot includes and how success is measured." },
+      { "subject": "Quarterly business review", "type": "meeting", "status": "completed", "priority": "normal", "owner": "carlos", "due_date": "2026-07-02", "completed_date": "2026-07-02", "duration_minutes": 60, "account": "cascade", "contact": "c-thomas", "description": "Adoption at 78% in the head office. Analytics add-on introduced." },
+      { "subject": "Call Órbita Telecom to prepare the conversion", "type": "call", "status": "not_started", "priority": "high", "owner": "carlos", "due_date": "2026-07-28", "duration_minutes": 30, "lead": "l-orbita", "description": "Confirm the 400 users and the approval path before converting the lead." },
+      { "subject": "Qualification call with Solaris Wind", "type": "call", "status": "completed", "priority": "normal", "owner": "mei", "due_date": "2026-07-15", "completed_date": "2026-07-15", "duration_minutes": 35, "lead": "l-solaris", "description": "Budget confirmed for 2027, 120 users. Needs the forecasting use case." },
+      { "subject": "Send the logistics customer story", "type": "email", "status": "not_started", "priority": "low", "owner": "carlos", "due_date": "2026-07-31", "lead": "l-ferrovia", "description": "Northwind case study, with the Portuguese offices highlighted." },
+      { "subject": "Kestrel Insurance — partner portal walkthrough", "type": "demo", "status": "not_started", "priority": "normal", "owner": "mei", "due_date": "2026-08-06", "duration_minutes": 60, "lead": "l-kestrel", "description": "Show how the 300 brokers would work in the portal." },
+      { "subject": "Hourly update on the scanner incident", "type": "call", "status": "in_progress", "priority": "high", "owner": "ravi", "due_date": "2026-07-27", "duration_minutes": 15, "account": "northwind", "contact": "n-pablo", "support_case": "case-nw-sync", "description": "Keep the IT director informed while engineering works on the hotfix." },
+      { "subject": "Check the nightly ERP run", "type": "task", "status": "not_started", "priority": "high", "owner": "ravi", "due_date": "2026-07-28", "account": "cascade", "contact": "c-thomas", "support_case": "case-cas-erp", "description": "Confirm the paged synchronisation completed before closing the escalation." },
+      { "subject": "Renewal call — premier support", "type": "call", "status": "not_started", "priority": "normal", "owner": "carlos", "due_date": "2026-08-18", "duration_minutes": 30, "account": "northwind", "contact": "n-pablo", "opportunity": "opp-northwind-support", "description": "Walk through the renewal quote before the contract lapses at the end of August." },
+      { "subject": "Partner enablement plan with Veritas", "type": "meeting", "status": "not_started", "priority": "normal", "owner": "laura", "due_date": "2026-08-20", "duration_minutes": 90, "account": "veritas", "contact": "v-daan", "opportunity": "opp-veritas-partner", "attendees": ["v-ines"], "description": "Certification plan for the four consultants and the joint pipeline for the autumn." },
+      { "subject": "Re-open the conversation with Atlas", "type": "task", "status": "deferred", "priority": "low", "owner": "mei", "due_date": "2026-11-02", "account": "atlas", "contact": "a-jenna", "opportunity": "opp-atlas", "description": "Their incumbent contract renews in early 2027; get in touch three months earlier." },
+      { "subject": "Nurture email — migration story", "type": "email", "status": "completed", "priority": "low", "owner": "sofia", "due_date": "2026-07-06", "completed_date": "2026-07-06", "lead": "l-brightbank-2", "description": "First email of the H2 nurture sequence; opened twice, no reply yet." }
+    ]
+  }
+}

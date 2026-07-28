@@ -1,0 +1,46 @@
+// Master data owned by the model, not by the users: it is upserted transactionally on
+// every deployment, keyed by the concept's local id_presentation fields (here, the name).
+//
+// Only catalogues nothing else points at live here. A deployed row has no seed alias, so
+// anything the demo data has to reference — skills held by a technician, the categories of
+// the knowledge base, a business calendar and its holidays — stays in seed_data.jsonc.
+//
+// on_removed 'ignore': a row dropped from this file is left in the database rather than
+// deleted, so a milestone type that cases already point at never disappears under them.
+{
+  "$schema": "../../schemas/deployed_data_schema.json",
+  "concepts": [
+    {
+      "concept": "milestone_type",
+      "on_removed": "ignore",
+      "records": [
+        { "name": "First response", "target_hours": 4, "applies_to_priority": "any", "description": "An agent has answered the customer, even if only to acknowledge the case" },
+        { "name": "Critical first response", "target_hours": 1, "applies_to_priority": "critical", "description": "Acknowledgement of a critical case, around the clock" },
+        { "name": "Workaround provided", "target_hours": 24, "applies_to_priority": "high", "description": "The customer can work again, even if the root cause is still open" },
+        { "name": "Resolution", "target_hours": 72, "applies_to_priority": "any", "description": "Root cause fixed and the case closed with the customer" },
+        { "name": "Critical resolution", "target_hours": 8, "applies_to_priority": "critical", "description": "Service fully restored for a critical outage" }
+      ]
+    },
+    {
+      "concept": "email_template",
+      "on_removed": "ignore",
+      "records": [
+        { "name": "Case acknowledgement", "folder": "service", "language": "en", "is_active": true,
+          "subject": "We have your case {{case_number}}: {{case_subject}}",
+          "body": "Hello {{contact_first_name}},\n\nWe have your report and a support engineer is looking at it. You can reply to this email at any time and your answer lands straight on the case.\n\n**Case**: {{case_number}} — {{case_subject}}\n**Priority**: {{case_priority}}\n\nWe will come back to you within the response time of your support plan." },
+        { "name": "Quote cover letter", "folder": "sales", "language": "en", "is_active": true,
+          "subject": "Your proposal from {{company_name}}",
+          "body": "Hi {{contact_first_name}},\n\nPlease find attached the proposal we discussed. It holds the prices until {{quote_expiration_date}}.\n\nThe headline figures:\n\n* Scope: {{opportunity_name}}\n* Total: {{quote_grand_total}}\n\nHappy to walk through it whenever suits you." },
+        { "name": "Renewal reminder", "folder": "sales", "language": "en", "is_active": true,
+          "subject": "{{account_name}} — renewal due on {{renewal_date}}",
+          "body": "Hello {{contact_first_name}},\n\nYour subscription renews on {{renewal_date}}. Nothing is needed from you if you are happy to continue.\n\nIf you would like to change the number of seats or the term, tell us before that date and we will send a revised agreement." },
+        { "name": "Recordatorio de renovación", "folder": "sales", "language": "es", "is_active": true,
+          "subject": "{{account_name}} — renovación el {{renewal_date}}",
+          "body": "Hola {{contact_first_name}}:\n\nTu suscripción se renueva el {{renewal_date}}. Si todo sigue igual, no tienes que hacer nada.\n\nSi quieres cambiar el número de usuarios o la duración, dínoslo antes de esa fecha y te enviamos un contrato revisado." },
+        { "name": "Webinar follow-up", "folder": "marketing", "language": "en", "is_active": true,
+          "subject": "Thanks for joining — the recording and what to do next",
+          "body": "Hi {{first_name}},\n\nThanks for coming to the session. Here is the recording and the deck.\n\nIf you would like to see the forecast working on your own data, book a slot with us and we will set up a sandbox." }
+      ]
+    }
+  ]
+}

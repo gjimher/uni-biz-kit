@@ -1,0 +1,11 @@
+{
+  "$schema": "../../schemas/deployment_schema.json",
+  "base_uri": "/crm",
+  "prod_origin": "https://www.unibizkit.dev",
+  // 50-port blocks, unique per model (b2c=3050, intranet=3100, agile=3150)
+  "prod_base_port": 3200,
+  "prod_smtp_server": "127.0.0.1",
+  "prod_smtp_port": 25,
+  "prod_smtp_from": "noreply-crm@unibizkit.dev",
+  "prod_versioning": "dev"
+}

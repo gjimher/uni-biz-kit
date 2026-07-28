@@ -1,0 +1,70 @@
+billing_country,billing_state,billing_city
+Spain,Madrid,Madrid
+Spain,Madrid,Alcobendas
+Spain,Madrid,Las Rozas
+Spain,Madrid,*
+Spain,Barcelona,Barcelona
+Spain,Barcelona,Sant Cugat del Valles
+Spain,Barcelona,*
+Spain,Valencia,Valencia
+Spain,Valencia,Paterna
+Spain,Valencia,*
+Spain,Bizkaia,Bilbao
+Spain,Bizkaia,*
+Spain,Sevilla,Sevilla
+Spain,Sevilla,*
+Spain,Malaga,Malaga
+Spain,Malaga,Marbella
+Spain,Malaga,*
+Spain,*,*
+Portugal,Lisboa,Lisboa
+Portugal,Lisboa,*
+Portugal,Porto,Porto
+Portugal,Porto,*
+Portugal,*,*
+France,Ile-de-France,Paris
+France,Ile-de-France,Boulogne-Billancourt
+France,Ile-de-France,*
+France,Auvergne-Rhone-Alpes,Lyon
+France,Auvergne-Rhone-Alpes,*
+France,Occitanie,Toulouse
+France,Occitanie,*
+France,*,*
+Germany,Bayern,Munich
+Germany,Bayern,*
+Germany,Berlin,Berlin
+Germany,Berlin,*
+Germany,Nordrhein-Westfalen,Cologne
+Germany,Nordrhein-Westfalen,Dusseldorf
+Germany,Nordrhein-Westfalen,*
+Germany,Hamburg,Hamburg
+Germany,Hamburg,*
+Germany,*,*
+Netherlands,Noord-Holland,Amsterdam
+Netherlands,Noord-Holland,*
+Netherlands,Zuid-Holland,Rotterdam
+Netherlands,Zuid-Holland,*
+Netherlands,*,*
+Ireland,Leinster,Dublin
+Ireland,Leinster,*
+Ireland,*,*
+United Kingdom,England,London
+United Kingdom,England,Manchester
+United Kingdom,England,Cambridge
+United Kingdom,England,*
+United Kingdom,Scotland,Edinburgh
+United Kingdom,Scotland,*
+United Kingdom,*,*
+United States,California,San Francisco
+United States,California,San Jose
+United States,California,*
+United States,New York,New York
+United States,New York,*
+United States,Texas,Austin
+United States,Texas,*
+United States,Illinois,Chicago
+United States,Illinois,*
+United States,Massachusetts,Boston
+United States,Massachusetts,*
+United States,*,*
+*,*,*

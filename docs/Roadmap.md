@@ -7,7 +7,6 @@ UniBizKit is intentionally developed in phases. See [docs/README.md](README.md) 
 * External user directory synchronization (LDAP/IdC/CDC) feeding the workflow `_user_directory` cache (see [Workflow.md](Workflow.md))
 * Explicit workflow transitions with visual state diagrams
 * Cross-model integration: one model using the user database of another (today the workaround is [Single Sign-On](SingleSignOn.md))
-* Example models for medium-sized applications
 
 ## Mid Term
 

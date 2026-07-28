@@ -1,0 +1,1275 @@
+{
+  "$schema": "../../schemas/concepts_schema.json",
+  "version": "1.0.0",
+  "name": "CRM App",
+  "description": "Customer relationship management: leads and their conversion, accounts with their contacts, an opportunity pipeline with stages, products, price books, quotes, contracts, orders, installed assets, support entitlements, cases and the activities logged against everything.",
+  // Field history is what a CRM administrator turns on first: 'account' is the
+  // aggregate root and every concept that is part_of it (contacts, opportunities,
+  // quotes, cases, contracts, orders, assets, entitlements and their children)
+  // inherits the flag. admin_role opens the global Operations > Versions resource.
+  "versioning": { "admin_role": "admin" },
+  "concepts": [
+    {
+      "name": "sales_rep",
+      "plural_name": "sales_reps",
+      "description": "Internal user profile linked to a registered account. Referenced as the owner of leads, accounts, opportunities and cases, and as the author of activities and case comments.",
+      "id_presentation": { "fields": ["first_name", "last_name"] },
+      // Avatar shown in the portal header and on the pipeline cards.
+      "documents": { "enabled": true, "tags": ["avatar"] },
+      "fields": [
+        // Profile rows are auto-created empty when a user is seeded or signs in for the
+        // first time, so required fields need defaults (same pattern as agile-app member).
+        { "name": "first_name", "type": "string", "required": true, "min_length": 1, "max_length": 50, "default": "Pending", "description": "First name" },
+        { "name": "last_name", "type": "string", "required": true, "min_length": 1, "max_length": 50, "default": "Profile", "description": "Last name" },
+        { "name": "email", "type": "string", "min_length": 5, "max_length": 100, "calculated": "\"_user_email\"", "description": "Email — auto-set from the authenticated user at INSERT; read-only" },
+        { "name": "title", "type": "string", "max_length": 100, "description": "Job title (e.g. Account Executive, Support Engineer)" },
+        { "name": "department", "type": "enum", "required": true, "enum_values": ["sales", "service", "marketing", "operations"], "default": "sales", "description": "Team this person works in" },
+        { "name": "phone", "type": "string", "max_length": 30, "description": "Direct phone number" },
+        { "name": "manager", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Person this user reports to" },
+        { "name": "quota_annual", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "description": "Annual sales quota; the forecast page measures attainment against it" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Whether the user is currently working; inactive users stay on historical records" }
+      ]
+    },
+    {
+      "name": "account",
+      "plural_name": "accounts",
+      "description": "Company you do business with: the hub every contact, opportunity, contract, order, asset, entitlement and case hangs from.",
+      "data_size": "m",
+      // Aggregate root of the version history; every part_of child inherits it.
+      "versioned": true,
+      "id_presentation": { "fields": ["name"], "show": true },
+      "documents": { "enabled": true, "tags": ["logo", "nda", "reference"] },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 120, "description": "Registered company name" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["prospect", "customer", "partner", "reseller", "competitor", "other"], "default": "prospect", "description": "Relationship with this company" },
+        { "name": "industry", "type": "enum", "enum_values": ["agriculture", "banking", "biotechnology", "construction", "consulting", "education", "energy", "engineering", "government", "healthcare", "hospitality", "insurance", "manufacturing", "media", "retail", "technology", "telecommunications", "transportation", "utilities", "other"], "description": "Sector, used to segment the pipeline" },
+        { "name": "rating", "type": "enum", "enum_values": ["hot", "warm", "cold"], "description": "How promising the account is" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Account executive responsible for the relationship" },
+        { "name": "parent_account", "type": "relation_to_one", "subtype": "related_to", "target": "account", "on_delete": "set_null", "description": "Holding company or headquarters this account belongs to" },
+        { "name": "website", "type": "string", "max_length": 200, "description": "Corporate website" },
+        { "name": "phone", "type": "string", "max_length": 30, "description": "Main switchboard number" },
+        { "name": "employees", "type": "integer", "min": 0, "description": "Number of employees" },
+        { "name": "annual_revenue", "type": "decimal", "subtype": "money", "precision": 10, "scale": 0, "min": 0, "description": "Reported annual revenue" },
+        // billing_country / billing_state / billing_city are validated together as a
+        // combination through validations/account.csv.
+        { "name": "billing_street", "type": "string", "max_length": 200, "size": "m", "description": "Billing street address" },
+        { "name": "billing_city", "type": "string", "max_length": 100, "description": "Billing city" },
+        { "name": "billing_state", "type": "string", "max_length": 100, "description": "Billing state or province" },
+        { "name": "billing_postal_code", "type": "string", "max_length": 20, "description": "Billing postal / ZIP code" },
+        { "name": "billing_country", "type": "string", "max_length": 100, "description": "Billing country" },
+        { "name": "description", "type": "markdown", "description": "What the company does, its structure and the history of the relationship" },
+        // Rollups over the children of the account
+        { "name": "contact_count", "type": "integer", "calculated": "rollup(count,contact,last_name)", "description": "People registered on this account" },
+        { "name": "open_pipeline", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "rollup(sum,opportunity,open_amount)", "description": "Amount of the opportunities still open" },
+        { "name": "won_revenue", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "rollup(sum,opportunity,won_amount)", "description": "Amount closed as won, all time" },
+        { "name": "open_case_count", "type": "integer", "calculated": "rollup(sum,support_case,is_open)", "description": "Support cases not closed yet" },
+        { "name": "outstanding_balance", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "rollup(sum,invoice,balance)", "description": "Invoiced amount still unpaid" }
+      ]
+    },
+    {
+      "name": "contact",
+      "plural_name": "contacts",
+      "description": "Person working at an account: the counterpart on opportunities, quotes, cases and activities",
+      "data_size": "m",
+      "id_presentation": { "fields": ["first_name", "last_name"], "show": true },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Company this person works for" },
+        { "name": "salutation", "type": "enum", "enum_values": ["mr", "ms", "mrs", "dr", "prof"], "description": "Form of address" },
+        { "name": "first_name", "type": "string", "required": true, "min_length": 1, "max_length": 50, "description": "First name" },
+        { "name": "last_name", "type": "string", "required": true, "min_length": 1, "max_length": 50, "description": "Last name" },
+        { "name": "title", "type": "string", "max_length": 100, "description": "Job title" },
+        { "name": "department", "type": "string", "max_length": 100, "description": "Department inside the company" },
+        { "name": "email", "type": "string", "max_length": 120, "description": "Work email" },
+        { "name": "phone", "type": "string", "max_length": 30, "description": "Work phone" },
+        { "name": "mobile", "type": "string", "max_length": 30, "description": "Mobile phone" },
+        { "name": "reports_to", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Manager of this person inside the account" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Person in our team who owns this relationship" },
+        { "name": "lead_source", "type": "enum", "enum_values": ["web", "phone_inquiry", "partner_referral", "employee_referral", "purchased_list", "trade_show", "webinar", "other"], "description": "Where this person came from" },
+        { "name": "birthdate", "type": "date", "description": "Date of birth" },
+        { "name": "do_not_call", "type": "boolean", "default": false, "description": "Never call this person" },
+        { "name": "email_opt_out", "type": "boolean", "default": false, "description": "Excluded from marketing emails" },
+        { "name": "description", "type": "markdown", "description": "Role in the buying process, preferences and notes" }
+      ]
+    },
+    {
+      "name": "campaign",
+      "plural_name": "campaigns",
+      "description": "Marketing initiative that generates leads and influences opportunities (webinar, trade show, email blast...)",
+      "checks": ["end_date IS NULL OR start_date IS NULL OR end_date >= start_date"],
+      "id_presentation": { "fields": ["name"], "show": true },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 120, "description": "Campaign name" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["email", "webinar", "trade_show", "advertisement", "content", "partner", "referral_program", "other"], "default": "email", "description": "Kind of campaign" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["planned", "in_progress", "completed", "aborted"], "default": "planned", "description": "Where the campaign stands" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Marketer running the campaign" },
+        { "name": "start_date", "type": "date", "description": "First day of the campaign" },
+        { "name": "end_date", "type": "date", "description": "Last day of the campaign" },
+        { "name": "budgeted_cost", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "description": "Approved budget" },
+        { "name": "actual_cost", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "description": "Money actually spent" },
+        { "name": "expected_revenue", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "description": "Revenue the campaign is expected to generate" },
+        { "name": "target_audience", "type": "string", "max_length": 200, "size": "m", "description": "Who the campaign targets" },
+        { "name": "description", "type": "markdown", "description": "Message, channels and follow-up plan" },
+        { "name": "member_count", "type": "integer", "calculated": "rollup(count,campaign_member,status)", "description": "People contacted by this campaign" },
+        { "name": "responded_count", "type": "integer", "calculated": "rollup(sum,campaign_member,is_responded)", "description": "Members who reacted to the campaign" }
+      ]
+    },
+    {
+      "name": "lead",
+      "plural_name": "leads",
+      "description": "Unqualified person who showed interest and does not belong to an account yet. The 'Convert Lead' action turns a qualified lead into an account, a contact and an opportunity.",
+      "data_size": "m",
+      "id_presentation": { "fields": ["company", "last_name"], "separator": " · ", "show": true },
+      // The signature CRM action, implemented as a backend function so the three
+      // records are created server-side with the caller's permissions.
+      "actions": [
+        { "label": "Convert Lead", "source": "lead-convert.js", "placement": ["edit", "show"] }
+      ],
+      "fields": [
+        { "name": "salutation", "type": "enum", "enum_values": ["mr", "ms", "mrs", "dr", "prof"], "description": "Form of address" },
+        { "name": "first_name", "type": "string", "max_length": 50, "description": "First name" },
+        { "name": "last_name", "type": "string", "required": true, "min_length": 1, "max_length": 50, "description": "Last name" },
+        { "name": "company", "type": "string", "required": true, "min_length": 2, "max_length": 120, "description": "Company the lead works for; becomes the account name on conversion" },
+        { "name": "title", "type": "string", "max_length": 100, "description": "Job title" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["new", "working", "nurturing", "qualified", "unqualified", "converted"], "default": "new", "description": "Where the lead stands in qualification; only a qualified lead can be converted" },
+        { "name": "rating", "type": "enum", "enum_values": ["hot", "warm", "cold"], "description": "How promising the lead is" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Sales rep working this lead" },
+        { "name": "lead_source", "type": "enum", "enum_values": ["web", "phone_inquiry", "partner_referral", "employee_referral", "purchased_list", "trade_show", "webinar", "other"], "description": "Channel the lead came in through" },
+        { "name": "campaign", "type": "relation_to_one", "subtype": "related_to", "target": "campaign", "on_delete": "set_null", "description": "Campaign that generated the lead" },
+        { "name": "email", "type": "string", "max_length": 120, "description": "Email address" },
+        { "name": "phone", "type": "string", "max_length": 30, "description": "Phone number" },
+        { "name": "mobile", "type": "string", "max_length": 30, "description": "Mobile number" },
+        { "name": "website", "type": "string", "max_length": 200, "description": "Company website" },
+        { "name": "industry", "type": "enum", "enum_values": ["agriculture", "banking", "biotechnology", "construction", "consulting", "education", "energy", "engineering", "government", "healthcare", "hospitality", "insurance", "manufacturing", "media", "retail", "technology", "telecommunications", "transportation", "utilities", "other"], "description": "Sector of the company" },
+        { "name": "num_employees", "type": "integer", "min": 0, "description": "Size of the company" },
+        { "name": "annual_revenue", "type": "decimal", "subtype": "money", "precision": 10, "scale": 0, "min": 0, "description": "Estimated annual revenue of the company" },
+        { "name": "city", "type": "string", "max_length": 100, "description": "City" },
+        { "name": "country", "type": "string", "max_length": 100, "description": "Country" },
+        { "name": "description", "type": "markdown", "description": "What the lead asked for and how the conversation went" },
+        { "name": "disqualification_reason", "type": "enum", "enum_values": ["no_budget", "no_authority", "no_need", "bad_timing", "chose_competitor", "duplicate", "junk"], "description": "Why the lead was marked unqualified" },
+        // Written by the Convert Lead action with the privileged client; read-only for
+        // everyone (rules_level_3), so the conversion audit trail cannot be edited by hand.
+        { "name": "converted_date", "type": "date", "description": "Day the lead was converted" },
+        { "name": "converted_account", "type": "relation_to_one", "subtype": "related_to", "target": "account", "on_delete": "set_null", "description": "Account created (or matched) by the conversion" },
+        { "name": "converted_contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Contact created by the conversion" },
+        { "name": "converted_opportunity", "type": "relation_to_one", "subtype": "related_to", "target": "opportunity", "on_delete": "set_null", "description": "Opportunity created by the conversion" }
+      ]
+    },
+    {
+      "name": "campaign_member",
+      "plural_name": "campaign_members",
+      "description": "A lead or a contact reached by a campaign, with how they responded. It is the junction that connects marketing to the pipeline.",
+      "data_size": "m",
+      "id_presentation": { "fields": ["campaign.id_presentation", "status"], "separator": " · " },
+      "fields": [
+        { "name": "campaign", "type": "relation_to_one", "subtype": "part_of", "target": "campaign", "description": "Campaign the person was included in" },
+        { "name": "lead", "type": "relation_to_one", "subtype": "related_to", "target": "lead", "on_delete": "set_null", "description": "Lead reached by the campaign (empty when the member is a contact)" },
+        { "name": "contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Contact reached by the campaign (empty when the member is a lead)" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["sent", "opened", "responded", "registered", "attended", "converted", "bounced"], "default": "sent", "description": "How the person reacted" },
+        { "name": "response_date", "type": "date", "description": "Day the person responded" },
+        // Feeds campaign.responded_count: anything past a plain send counts as a response.
+        { "name": "is_responded", "type": "integer", "calculated": "CASE WHEN status IN ('responded', 'registered', 'attended', 'converted') THEN 1 ELSE 0 END", "description": "1 when the member reacted to the campaign, 0 otherwise" }
+      ]
+    },
+    {
+      "name": "product",
+      "plural_name": "products",
+      "description": "Something you sell: licence, hardware, service or subscription. Prices live in price books, not here.",
+      "id_presentation": { "fields": ["code", "name"], "separator": " · ", "show": true },
+      "documents": { "enabled": true, "tags": ["datasheet"] },
+      "fields": [
+        { "name": "code", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 30, "description": "Product code used in quotes and orders (e.g. CRM-ENT)" },
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 120, "description": "Commercial name" },
+        { "name": "family", "type": "enum", "required": true, "enum_values": ["software", "hardware", "services", "subscription", "training", "support"], "default": "software", "description": "Product family, used to group the revenue" },
+        { "name": "list_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Catalogue price before any price book discount" },
+        { "name": "cost", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "description": "Internal cost, for margin analysis" },
+        { "name": "is_subscription", "type": "boolean", "default": false, "description": "Whether the product is billed recurrently" },
+        { "name": "term_months", "type": "integer", "min": 1, "max": 120, "description": "Length of the subscription term in months" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Whether the product can still be sold" },
+        { "name": "is_bundle", "type": "boolean", "default": false, "description": "Whether the product is configured from feature groups instead of sold as it is" },
+        { "name": "description", "type": "markdown", "description": "What the product does and what it includes" }
+      ]
+    },
+    {
+      "name": "price_book",
+      "plural_name": "price_books",
+      "description": "Named price list: the standard catalogue, a partner list or a regional list. Opportunities, quotes and orders take their prices from one of them.",
+      "checks": ["valid_until IS NULL OR valid_from IS NULL OR valid_until >= valid_from"],
+      "id_presentation": { "fields": ["name"], "show": true },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 100, "description": "Price book name" },
+        { "name": "description", "type": "string", "max_length": 300, "size": "m", "description": "Who this price book is for" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Person in sales operations who maintains these prices" },
+        { "name": "is_standard", "type": "boolean", "default": false, "description": "The catalogue price book used by default" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Whether new records may use it" },
+        { "name": "valid_from", "type": "date", "description": "First day the prices apply" },
+        { "name": "valid_until", "type": "date", "description": "Last day the prices apply" },
+        { "name": "entry_count", "type": "integer", "calculated": "rollup(count,price_book_entry,unit_price)", "description": "Products priced in this book" }
+      ]
+    },
+    {
+      "name": "price_book_entry",
+      "plural_name": "price_book_entries",
+      "description": "Price of one product in one price book. Line items point here, so a sale always records which list it was priced from.",
+      "id_presentation": { "fields": ["price_book.id_presentation", "product.id_presentation"], "separator": " / ", "show": true },
+      "fields": [
+        { "name": "price_book", "type": "relation_to_one", "subtype": "part_of", "target": "price_book", "description": "Price book this price belongs to" },
+        { "name": "product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "required": true, "description": "Product being priced" },
+        { "name": "unit_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Price of one unit in this price book" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Whether the price can be used on new line items" },
+        // Kept in step with the catalogue price so the discount below stays meaningful
+        // even after the product is repriced.
+        { "name": "product_list_price", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "copy(product,list_price,on_change)", "description": "Catalogue price of the product; copied whenever the entry changes" },
+        { "name": "discount_vs_list", "type": "decimal", "precision": 5, "scale": 2, "calculated": "CASE WHEN product_list_price IS NULL OR product_list_price = 0 THEN NULL ELSE ROUND((product_list_price - unit_price) * 100 / product_list_price, 2) END", "description": "Percentage this book discounts against the catalogue price" }
+      ]
+    },
+    {
+      "name": "opportunity",
+      "plural_name": "opportunities",
+      "description": "Potential deal with an account (opportunity_workflow: prospecting → qualification → needs_analysis → proposal → negotiation → closed). Probability and forecast category are derived from the stage, the way a sales process maps them.",
+      "data_size": "m",
+      "id_presentation": { "fields": ["name"], "show": true },
+      "documents": { "enabled": true, "tags": ["proposal", "business_case"] },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Account the deal belongs to" },
+        { "name": "name", "type": "string", "required": true, "min_length": 3, "max_length": 150, "size": "m", "description": "Deal name (e.g. Acme — 250 Enterprise licences)" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["new_business", "existing_business", "renewal", "upsell", "cross_sell"], "default": "new_business", "description": "Nature of the deal" },
+        { "name": "amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "description": "Value of the deal; the pipeline and the forecast are built on it" },
+        { "name": "close_date", "type": "date", "required": true, "description": "Date the deal is expected to close" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Sales rep who owns the deal" },
+        { "name": "primary_contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Main counterpart at the customer" },
+        { "name": "campaign", "type": "relation_to_one", "subtype": "related_to", "target": "campaign", "on_delete": "set_null", "description": "Campaign this deal is attributed to" },
+        { "name": "price_book", "type": "relation_to_one", "subtype": "related_to", "target": "price_book", "on_delete": "set_null", "description": "Price book the line items are priced from" },
+        { "name": "lead_source", "type": "enum", "enum_values": ["web", "phone_inquiry", "partner_referral", "employee_referral", "purchased_list", "trade_show", "webinar", "other"], "description": "Where the deal originated" },
+        { "name": "next_step", "type": "string", "max_length": 200, "size": "m", "description": "The single action that moves the deal forward" },
+        { "name": "competitor", "type": "string", "max_length": 100, "description": "Main competitor in the deal" },
+        // The workflow selector only moves one step at a time, so 'closed' is a single
+        // terminal state and the outcome is a field: it keeps won and lost one step away
+        // from negotiation and lets a check rule demand a reason for a loss.
+        { "name": "outcome", "type": "enum", "enum_values": ["won", "lost"], "description": "How the deal ended; required to reach the closed state" },
+        { "name": "loss_reason", "type": "enum", "enum_values": ["price", "product_fit", "competitor", "no_decision", "timing", "lost_contact", "other"], "description": "Why the deal was lost; required when the outcome is lost" },
+        { "name": "description", "type": "markdown", "description": "Customer need, decision process, risks and close plan" },
+        // The standard stage → probability → forecast category mapping. Plain SQL rather
+        // than a rule so it is also correct for records written outside the UI (seed data,
+        // imports, integrations), which never trigger the rule edge functions.
+        { "name": "probability", "type": "integer", "calculated": "CASE \"state\" WHEN 'prospecting' THEN 10 WHEN 'qualification' THEN 20 WHEN 'needs_analysis' THEN 40 WHEN 'proposal' THEN 60 WHEN 'negotiation' THEN 80 WHEN 'closed' THEN (CASE WHEN outcome = 'won' THEN 100 ELSE 0 END) ELSE 0 END", "description": "Chance of winning, derived from the stage (and the outcome once closed)" },
+        { "name": "forecast_category", "type": "string", "max_length": 20, "calculated": "CASE \"state\" WHEN 'prospecting' THEN 'pipeline' WHEN 'qualification' THEN 'pipeline' WHEN 'needs_analysis' THEN 'best_case' WHEN 'proposal' THEN 'best_case' WHEN 'negotiation' THEN 'commit' WHEN 'closed' THEN (CASE WHEN outcome = 'won' THEN 'closed' ELSE 'omitted' END) ELSE 'pipeline' END", "description": "Forecast bucket derived from the stage: pipeline, best_case, commit, closed or omitted" },
+        // A generated column cannot reference another generated column, so the stage
+        // mapping is repeated here instead of multiplying by 'probability'.
+        { "name": "expected_revenue", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(COALESCE(amount, 0) * (CASE \"state\" WHEN 'prospecting' THEN 10 WHEN 'qualification' THEN 20 WHEN 'needs_analysis' THEN 40 WHEN 'proposal' THEN 60 WHEN 'negotiation' THEN 80 WHEN 'closed' THEN (CASE WHEN outcome = 'won' THEN 100 ELSE 0 END) ELSE 0 END) / 100.0, 2)", "description": "Amount weighted by the probability of the stage" },
+        // Feed the account rollups; a closed deal no longer counts as pipeline.
+        { "name": "open_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "CASE WHEN \"state\" <> 'closed' THEN COALESCE(amount, 0) ELSE 0 END", "description": "Amount while the deal is open, 0 once it is closed" },
+        { "name": "won_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "CASE WHEN \"state\" = 'closed' AND outcome = 'won' THEN COALESCE(amount, 0) ELSE 0 END", "description": "Amount once the deal is closed as won, 0 otherwise" },
+        { "name": "products_total", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "rollup(sum,opportunity_line,total_price)", "description": "Sum of the line items; compare it with the amount to spot an unpriced deal" },
+        { "name": "line_count", "type": "integer", "calculated": "rollup(count,opportunity_line,quantity)", "description": "Number of line items" }
+      ]
+    },
+    {
+      "name": "opportunity_line",
+      "plural_name": "opportunity_lines",
+      "description": "Product sold in an opportunity, priced from a price book entry",
+      "data_size": "m",
+      "id_presentation": { "fields": ["opportunity.id_presentation", "price_book_entry.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "opportunity", "type": "relation_to_one", "subtype": "part_of", "target": "opportunity", "description": "Deal this line belongs to" },
+        { "name": "price_book_entry", "type": "relation_to_one", "subtype": "related_to", "target": "price_book_entry", "required": true, "description": "Product and price list this line is sold from" },
+        { "name": "quantity", "type": "decimal", "required": true, "precision": 10, "scale": 2, "min": 0.01, "default": 1, "description": "Units sold" },
+        { "name": "unit_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Price actually negotiated per unit" },
+        // Snapshot of the price book price at the moment the line was created, so a later
+        // repricing of the book does not rewrite the discount that was agreed.
+        { "name": "list_price", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "copy(price_book_entry,unit_price,on_insert)", "description": "Price book price when the line was added" },
+        { "name": "discount_percent", "type": "decimal", "precision": 5, "scale": 2, "min": 0, "max": 100, "default": 0, "description": "Discount applied to this line" },
+        { "name": "total_price", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(quantity * unit_price * (1 - COALESCE(discount_percent, 0) / 100), 2)", "description": "Line total after the discount" },
+        { "name": "description", "type": "string", "max_length": 300, "size": "m", "description": "What was agreed for this line" }
+      ]
+    },
+    {
+      "name": "quote",
+      "plural_name": "quotes",
+      "description": "Priced offer sent to the customer for an opportunity. Its versioned documents keep every PDF that was actually sent.",
+      "id_presentation": { "fields": ["opportunity.id_presentation", "name"], "separator": " · ", "show": true },
+      // Unique per (quote, tag, version): each revision of the PDF is kept.
+      "documents": { "enabled": true, "versioned": true, "tags": ["quote_pdf", "terms"] },
+      "fields": [
+        { "name": "opportunity", "type": "relation_to_one", "subtype": "part_of", "target": "opportunity", "description": "Deal being quoted" },
+        { "name": "name", "type": "string", "required": true, "min_length": 2, "max_length": 120, "description": "Quote name (e.g. Rev. B — 3-year term)" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["draft", "in_review", "approved", "presented", "accepted", "rejected", "expired"], "default": "draft", "description": "Where the offer stands" },
+        { "name": "contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Person the quote is addressed to" },
+        { "name": "prepared_by", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Who put the offer together" },
+        { "name": "quote_date", "type": "date", "description": "Date on the offer" },
+        { "name": "expiration_date", "type": "date", "description": "Last day the prices are held" },
+        { "name": "payment_terms", "type": "enum", "enum_values": ["prepaid", "net_15", "net_30", "net_60", "milestones"], "default": "net_30", "description": "Agreed payment terms" },
+        { "name": "subtotal", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "rollup(sum,quote_line,total_price)", "description": "Sum of the quote lines" },
+        { "name": "discount_percent", "type": "decimal", "precision": 5, "scale": 2, "min": 0, "max": 100, "default": 0, "description": "Extra discount applied to the whole quote" },
+        { "name": "tax_percent", "type": "decimal", "precision": 5, "scale": 2, "min": 0, "max": 100, "default": 21, "description": "Tax rate applied to the discounted subtotal" },
+        { "name": "grand_total", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(COALESCE(subtotal, 0) * (1 - COALESCE(discount_percent, 0) / 100) * (1 + COALESCE(tax_percent, 0) / 100), 2)", "description": "What the customer pays, taxes included" },
+        { "name": "notes", "type": "markdown", "description": "Assumptions, scope and conditions of the offer" }
+      ]
+    },
+    {
+      "name": "quote_line",
+      "plural_name": "quote_lines",
+      "description": "Line of a quote, priced from a price book entry",
+      "data_size": "m",
+      "id_presentation": { "fields": ["quote.id_presentation", "price_book_entry.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "quote", "type": "relation_to_one", "subtype": "part_of", "target": "quote", "description": "Quote this line belongs to" },
+        { "name": "price_book_entry", "type": "relation_to_one", "subtype": "related_to", "target": "price_book_entry", "required": true, "description": "Product and price list quoted" },
+        { "name": "quantity", "type": "decimal", "required": true, "precision": 10, "scale": 2, "min": 0.01, "default": 1, "description": "Units quoted" },
+        { "name": "unit_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Quoted price per unit" },
+        { "name": "list_price", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "copy(price_book_entry,unit_price,on_insert)", "description": "Price book price when the line was added" },
+        { "name": "discount_percent", "type": "decimal", "precision": 5, "scale": 2, "min": 0, "max": 100, "default": 0, "description": "Discount applied to this line" },
+        { "name": "total_price", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(quantity * unit_price * (1 - COALESCE(discount_percent, 0) / 100), 2)", "description": "Line total after the discount" }
+      ]
+    },
+    {
+      "name": "contract",
+      "plural_name": "contracts",
+      "description": "Signed agreement with an account. Orders bill against it and entitlements grant the support it includes.",
+      "checks": ["end_date IS NULL OR start_date IS NULL OR end_date >= start_date"],
+      "id_presentation": { "fields": ["account.id_presentation", "reference"], "separator": " · ", "show": true },
+      "documents": { "enabled": true, "tags": ["signed_contract", "annex"] },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Customer bound by the contract" },
+        { "name": "reference", "type": "string", "required": true, "min_length": 2, "max_length": 40, "description": "Contract reference used with the customer (e.g. CT-2026-014)" },
+        { "name": "opportunity", "type": "relation_to_one", "subtype": "related_to", "target": "opportunity", "on_delete": "set_null", "description": "Deal this contract came from" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["draft", "in_approval", "activated", "expired", "terminated"], "default": "draft", "description": "Where the contract stands" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Person responsible for the contract" },
+        { "name": "signed_date", "type": "date", "description": "Day both parties signed" },
+        { "name": "start_date", "type": "date", "description": "First day of service" },
+        { "name": "end_date", "type": "date", "description": "Last day of service" },
+        { "name": "term_months", "type": "integer", "min": 1, "max": 120, "description": "Length of the term in months" },
+        { "name": "contract_value", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "description": "Total committed value" },
+        { "name": "billing_frequency", "type": "enum", "required": true, "enum_values": ["one_time", "monthly", "quarterly", "annual"], "default": "annual", "description": "How often the customer is invoiced" },
+        { "name": "auto_renew", "type": "boolean", "default": false, "description": "Whether the term renews automatically unless cancelled" },
+        { "name": "terms", "type": "markdown", "description": "Special conditions agreed for this customer" }
+      ]
+    },
+    {
+      "name": "sales_order",
+      "plural_name": "sales_orders",
+      "description": "Order placed by an account, usually against a contract. Named sales_order because 'order' is a reserved SQL word.",
+      "id_presentation": { "fields": ["account.id_presentation", "reference"], "separator": " · ", "show": true },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Customer placing the order" },
+        { "name": "reference", "type": "string", "required": true, "min_length": 2, "max_length": 40, "description": "Order reference (e.g. SO-2026-108)" },
+        { "name": "contract", "type": "relation_to_one", "subtype": "related_to", "target": "contract", "on_delete": "set_null", "description": "Contract the order bills against" },
+        { "name": "opportunity", "type": "relation_to_one", "subtype": "related_to", "target": "opportunity", "on_delete": "set_null", "description": "Deal that produced the order" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["draft", "activated", "shipped", "invoiced", "cancelled"], "default": "draft", "description": "Where the order stands" },
+        { "name": "order_date", "type": "date", "required": true, "description": "Day the customer placed the order" },
+        { "name": "activated_date", "type": "date", "description": "Day the order was activated for fulfilment" },
+        { "name": "purchase_order_number", "type": "string", "max_length": 40, "description": "Customer's own purchase order number" },
+        // Inline-expands the address fields from the account's saved addresses, so the
+        // delivery address is picked rather than retyped.
+        { "name": "shipping_address", "type": "prefill", "subtype": "account.addresses", "description": "Where the order is delivered (prefilled from the account's addresses)" },
+        { "name": "total_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "rollup(sum,order_line,total_price)", "description": "Sum of the order lines" }
+      ]
+    },
+    {
+      "name": "order_line",
+      "plural_name": "order_lines",
+      "description": "Product ordered, with what has already been delivered",
+      "data_size": "m",
+      "id_presentation": { "fields": ["sales_order.id_presentation", "price_book_entry.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "sales_order", "type": "relation_to_one", "subtype": "part_of", "target": "sales_order", "description": "Order this line belongs to" },
+        { "name": "price_book_entry", "type": "relation_to_one", "subtype": "related_to", "target": "price_book_entry", "required": true, "description": "Product and price list ordered" },
+        { "name": "quantity", "type": "decimal", "required": true, "precision": 10, "scale": 2, "min": 0.01, "default": 1, "description": "Units ordered" },
+        { "name": "delivered_quantity", "type": "decimal", "precision": 10, "scale": 2, "min": 0, "default": 0, "description": "Units already delivered" },
+        { "name": "unit_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Price per unit on the order" },
+        { "name": "discount_percent", "type": "decimal", "precision": 5, "scale": 2, "min": 0, "max": 100, "default": 0, "description": "Discount applied to this line" },
+        { "name": "total_price", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(quantity * unit_price * (1 - COALESCE(discount_percent, 0) / 100), 2)", "description": "Line total after the discount" }
+      ]
+    },
+    {
+      "name": "asset",
+      "plural_name": "assets",
+      "description": "Product a customer actually owns and runs. Support cases point at it, so an agent sees what broke.",
+      "id_presentation": { "fields": ["account.id_presentation", "serial_number"], "separator": " · ", "show": true },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Customer owning the asset" },
+        { "name": "product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "on_delete": "set_null", "description": "Product installed" },
+        { "name": "serial_number", "type": "string", "required": true, "min_length": 2, "max_length": 60, "description": "Serial number or licence key" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["purchased", "shipped", "installed", "registered", "obsolete"], "default": "purchased", "description": "State of the installed product" },
+        { "name": "contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Person who uses or administers it" },
+        { "name": "sales_order", "type": "relation_to_one", "subtype": "related_to", "target": "sales_order", "on_delete": "set_null", "description": "Order it was delivered with" },
+        { "name": "quantity", "type": "decimal", "precision": 10, "scale": 2, "min": 0, "default": 1, "description": "Units installed" },
+        { "name": "price", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "description": "Price paid for it" },
+        { "name": "purchase_date", "type": "date", "description": "Day it was bought" },
+        { "name": "install_date", "type": "date", "description": "Day it went live" },
+        { "name": "usage_end_date", "type": "date", "description": "Day support or the licence ends" },
+        { "name": "is_competitor_product", "type": "boolean", "default": false, "description": "Whether the asset is a competitor's product installed at the customer" }
+      ]
+    },
+    {
+      "name": "entitlement",
+      "plural_name": "entitlements",
+      "description": "Support a customer is entitled to: channel, response time and number of cases included",
+      "checks": ["end_date IS NULL OR start_date IS NULL OR end_date >= start_date"],
+      "id_presentation": { "fields": ["account.id_presentation", "name"], "separator": " · ", "show": true },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Customer covered" },
+        { "name": "name", "type": "string", "required": true, "min_length": 2, "max_length": 100, "description": "Name of the support plan (e.g. Premier Support 2026)" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["web_support", "phone_support", "premier_support"], "default": "web_support", "description": "Channels the customer may use" },
+        { "name": "contract", "type": "relation_to_one", "subtype": "related_to", "target": "contract", "on_delete": "set_null", "description": "Contract that grants this support" },
+        { "name": "start_date", "type": "date", "description": "First day covered" },
+        { "name": "end_date", "type": "date", "description": "Last day covered" },
+        { "name": "sla_response_hours", "type": "integer", "min": 1, "max": 168, "default": 24, "description": "Hours agreed to respond to a case" },
+        { "name": "cases_per_entitlement", "type": "integer", "min": 0, "description": "Cases included; empty means unlimited" },
+        { "name": "cases_used", "type": "integer", "min": 0, "default": 0, "description": "Cases already consumed" }
+      ]
+    },
+    {
+      "name": "support_case",
+      "plural_name": "support_cases",
+      "description": "Customer issue or question (case_workflow: new → working → escalated → closed). Named support_case because 'case' is a reserved SQL word.",
+      "data_size": "m",
+      "id_presentation": { "fields": ["id", "subject"], "separator": " · ", "show": true },
+      "documents": { "enabled": true, "tags": ["screenshot", "log"] },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Customer reporting the issue" },
+        { "name": "contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Person who reported it" },
+        { "name": "subject", "type": "string", "required": true, "min_length": 3, "max_length": 200, "size": "m", "description": "One-line summary of the issue" },
+        { "name": "description", "type": "markdown", "description": "Full description, steps to reproduce and impact" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["question", "problem", "incident", "feature_request"], "default": "question", "description": "Kind of case" },
+        { "name": "reason", "type": "enum", "enum_values": ["installation", "complexity", "performance", "breakdown", "design_defect", "user_error", "other"], "description": "Underlying cause" },
+        { "name": "origin", "type": "enum", "required": true, "enum_values": ["email", "phone", "web", "chat", "social"], "default": "email", "description": "Channel the case came in through" },
+        { "name": "priority", "type": "enum", "required": true, "enum_values": ["low", "medium", "high", "critical"], "default": "medium", "description": "How urgent the case is" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Support engineer handling the case" },
+        { "name": "asset", "type": "relation_to_one", "subtype": "related_to", "target": "asset", "on_delete": "set_null", "description": "Installed product the case is about" },
+        { "name": "entitlement", "type": "relation_to_one", "subtype": "related_to", "target": "entitlement", "on_delete": "set_null", "description": "Support plan the case is served under" },
+        { "name": "escalation_reason", "type": "string", "max_length": 200, "size": "m", "description": "Why the case was escalated; required to reach the escalated state" },
+        { "name": "resolution_code", "type": "enum", "enum_values": ["solved", "workaround", "duplicate", "no_fault_found", "cancelled"], "description": "How the case ended; required to close it" },
+        { "name": "resolution", "type": "markdown", "description": "What was done to solve it, for the next agent who hits the same problem" },
+        { "name": "opened_date", "type": "date", "description": "Day the customer reported it" },
+        { "name": "closed_date", "type": "date", "description": "Day it was closed" },
+        // Feeds account.open_case_count.
+        { "name": "is_open", "type": "integer", "calculated": "CASE WHEN \"state\" <> 'closed' THEN 1 ELSE 0 END", "description": "1 while the case is not closed, 0 afterwards" },
+        { "name": "comment_count", "type": "integer", "calculated": "rollup(count,case_comment,body)", "description": "Comments on the case" },
+        { "name": "sla_violated", "type": "integer", "calculated": "rollup(max,case_milestone,is_violated)", "description": "1 when any service commitment on the case was met late" }
+      ]
+    },
+    {
+      "name": "case_comment",
+      "plural_name": "case_comments",
+      "description": "Note on a case, either internal or visible to the customer",
+      "id_presentation": { "fields": ["support_case.id_presentation", "author.id_presentation"], "separator": " · ", "show": true },
+      "fields": [
+        { "name": "support_case", "type": "relation_to_one", "subtype": "part_of", "target": "support_case", "description": "Case being discussed" },
+        // Plain relation rather than copy_logged_on_insert so seed data can write comments
+        // on behalf of anyone; rules_level_3 makes it read-only for the support role.
+        { "name": "author", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Who wrote the note" },
+        { "name": "body", "type": "markdown", "required": true, "description": "Text of the note" },
+        { "name": "is_public", "type": "boolean", "default": false, "description": "Whether the customer sees this note" }
+      ]
+    },
+    {
+      "name": "activity",
+      "plural_name": "activities",
+      "description": "Call, email, meeting, demo or to-do logged against any record. It is the timeline a sales rep works from.",
+      "data_size": "m",
+      // Subject alone: a local-field id_presentation becomes a generated column, and
+      // casting a date to text there is not immutable enough for PostgreSQL.
+      "id_presentation": { "fields": ["subject"], "show": true },
+      "fields": [
+        { "name": "subject", "type": "string", "required": true, "min_length": 3, "max_length": 150, "size": "m", "description": "What the activity is about" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["call", "email", "meeting", "demo", "task"], "default": "task", "description": "Kind of activity" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["not_started", "in_progress", "completed", "deferred"], "default": "not_started", "description": "Where the activity stands" },
+        { "name": "priority", "type": "enum", "required": true, "enum_values": ["low", "normal", "high"], "default": "normal", "description": "How urgent it is" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Who has to do it" },
+        { "name": "due_date", "type": "date", "description": "Day it is due" },
+        { "name": "completed_date", "type": "date", "description": "Day it was done" },
+        { "name": "duration_minutes", "type": "integer", "min": 0, "max": 1440, "description": "How long the call or meeting took" },
+        // An activity points at a person (who) and a record (what); here each
+        // possible target is its own optional relation, so the timeline can be queried
+        // from any of them without a polymorphic key.
+        { "name": "account", "type": "relation_to_one", "subtype": "related_to", "target": "account", "on_delete": "set_null", "description": "Account this activity belongs to" },
+        { "name": "contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Person involved" },
+        { "name": "lead", "type": "relation_to_one", "subtype": "related_to", "target": "lead", "on_delete": "set_null", "description": "Lead involved, before conversion" },
+        { "name": "opportunity", "type": "relation_to_one", "subtype": "related_to", "target": "opportunity", "on_delete": "set_null", "description": "Deal this activity moves forward" },
+        { "name": "support_case", "type": "relation_to_one", "subtype": "related_to", "target": "support_case", "on_delete": "set_null", "description": "Case this activity belongs to" },
+        { "name": "attendees", "type": "relation_to_many", "target": "contact", "description": "Other people who joined the meeting or the call" },
+        { "name": "description", "type": "markdown", "description": "Agenda, notes taken and agreed next steps" }
+      ]
+    },
+    {
+      "name": "account_address",
+      "plural_name": "addresses",
+      "description": "Address of an account: where it is invoiced, where goods are delivered and where a technician is sent. Work orders and orders prefill their address from here.",
+      "id_presentation": { "fields": ["label"], "show": true },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Company this address belongs to" },
+        { "name": "label", "type": "string", "required": true, "max_length": 60, "description": "Address nickname (e.g. Headquarters, Madrid depot)" },
+        { "name": "address_type", "type": "enum", "required": true, "enum_values": ["billing", "shipping", "service", "office"], "default": "office", "description": "What the address is used for" },
+        { "name": "street_line_1", "type": "string", "required": true, "max_length": 200, "size": "m", "description": "Street address" },
+        { "name": "street_line_2", "type": "string", "max_length": 200, "size": "m", "description": "Floor, suite or building" },
+        { "name": "city", "type": "string", "required": true, "max_length": 100, "description": "City" },
+        { "name": "state_province", "type": "string", "max_length": 100, "description": "State or province" },
+        { "name": "postal_code", "type": "string", "max_length": 20, "description": "Postal / ZIP code" },
+        { "name": "country", "type": "string", "required": true, "max_length": 100, "description": "Country" },
+        { "name": "contact_phone", "type": "string", "max_length": 30, "description": "Phone to call before arriving" },
+        { "name": "access_notes", "type": "string", "max_length": 300, "size": "m", "description": "How to get in: gate code, loading dock, opening hours" },
+        { "name": "is_primary", "type": "boolean", "default": false, "description": "Main address of its type for this account" }
+      ]
+    },
+    {
+      "name": "opportunity_contact_role",
+      "plural_name": "opportunity_contact_roles",
+      "description": "Person from the customer taking part in a deal, and the part they play in the decision — the buying committee behind an opportunity",
+      "id_presentation": { "fields": ["opportunity.id_presentation", "contact.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "opportunity", "type": "relation_to_one", "subtype": "part_of", "target": "opportunity", "description": "Deal being decided" },
+        { "name": "contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "required": true, "description": "Person involved" },
+        { "name": "role", "type": "enum", "required": true, "enum_values": ["decision_maker", "economic_buyer", "evaluator", "influencer", "technical_buyer", "executive_sponsor", "blocker", "other"], "default": "influencer", "description": "Part this person plays in the decision" },
+        { "name": "is_primary", "type": "boolean", "default": false, "description": "Main counterpart for the deal" },
+        { "name": "stance", "type": "enum", "enum_values": ["champion", "supportive", "neutral", "sceptical", "opposed"], "description": "How this person leans towards our offer" },
+        { "name": "notes", "type": "string", "max_length": 300, "size": "m", "description": "What this person cares about" }
+      ]
+    },
+    {
+      "name": "opportunity_competitor",
+      "plural_name": "opportunity_competitors",
+      "description": "Competitor fighting for a deal, with the reading the team has of them",
+      "id_presentation": { "fields": ["opportunity.id_presentation", "name"], "separator": " · " },
+      "fields": [
+        { "name": "opportunity", "type": "relation_to_one", "subtype": "part_of", "target": "opportunity", "description": "Deal being contested" },
+        { "name": "name", "type": "string", "required": true, "min_length": 2, "max_length": 100, "description": "Competitor name" },
+        { "name": "is_primary", "type": "boolean", "default": false, "description": "The one to beat" },
+        { "name": "strengths", "type": "string", "max_length": 300, "size": "m", "description": "Where they are stronger than us" },
+        { "name": "weaknesses", "type": "string", "max_length": 300, "size": "m", "description": "Where we win against them" },
+        { "name": "quoted_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "description": "Price they are known to have quoted" }
+      ]
+    },
+    {
+      "name": "opportunity_team_member",
+      "plural_name": "opportunity_team_members",
+      "description": "Colleague working a deal beside its owner, with the access they are granted",
+      "id_presentation": { "fields": ["opportunity.id_presentation", "sales_rep.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "opportunity", "type": "relation_to_one", "subtype": "part_of", "target": "opportunity", "description": "Deal being worked" },
+        { "name": "sales_rep", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Team member" },
+        { "name": "team_role", "type": "enum", "required": true, "enum_values": ["account_manager", "sales_engineer", "solution_architect", "executive_sponsor", "channel_manager", "legal"], "default": "sales_engineer", "description": "What they contribute to the deal" },
+        { "name": "contribution", "type": "string", "max_length": 200, "size": "m", "description": "What they are on the hook for" }
+      ]
+    },
+    {
+      "name": "opportunity_split",
+      "plural_name": "opportunity_splits",
+      "description": "Share of a deal credited to a rep for quota and commission. The amounts follow the deal: the parent amount is copied in, so a split is never left quoting a stale figure.",
+      "checks": ["split_percent > 0"],
+      "id_presentation": { "fields": ["opportunity.id_presentation", "sales_rep.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "opportunity", "type": "relation_to_one", "subtype": "part_of", "target": "opportunity", "description": "Deal being split" },
+        { "name": "sales_rep", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Rep credited" },
+        { "name": "split_type", "type": "enum", "required": true, "enum_values": ["revenue", "overlay"], "default": "revenue", "description": "Revenue splits share the deal amount; overlay splits credit extra people on top" },
+        { "name": "split_percent", "type": "decimal", "required": true, "precision": 5, "scale": 2, "min": 0, "max": 100, "description": "Percentage of the deal credited to this rep" },
+        { "name": "opportunity_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "copy(opportunity,amount,on_change)", "description": "Amount of the deal when the split was last touched" },
+        { "name": "split_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(COALESCE(opportunity_amount, 0) * split_percent / 100, 2)", "description": "Amount credited to this rep" }
+      ]
+    },
+    {
+      "name": "account_team_member",
+      "plural_name": "account_team_members",
+      "description": "Colleague assigned to an account beyond its owner: customer success, support, the executive sponsor",
+      "id_presentation": { "fields": ["account.id_presentation", "sales_rep.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Customer being served" },
+        { "name": "sales_rep", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Team member" },
+        { "name": "team_role", "type": "enum", "required": true, "enum_values": ["account_manager", "customer_success", "support_engineer", "executive_sponsor", "renewal_manager"], "default": "customer_success", "description": "Their role on this account" },
+        { "name": "since", "type": "date", "description": "Day they joined the account team" },
+        { "name": "notes", "type": "string", "max_length": 200, "size": "m", "description": "Scope of their involvement" }
+      ]
+    },
+    {
+      "name": "contract_contact_role",
+      "plural_name": "contract_contact_roles",
+      "description": "Person named on a contract: who signs it, who is invoiced, who is called when something breaks",
+      "id_presentation": { "fields": ["contract.id_presentation", "contact.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "contract", "type": "relation_to_one", "subtype": "part_of", "target": "contract", "description": "Contract being signed" },
+        { "name": "contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "required": true, "description": "Person named" },
+        { "name": "role", "type": "enum", "required": true, "enum_values": ["signatory", "billing", "technical", "legal", "escalation"], "default": "signatory", "description": "Why they are on the contract" },
+        { "name": "is_primary", "type": "boolean", "default": false, "description": "Main person for this role" }
+      ]
+    },
+    {
+      "name": "partner",
+      "plural_name": "partners",
+      "description": "Relationship between two accounts: the reseller that brings deals, the integrator that delivers them",
+      "id_presentation": { "fields": ["account.id_presentation", "partner_account.id_presentation"], "separator": " ↔ " },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Account the relationship is seen from" },
+        { "name": "partner_account", "type": "relation_to_one", "subtype": "related_to", "target": "account", "required": true, "description": "The other company" },
+        { "name": "role", "type": "enum", "required": true, "enum_values": ["reseller", "system_integrator", "referral", "technology", "distributor"], "default": "reseller", "description": "What the partner does for us" },
+        { "name": "tier", "type": "enum", "enum_values": ["registered", "silver", "gold", "platinum"], "description": "Level in the partner programme" },
+        { "name": "is_primary", "type": "boolean", "default": false, "description": "Main partner of the account" },
+        { "name": "since", "type": "date", "description": "Start of the relationship" }
+      ]
+    },
+    {
+      "name": "territory",
+      "plural_name": "territories",
+      "description": "Sales or service territory. Territories nest (Iberia → Spain → Levante), so this is a tree: deleting a parent removes the branch under it.",
+      "id_presentation": { "fields": ["parent.id_presentation", "name"], "separator": " / ", "show": true },
+      "fields": [
+        { "name": "parent", "type": "relation_to_one", "subtype": "part_of", "target": "territory", "description": "Territory this one belongs to (empty for a root)" },
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 80, "description": "Territory name" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["sales", "service"], "default": "sales", "description": "Sales territories route deals; service territories route technicians" },
+        { "name": "manager", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Person accountable for the territory" },
+        { "name": "description", "type": "string", "max_length": 300, "size": "m", "description": "What the territory covers" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Whether the territory is in use" }
+      ]
+    },
+    {
+      "name": "territory_assignment",
+      "plural_name": "territory_assignments",
+      "description": "Account covered by a territory, and whether it is its main one",
+      "id_presentation": { "fields": ["territory.id_presentation", "account.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "territory", "type": "relation_to_one", "subtype": "part_of", "target": "territory", "description": "Territory covering the account" },
+        { "name": "account", "type": "relation_to_one", "subtype": "related_to", "target": "account", "required": true, "description": "Account covered" },
+        { "name": "assignment_type", "type": "enum", "required": true, "enum_values": ["primary", "secondary"], "default": "primary", "description": "Main territory of the account, or an additional one" },
+        { "name": "assigned_on", "type": "date", "description": "Day the account was assigned" }
+      ]
+    },
+    {
+      "name": "quota_period",
+      "plural_name": "quota_periods",
+      "description": "Quota of a rep for one period. The forecast measures attainment against the period that contains the deals being closed.",
+      "checks": ["period_end IS NULL OR period_start IS NULL OR period_end >= period_start"],
+      "id_presentation": { "fields": ["sales_rep.id_presentation", "label"], "separator": " · ", "show": true },
+      "fields": [
+        { "name": "sales_rep", "type": "relation_to_one", "subtype": "part_of", "target": "sales_rep", "description": "Rep carrying the quota" },
+        { "name": "label", "type": "string", "required": true, "min_length": 4, "max_length": 20, "description": "Period name (e.g. 2026-Q3)" },
+        { "name": "period_start", "type": "date", "description": "First day of the period" },
+        { "name": "period_end", "type": "date", "description": "Last day of the period" },
+        { "name": "amount", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Amount the rep is expected to close in the period" },
+        { "name": "notes", "type": "string", "max_length": 200, "size": "m", "description": "Why the quota was set at this level" }
+      ]
+    },
+    {
+      "name": "campaign_influence",
+      "plural_name": "campaign_influences",
+      "description": "Share of a deal attributed to a campaign. It is what closes the loop between marketing spend and won revenue.",
+      "id_presentation": { "fields": ["opportunity.id_presentation", "campaign.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "opportunity", "type": "relation_to_one", "subtype": "part_of", "target": "opportunity", "description": "Deal the campaign influenced" },
+        { "name": "campaign", "type": "relation_to_one", "subtype": "related_to", "target": "campaign", "required": true, "description": "Campaign taking the credit" },
+        { "name": "model", "type": "enum", "required": true, "enum_values": ["primary", "first_touch", "last_touch", "even"], "default": "even", "description": "Attribution model this share was computed with" },
+        { "name": "influence_percent", "type": "decimal", "required": true, "precision": 5, "scale": 2, "min": 0, "max": 100, "default": 100, "description": "Percentage of the deal attributed to the campaign" },
+        { "name": "opportunity_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "copy(opportunity,amount,on_change)", "description": "Amount of the deal when the attribution was last touched" },
+        { "name": "attributed_revenue", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(COALESCE(opportunity_amount, 0) * influence_percent / 100, 2)", "description": "Revenue credited to the campaign" }
+      ]
+    },
+    {
+      "name": "email_template",
+      "plural_name": "email_templates",
+      "description": "Reusable email the team sends from a record: an outreach sequence, a quote cover letter, a case acknowledgement",
+      "id_presentation": { "fields": ["name"], "show": true },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 3, "max_length": 100, "description": "Template name" },
+        { "name": "folder", "type": "enum", "required": true, "enum_values": ["sales", "service", "marketing"], "default": "sales", "description": "Team the template belongs to" },
+        { "name": "subject", "type": "string", "required": true, "max_length": 200, "size": "m", "description": "Subject line, with the merge fields between braces" },
+        { "name": "body", "type": "markdown", "required": true, "description": "Body of the email" },
+        { "name": "language", "type": "enum", "required": true, "enum_values": ["en", "es"], "default": "en", "description": "Language it is written in" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Whether it can still be picked" }
+      ]
+    },
+    {
+      "name": "email_message",
+      "plural_name": "email_messages",
+      "description": "Email exchanged with the customer about a case — the thread a support agent reads before answering",
+      "data_size": "m",
+      "id_presentation": { "fields": ["support_case.id_presentation", "subject"], "separator": " · " },
+      "fields": [
+        { "name": "support_case", "type": "relation_to_one", "subtype": "part_of", "target": "support_case", "description": "Case being discussed" },
+        { "name": "direction", "type": "enum", "required": true, "enum_values": ["inbound", "outbound"], "default": "inbound", "description": "Received from the customer or sent to them" },
+        { "name": "from_address", "type": "string", "required": true, "max_length": 150, "description": "Sender address" },
+        { "name": "to_address", "type": "string", "required": true, "max_length": 300, "size": "m", "description": "Recipients" },
+        { "name": "subject", "type": "string", "required": true, "max_length": 200, "size": "m", "description": "Subject line" },
+        { "name": "body", "type": "markdown", "description": "Message text" },
+        { "name": "template", "type": "relation_to_one", "subtype": "related_to", "target": "email_template", "on_delete": "set_null", "description": "Template it was written from" },
+        { "name": "sent_at", "type": "datetime", "precision": "minute", "description": "When it was sent or received" },
+        { "name": "has_attachment", "type": "boolean", "default": false, "description": "Whether the mail carried files" }
+      ]
+    },
+    {
+      "name": "knowledge_category",
+      "plural_name": "knowledge_categories",
+      "description": "Section of the knowledge base (Getting started, Integrations, Troubleshooting…)",
+      "id_presentation": { "fields": ["name"], "show": true },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 80, "description": "Category name" },
+        { "name": "description", "type": "string", "max_length": 300, "size": "m", "description": "What belongs in this category" },
+        { "name": "sort_order", "type": "integer", "min": 0, "default": 100, "description": "Position in the knowledge base navigation" }
+      ]
+    },
+    {
+      "name": "knowledge_article",
+      "plural_name": "knowledge_articles",
+      "description": "Answer written once and reused: how-to, troubleshooting guide or known issue. Agents attach it to a case instead of retyping the explanation.",
+      "data_size": "m",
+      "id_presentation": { "fields": ["title"], "show": true },
+      "documents": { "enabled": true, "tags": ["attachment", "screenshot"] },
+      "fields": [
+        { "name": "title", "type": "string", "required": true, "unique": true, "min_length": 5, "max_length": 150, "size": "m", "description": "Question the article answers" },
+        { "name": "category", "type": "relation_to_one", "subtype": "related_to", "target": "knowledge_category", "on_delete": "set_null", "description": "Section it belongs to" },
+        { "name": "summary", "type": "string", "max_length": 300, "size": "m", "description": "One-paragraph answer for the search results" },
+        { "name": "body", "type": "markdown", "required": true, "description": "Full article, with the steps and the reasoning" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["draft", "in_review", "published", "archived"], "default": "draft", "description": "Where the article stands in its review cycle" },
+        { "name": "language", "type": "enum", "required": true, "enum_values": ["en", "es"], "default": "en", "description": "Language it is written in" },
+        { "name": "is_public", "type": "boolean", "default": false, "description": "Whether customers may see it, or only agents" },
+        { "name": "author", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Who wrote it" },
+        { "name": "published_on", "type": "date", "description": "Day it went live" },
+        { "name": "keywords", "type": "string", "max_length": 200, "size": "m", "description": "Terms people search for when they need this" },
+        { "name": "view_count", "type": "integer", "min": 0, "default": 0, "description": "Times it has been opened" },
+        { "name": "helpful_count", "type": "integer", "min": 0, "default": 0, "description": "Times it solved the reader's problem" }
+      ]
+    },
+    {
+      "name": "milestone_type",
+      "plural_name": "milestone_types",
+      "description": "Kind of service commitment a case is measured against (first response, resolution). Owned by the model and synchronised on every deployment.",
+      "id_presentation": { "fields": ["name"], "show": true },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 3, "max_length": 60, "description": "Commitment name" },
+        { "name": "target_hours", "type": "integer", "required": true, "min": 1, "max": 720, "default": 24, "description": "Hours allowed before the commitment is missed" },
+        { "name": "applies_to_priority", "type": "enum", "required": true, "enum_values": ["any", "high", "critical"], "default": "any", "description": "Cases this commitment applies to" },
+        { "name": "description", "type": "string", "max_length": 200, "size": "m", "description": "What has to happen before the clock stops" }
+      ]
+    },
+    {
+      "name": "case_milestone",
+      "plural_name": "case_milestones",
+      "description": "Service commitment running on a case, with the clock that decides whether the SLA was met",
+      "id_presentation": { "fields": ["support_case.id_presentation", "name"], "separator": " · " },
+      "fields": [
+        { "name": "support_case", "type": "relation_to_one", "subtype": "part_of", "target": "support_case", "description": "Case under commitment" },
+        { "name": "name", "type": "string", "required": true, "min_length": 3, "max_length": 60, "description": "Commitment being measured, snapshotted from the catalogue" },
+        { "name": "milestone_type", "type": "relation_to_one", "subtype": "related_to", "target": "milestone_type", "on_delete": "set_null", "description": "Entry of the catalogue this commitment came from" },
+        { "name": "target_hours", "type": "integer", "min": 1, "max": 720, "description": "Hours allowed, as agreed when the clock started" },
+        { "name": "started_at", "type": "datetime", "precision": "minute", "description": "When the clock started" },
+        { "name": "target_at", "type": "datetime", "precision": "minute", "description": "Deadline the commitment has to be met by" },
+        { "name": "completed_at", "type": "datetime", "precision": "minute", "description": "When the commitment was actually met" },
+        // Only a finished milestone can be judged here: a generated column may not call
+        // now(), so the SLA report computes the overdue-but-open case with CURRENT_TIMESTAMP.
+        { "name": "is_violated", "type": "integer", "calculated": "CASE WHEN completed_at IS NOT NULL AND target_at IS NOT NULL AND completed_at > target_at THEN 1 ELSE 0 END", "description": "1 when the commitment was met late, 0 otherwise" },
+        { "name": "notes", "type": "string", "max_length": 200, "size": "m", "description": "Why it was missed, when it was" }
+      ]
+    },
+    {
+      "name": "case_team_member",
+      "plural_name": "case_team_members",
+      "description": "Colleague pulled into a case beyond its owner: a specialist, the duty manager, an observer from sales",
+      "id_presentation": { "fields": ["support_case.id_presentation", "sales_rep.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "support_case", "type": "relation_to_one", "subtype": "part_of", "target": "support_case", "description": "Case being worked" },
+        { "name": "sales_rep", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Colleague involved" },
+        { "name": "role", "type": "enum", "required": true, "enum_values": ["specialist", "duty_manager", "account_owner", "observer"], "default": "specialist", "description": "Why they were pulled in" },
+        { "name": "is_visible_to_customer", "type": "boolean", "default": false, "description": "Whether the customer sees them on the case" }
+      ]
+    },
+    {
+      "name": "service_contract",
+      "plural_name": "service_contracts",
+      "description": "Support agreement of an account: the level of service bought, what it covers and until when",
+      "checks": ["end_date IS NULL OR start_date IS NULL OR end_date >= start_date"],
+      "id_presentation": { "fields": ["account.id_presentation", "name"], "separator": " · ", "show": true },
+      "documents": { "enabled": true, "tags": ["signed_contract", "sla_annex"] },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Customer covered" },
+        { "name": "name", "type": "string", "required": true, "min_length": 3, "max_length": 100, "description": "Name of the agreement" },
+        { "name": "contract", "type": "relation_to_one", "subtype": "related_to", "target": "contract", "on_delete": "set_null", "description": "Commercial contract it hangs from" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["draft", "activated", "expired", "cancelled"], "default": "draft", "description": "Where the agreement stands" },
+        { "name": "support_level", "type": "enum", "required": true, "enum_values": ["standard", "premium", "mission_critical"], "default": "standard", "description": "Level of service bought" },
+        { "name": "response_hours", "type": "integer", "min": 1, "max": 168, "default": 24, "description": "Hours agreed for the first response" },
+        { "name": "coverage", "type": "enum", "required": true, "enum_values": ["business_hours", "extended", "24x7"], "default": "business_hours", "description": "When the customer may raise a critical case" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Person accountable for the service" },
+        { "name": "start_date", "type": "date", "description": "First day covered" },
+        { "name": "end_date", "type": "date", "description": "Last day covered" },
+        { "name": "total_value", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "description": "Value of the agreement" },
+        { "name": "line_total", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "rollup(sum,service_contract_line,total_price)", "description": "Sum of the covered items" }
+      ]
+    },
+    {
+      "name": "service_contract_line",
+      "plural_name": "service_contract_lines",
+      "description": "Product or installed asset covered by a service agreement, for the period it is covered",
+      "id_presentation": { "fields": ["service_contract.id_presentation", "product.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "service_contract", "type": "relation_to_one", "subtype": "part_of", "target": "service_contract", "description": "Agreement covering the item" },
+        { "name": "product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "on_delete": "set_null", "description": "Product covered" },
+        { "name": "asset", "type": "relation_to_one", "subtype": "related_to", "target": "asset", "on_delete": "set_null", "description": "Installed unit covered, when the cover is per unit" },
+        { "name": "quantity", "type": "decimal", "required": true, "precision": 10, "scale": 2, "min": 0.01, "default": 1, "description": "Units covered" },
+        { "name": "unit_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Price per unit and period" },
+        { "name": "total_price", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(quantity * unit_price, 2)", "description": "Line total" },
+        { "name": "start_date", "type": "date", "description": "First day this item is covered" },
+        { "name": "end_date", "type": "date", "description": "Last day this item is covered" }
+      ]
+    },
+    {
+      "name": "business_hours",
+      "plural_name": "business_hours_sets",
+      "description": "Working calendar a service commitment is measured against: when the clock runs and when it is paused",
+      "id_presentation": { "fields": ["name"], "show": true },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 3, "max_length": 80, "description": "Calendar name (e.g. Iberia office hours)" },
+        { "name": "time_zone", "type": "string", "required": true, "max_length": 60, "default": "Europe/Madrid", "description": "IANA time zone the hours are expressed in" },
+        { "name": "weekday_open_hour", "type": "integer", "required": true, "min": 0, "max": 23, "default": 9, "description": "Hour the working day starts, Monday to Friday" },
+        { "name": "weekday_close_hour", "type": "integer", "required": true, "min": 1, "max": 24, "default": 18, "description": "Hour the working day ends, Monday to Friday" },
+        { "name": "saturday_open_hour", "type": "integer", "min": 0, "max": 23, "description": "Hour Saturday cover starts; empty means closed" },
+        { "name": "saturday_close_hour", "type": "integer", "min": 1, "max": 24, "description": "Hour Saturday cover ends" },
+        { "name": "is_24x7", "type": "boolean", "default": false, "description": "Round-the-clock cover: hours and holidays do not apply" },
+        { "name": "is_default", "type": "boolean", "default": false, "description": "Calendar used when a case has no other" }
+      ]
+    },
+    {
+      "name": "holiday",
+      "plural_name": "holidays",
+      "description": "Day the service clock is paused for a working calendar",
+      // The label goes through the calendar so it is a trigger-built value: a date cast to
+      // text is not immutable enough for a generated column.
+      "id_presentation": { "fields": ["business_hours.id_presentation", "name"], "separator": " · " },
+      "fields": [
+        { "name": "business_hours", "type": "relation_to_one", "subtype": "part_of", "target": "business_hours", "description": "Calendar the holiday belongs to" },
+        { "name": "name", "type": "string", "required": true, "min_length": 3, "max_length": 80, "description": "Holiday name" },
+        { "name": "holiday_date", "type": "date", "required": true, "description": "Day off" },
+        { "name": "is_recurring", "type": "boolean", "default": false, "description": "Whether it falls on the same date every year" },
+        { "name": "description", "type": "string", "max_length": 200, "size": "m", "description": "Scope of the closure" }
+      ]
+    },
+    {
+      "name": "skill",
+      "plural_name": "skills",
+      "description": "Capability a technician can hold (a product certification, a language, an electrical licence). Owned by the model and synchronised on every deployment.",
+      "id_presentation": { "fields": ["name"], "show": true },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 2, "max_length": 60, "description": "Skill name" },
+        { "name": "category", "type": "enum", "required": true, "enum_values": ["product", "technical", "certification", "language"], "default": "technical", "description": "Kind of capability" },
+        { "name": "description", "type": "string", "max_length": 200, "size": "m", "description": "What someone with this skill can do" }
+      ]
+    },
+    {
+      "name": "work_type",
+      "plural_name": "work_types",
+      "description": "Standard job a field team performs: how long it takes and what the technician must be able to do",
+      "id_presentation": { "fields": ["name"], "show": true },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 3, "max_length": 80, "description": "Job name (e.g. Gateway installation)" },
+        { "name": "estimated_duration_minutes", "type": "integer", "required": true, "min": 15, "max": 2880, "default": 120, "description": "How long the job usually takes" },
+        { "name": "required_skills", "type": "relation_to_many", "target": "skill", "description": "Capabilities a technician needs to be sent to this job" },
+        { "name": "default_priority", "type": "enum", "required": true, "enum_values": ["low", "medium", "high", "critical"], "default": "medium", "description": "Priority a work order of this type starts with" },
+        { "name": "requires_signature", "type": "boolean", "default": false, "description": "Whether the customer has to sign the job off on site" },
+        { "name": "description", "type": "markdown", "description": "What the job includes and the safety notes" }
+      ]
+    },
+    {
+      "name": "service_resource",
+      "plural_name": "service_resources",
+      "description": "Who can be sent to a job: a technician, a crew or a subcontractor, with the territory they work in",
+      "id_presentation": { "fields": ["name"], "show": true },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "min_length": 3, "max_length": 80, "description": "Resource name (person or crew)" },
+        { "name": "sales_rep", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Internal user behind the resource, when it is a person" },
+        { "name": "resource_type", "type": "enum", "required": true, "enum_values": ["technician", "crew", "dispatcher", "contractor"], "default": "technician", "description": "Kind of resource" },
+        { "name": "territory", "type": "relation_to_one", "subtype": "related_to", "target": "territory", "on_delete": "set_null", "description": "Service territory it works in" },
+        { "name": "phone", "type": "string", "max_length": 30, "description": "Number the dispatcher calls" },
+        { "name": "capacity_hours_per_week", "type": "decimal", "precision": 5, "scale": 1, "min": 0, "max": 168, "default": 40, "description": "Hours it can be scheduled for in a week" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Whether it can be scheduled today" }
+      ]
+    },
+    {
+      "name": "resource_skill",
+      "plural_name": "resource_skills",
+      "description": "Capability a resource holds, at what level and until when the certification lasts",
+      "id_presentation": { "fields": ["service_resource.id_presentation", "skill.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "service_resource", "type": "relation_to_one", "subtype": "part_of", "target": "service_resource", "description": "Resource holding the skill" },
+        { "name": "skill", "type": "relation_to_one", "subtype": "related_to", "target": "skill", "on_delete": "set_null", "description": "Capability held" },
+        { "name": "level", "type": "enum", "required": true, "enum_values": ["beginner", "competent", "expert"], "default": "competent", "description": "How deep the capability goes" },
+        { "name": "certified_on", "type": "date", "description": "Day the certification was obtained" },
+        { "name": "certified_until", "type": "date", "description": "Day it expires" }
+      ]
+    },
+    {
+      "name": "work_order",
+      "plural_name": "work_orders",
+      "description": "Job to be done at a customer site (work_order_workflow: new → dispatched → in_progress → completed). It is what a support case turns into when somebody has to travel.",
+      "data_size": "m",
+      "id_presentation": { "fields": ["id", "subject"], "separator": " · ", "show": true },
+      "documents": { "enabled": true, "tags": ["photo", "signature", "report"] },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Customer the job is for" },
+        { "name": "subject", "type": "string", "required": true, "min_length": 3, "max_length": 150, "size": "m", "description": "What has to be done" },
+        { "name": "description", "type": "markdown", "description": "Full instructions for the technician" },
+        { "name": "support_case", "type": "relation_to_one", "subtype": "related_to", "target": "support_case", "on_delete": "set_null", "description": "Case that triggered the visit" },
+        { "name": "work_type", "type": "relation_to_one", "subtype": "related_to", "target": "work_type", "on_delete": "set_null", "description": "Standard job being performed" },
+        { "name": "asset", "type": "relation_to_one", "subtype": "related_to", "target": "asset", "on_delete": "set_null", "description": "Installed unit to work on" },
+        { "name": "contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Person to ask for on arrival" },
+        { "name": "territory", "type": "relation_to_one", "subtype": "related_to", "target": "territory", "on_delete": "set_null", "description": "Service territory that has to cover it" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Dispatcher responsible for the job" },
+        // Prefilled from the account's saved addresses, the same way b2c-app prefills an
+        // order's shipping address from the customer's.
+        { "name": "service_address", "type": "prefill", "subtype": "account.addresses", "description": "Where the technician has to go" },
+        { "name": "priority", "type": "enum", "required": true, "enum_values": ["low", "medium", "high", "critical"], "default": "medium", "description": "How urgent the visit is" },
+        { "name": "scheduled_start", "type": "datetime", "precision": "minute", "description": "When the visit is planned to start" },
+        { "name": "scheduled_end", "type": "datetime", "precision": "minute", "description": "When it is planned to finish" },
+        { "name": "duration_hours", "type": "decimal", "precision": 5, "scale": 2, "min": 0, "description": "Hours actually spent on site" },
+        { "name": "resolution", "type": "markdown", "description": "What the technician did and what is left" },
+        { "name": "line_total", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "rollup(sum,work_order_line,total_price)", "description": "Billable total of the job" },
+        { "name": "appointment_count", "type": "integer", "calculated": "rollup(count,service_appointment,status)", "description": "Visits scheduled for this job" }
+      ]
+    },
+    {
+      "name": "work_order_line",
+      "plural_name": "work_order_lines",
+      "description": "One task inside a job, with what it costs the customer",
+      "data_size": "m",
+      "id_presentation": { "fields": ["work_order.id_presentation", "description"], "separator": " · " },
+      "fields": [
+        { "name": "work_order", "type": "relation_to_one", "subtype": "part_of", "target": "work_order", "description": "Job this task belongs to" },
+        { "name": "description", "type": "string", "required": true, "min_length": 3, "max_length": 100, "size": "m", "description": "Task performed" },
+        { "name": "product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "on_delete": "set_null", "description": "Service or product billed for the task" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["new", "in_progress", "completed", "cannot_complete"], "default": "new", "description": "Where the task stands" },
+        { "name": "quantity", "type": "decimal", "required": true, "precision": 10, "scale": 2, "min": 0.01, "default": 1, "description": "Units or hours billed" },
+        { "name": "unit_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "default": 0, "description": "Price per unit" },
+        { "name": "total_price", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(quantity * unit_price, 2)", "description": "Line total" },
+        { "name": "duration_hours", "type": "decimal", "precision": 5, "scale": 2, "min": 0, "description": "Hours the task took" }
+      ]
+    },
+    {
+      "name": "service_appointment",
+      "plural_name": "service_appointments",
+      "description": "Visit scheduled for a job: who goes, when they are expected and when they actually arrived",
+      "data_size": "m",
+      "id_presentation": { "fields": ["work_order.id_presentation", "service_resource.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "work_order", "type": "relation_to_one", "subtype": "part_of", "target": "work_order", "description": "Job being visited" },
+        { "name": "service_resource", "type": "relation_to_one", "subtype": "related_to", "target": "service_resource", "on_delete": "set_null", "description": "Who is going" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["none", "scheduled", "dispatched", "in_progress", "completed", "cannot_complete"], "default": "none", "description": "Where the visit stands" },
+        { "name": "scheduled_start", "type": "datetime", "required": true, "precision": "minute", "description": "Start of the agreed window" },
+        { "name": "scheduled_end", "type": "datetime", "precision": "minute", "description": "End of the agreed window" },
+        { "name": "actual_start", "type": "datetime", "precision": "minute", "description": "When the technician actually arrived" },
+        { "name": "actual_end", "type": "datetime", "precision": "minute", "description": "When they left" },
+        { "name": "travel_minutes", "type": "integer", "min": 0, "max": 600, "description": "Travel time to the site" },
+        { "name": "contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Person meeting the technician" },
+        { "name": "notes", "type": "string", "max_length": 300, "size": "m", "description": "What happened on the visit" }
+      ]
+    },
+    {
+      "name": "product_consumed",
+      "plural_name": "products_consumed",
+      "description": "Part or material used up on a job task, so the stock and the invoice both reflect it",
+      "id_presentation": { "fields": ["work_order_line.id_presentation", "product.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "work_order_line", "type": "relation_to_one", "subtype": "part_of", "target": "work_order_line", "description": "Task the material was used on" },
+        { "name": "product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "on_delete": "set_null", "description": "Part used" },
+        { "name": "quantity", "type": "decimal", "required": true, "precision": 10, "scale": 2, "min": 0.01, "default": 1, "description": "Units consumed" },
+        { "name": "unit_price", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "min": 0, "default": 0, "description": "Price charged per unit" },
+        { "name": "total_price", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(quantity * COALESCE(unit_price, 0), 2)", "description": "Material total" },
+        { "name": "is_billable", "type": "boolean", "default": true, "description": "Whether the customer pays for it or it goes under warranty" }
+      ]
+    },
+    {
+      "name": "invoice",
+      "plural_name": "invoices",
+      "description": "Bill sent to a customer (invoice_workflow: draft → issued → paid). The balance is what the payments still have to cover, and it is the amount the payment function charges.",
+      "data_size": "m",
+      "id_presentation": { "fields": ["account.id_presentation", "reference"], "separator": " · ", "show": true },
+      "documents": { "enabled": true, "versioned": true, "tags": ["invoice_pdf"] },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Customer being billed" },
+        { "name": "reference", "type": "string", "required": true, "unique": true, "min_length": 3, "max_length": 40, "description": "Invoice number (e.g. INV-2026-0142)" },
+        { "name": "sales_order", "type": "relation_to_one", "subtype": "related_to", "target": "sales_order", "on_delete": "set_null", "description": "Order being billed" },
+        { "name": "contract", "type": "relation_to_one", "subtype": "related_to", "target": "contract", "on_delete": "set_null", "description": "Contract the billing runs under" },
+        { "name": "contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Person in accounts payable" },
+        { "name": "issue_date", "type": "date", "description": "Day the invoice was issued" },
+        { "name": "due_date", "type": "date", "description": "Day the money is due" },
+        { "name": "payment_terms", "type": "enum", "required": true, "enum_values": ["prepaid", "net_15", "net_30", "net_60"], "default": "net_30", "description": "Agreed terms" },
+        { "name": "notes", "type": "markdown", "description": "Purchase order reference, breakdown notes or anything the customer asked to see" },
+        { "name": "subtotal", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "rollup(sum,invoice_line,total_price)", "description": "Sum of the invoice lines" },
+        { "name": "tax_percent", "type": "decimal", "precision": 5, "scale": 2, "min": 0, "max": 100, "default": 21, "description": "Tax rate applied" },
+        { "name": "total", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(COALESCE(subtotal, 0) * (1 + COALESCE(tax_percent, 0) / 100), 2)", "description": "Amount due, taxes included" },
+        { "name": "paid_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "rollup(sum,payment,cleared_amount)", "description": "Money actually cleared against this invoice; a failed or pending payment does not count" },
+        // A generated column cannot reference another generated column, so the total is
+        // recomputed here instead of referencing 'total'.
+        { "name": "balance", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(COALESCE(subtotal, 0) * (1 + COALESCE(tax_percent, 0) / 100), 2) - COALESCE(paid_amount, 0)", "description": "What is still owed; the workflow refuses to close the invoice until it is zero" },
+        // Written by the generated payment function when the customer pays by card.
+        { "name": "payment_status", "type": "string", "max_length": 20, "calculated": "by_rules", "description": "Card payment status: pending, paid or failed (empty when paid by other means)" },
+        { "name": "payment_reference", "type": "string", "max_length": 100, "calculated": "by_rules", "description": "Payment provider reference" }
+      ]
+    },
+    {
+      "name": "invoice_line",
+      "plural_name": "invoice_lines",
+      "description": "Line of an invoice, traced back to what was ordered",
+      "data_size": "m",
+      "id_presentation": { "fields": ["invoice.id_presentation", "description"], "separator": " · " },
+      "fields": [
+        { "name": "invoice", "type": "relation_to_one", "subtype": "part_of", "target": "invoice", "description": "Invoice this line belongs to" },
+        { "name": "description", "type": "string", "required": true, "min_length": 3, "max_length": 120, "size": "m", "description": "What is being billed" },
+        { "name": "product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "on_delete": "set_null", "description": "Product billed" },
+        { "name": "order_line", "type": "relation_to_one", "subtype": "related_to", "target": "order_line", "on_delete": "set_null", "description": "Order line this bills" },
+        { "name": "quantity", "type": "decimal", "required": true, "precision": 10, "scale": 2, "min": 0.01, "default": 1, "description": "Units billed" },
+        { "name": "unit_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Price per unit" },
+        { "name": "total_price", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(quantity * unit_price, 2)", "description": "Line total before taxes" },
+        { "name": "period_label", "type": "string", "max_length": 20, "description": "Period this line covers, for subscriptions (e.g. 2026-Q3)" }
+      ]
+    },
+    {
+      "name": "payment",
+      "plural_name": "payments",
+      "description": "Money received against an invoice. The rollup of these is what clears the invoice balance.",
+      "id_presentation": { "fields": ["invoice.id_presentation", "reference"], "separator": " · ", "show": true },
+      "fields": [
+        { "name": "invoice", "type": "relation_to_one", "subtype": "part_of", "target": "invoice", "description": "Invoice being paid" },
+        { "name": "reference", "type": "string", "required": true, "min_length": 3, "max_length": 60, "description": "Bank or provider reference" },
+        { "name": "amount", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0.01, "description": "Amount received" },
+        { "name": "method", "type": "enum", "required": true, "enum_values": ["card", "transfer", "direct_debit", "cheque"], "default": "transfer", "description": "How the customer paid" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["pending", "cleared", "failed", "refunded"], "default": "cleared", "description": "Where the payment stands with the bank" },
+        { "name": "paid_on", "type": "date", "required": true, "description": "Day the money arrived" },
+        { "name": "cleared_amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "CASE WHEN status = 'cleared' THEN amount ELSE 0 END", "description": "The amount once the bank confirmed it; this is what the invoice balance is reduced by" },
+        { "name": "notes", "type": "string", "max_length": 200, "size": "m", "description": "Anything worth recording about the payment" }
+      ]
+    },
+    {
+      "name": "credit_memo",
+      "plural_name": "credit_memos",
+      "description": "Amount credited back against an invoice, with the reason it was granted",
+      "id_presentation": { "fields": ["invoice.id_presentation", "reference"], "separator": " · " },
+      "fields": [
+        { "name": "invoice", "type": "relation_to_one", "subtype": "part_of", "target": "invoice", "description": "Invoice being credited" },
+        { "name": "reference", "type": "string", "required": true, "min_length": 3, "max_length": 40, "description": "Credit note number" },
+        { "name": "amount", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0.01, "description": "Amount credited" },
+        { "name": "reason", "type": "enum", "required": true, "enum_values": ["overcharge", "service_credit", "cancellation", "goodwill", "duplicate"], "default": "service_credit", "description": "Why the credit was granted" },
+        { "name": "issued_on", "type": "date", "description": "Day the credit note was issued" },
+        { "name": "approved_by", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Who authorised it" },
+        { "name": "notes", "type": "markdown", "description": "Explanation kept for the audit" }
+      ]
+    },
+    {
+      "name": "subscription",
+      "plural_name": "subscriptions",
+      "description": "Recurring commitment of a customer: what is billed every period, until when, and whether it renews on its own",
+      "id_presentation": { "fields": ["account.id_presentation", "product.id_presentation"], "separator": " · ", "show": true },
+      "fields": [
+        { "name": "account", "type": "relation_to_one", "subtype": "part_of", "target": "account", "description": "Customer subscribed" },
+        { "name": "product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "on_delete": "set_null", "description": "Product subscribed to" },
+        { "name": "contract", "type": "relation_to_one", "subtype": "related_to", "target": "contract", "on_delete": "set_null", "description": "Contract the subscription runs under" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["active", "paused", "cancelled", "expired"], "default": "active", "description": "Where the subscription stands" },
+        { "name": "quantity", "type": "decimal", "required": true, "precision": 10, "scale": 2, "min": 0.01, "default": 1, "description": "Seats or units subscribed" },
+        { "name": "unit_price", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Price per unit and period" },
+        { "name": "billing_frequency", "type": "enum", "required": true, "enum_values": ["monthly", "quarterly", "annual"], "default": "annual", "description": "How often it is billed" },
+        // Everything normalised to a monthly figure so subscriptions of different terms
+        // can be added up in the same report.
+        { "name": "monthly_revenue", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "calculated": "ROUND(quantity * unit_price / (CASE billing_frequency WHEN 'monthly' THEN 1 WHEN 'quarterly' THEN 3 ELSE 12 END), 2)", "description": "Recurring revenue per month" },
+        { "name": "start_date", "type": "date", "description": "First day of service" },
+        { "name": "end_date", "type": "date", "description": "Last day of the current term" },
+        { "name": "renewal_date", "type": "date", "description": "Day the renewal has to be agreed by" },
+        { "name": "auto_renew", "type": "boolean", "default": true, "description": "Whether it renews unless cancelled" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Person chasing the renewal" }
+      ]
+    },
+    {
+      "name": "revenue_schedule",
+      "plural_name": "revenue_schedules",
+      "description": "How the revenue of a sold line is spread over time, so a multi-year deal is not booked in a single month",
+      "data_size": "m",
+      "id_presentation": { "fields": ["opportunity_line.id_presentation", "period_label"], "separator": " · " },
+      "fields": [
+        { "name": "opportunity_line", "type": "relation_to_one", "subtype": "part_of", "target": "opportunity_line", "description": "Sold line being spread" },
+        { "name": "period_label", "type": "string", "required": true, "min_length": 4, "max_length": 20, "description": "Period the amount falls in (e.g. 2026-09)" },
+        { "name": "schedule_date", "type": "date", "description": "Date the revenue is recognised on" },
+        { "name": "amount", "type": "decimal", "subtype": "money", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Amount recognised in the period" },
+        { "name": "quantity", "type": "decimal", "precision": 10, "scale": 2, "min": 0, "description": "Units delivered in the period" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["planned", "invoiced", "recognised"], "default": "planned", "description": "Where the period stands" }
+      ]
+    },
+    {
+      "name": "discount_schedule",
+      "plural_name": "discount_schedules",
+      "description": "Volume discount grid applied when quoting: the more units, the better the price",
+      "id_presentation": { "fields": ["name"], "show": true },
+      "fields": [
+        { "name": "name", "type": "string", "required": true, "unique": true, "min_length": 3, "max_length": 80, "description": "Grid name" },
+        { "name": "type", "type": "enum", "required": true, "enum_values": ["range", "slab"], "default": "range", "description": "Range grids price every unit at the tier reached; slab grids price each block at its own tier" },
+        { "name": "applies_to", "type": "enum", "required": true, "enum_values": ["quantity", "amount", "term"], "default": "quantity", "description": "What the tiers are measured on" },
+        { "name": "product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "on_delete": "set_null", "description": "Product the grid is attached to (empty = any)" },
+        { "name": "is_active", "type": "boolean", "default": true, "description": "Whether it can be applied to new quotes" },
+        { "name": "description", "type": "string", "max_length": 200, "size": "m", "description": "When to use this grid" }
+      ]
+    },
+    {
+      "name": "discount_tier",
+      "plural_name": "discount_tiers",
+      "description": "One step of a discount grid",
+      "checks": ["upper_bound IS NULL OR upper_bound >= lower_bound"],
+      "id_presentation": { "fields": ["discount_schedule.id_presentation", "label"], "separator": " · " },
+      "fields": [
+        { "name": "discount_schedule", "type": "relation_to_one", "subtype": "part_of", "target": "discount_schedule", "description": "Grid this step belongs to" },
+        { "name": "label", "type": "string", "required": true, "min_length": 1, "max_length": 40, "description": "Step name (e.g. 100-249 seats)" },
+        { "name": "lower_bound", "type": "decimal", "required": true, "precision": 10, "scale": 2, "min": 0, "description": "Value the step starts at, inclusive" },
+        { "name": "upper_bound", "type": "decimal", "precision": 10, "scale": 2, "min": 0, "description": "Value the step ends at; empty means no ceiling" },
+        { "name": "discount_percent", "type": "decimal", "required": true, "precision": 5, "scale": 2, "min": 0, "max": 100, "description": "Discount granted in this step" }
+      ]
+    },
+    {
+      "name": "product_feature",
+      "plural_name": "product_features",
+      "description": "Group of options inside a configurable product: 'Support level', 'Connectors'. It is what turns a product into a bundle.",
+      "id_presentation": { "fields": ["product.id_presentation", "name"], "separator": " · " },
+      "fields": [
+        { "name": "product", "type": "relation_to_one", "subtype": "part_of", "target": "product", "description": "Bundle this group belongs to" },
+        { "name": "name", "type": "string", "required": true, "min_length": 2, "max_length": 80, "description": "Group name" },
+        { "name": "min_options", "type": "integer", "min": 0, "max": 50, "default": 0, "description": "How many options must be picked" },
+        { "name": "max_options", "type": "integer", "min": 1, "max": 50, "description": "How many options may be picked; empty means no limit" },
+        { "name": "sort_order", "type": "integer", "min": 0, "default": 100, "description": "Position in the configurator" },
+        { "name": "description", "type": "string", "max_length": 200, "size": "m", "description": "What the buyer is choosing here" }
+      ]
+    },
+    {
+      "name": "product_option",
+      "plural_name": "product_options",
+      "description": "Product that can be added to a bundle through one of its feature groups",
+      "id_presentation": { "fields": ["product_feature.id_presentation", "optional_product.id_presentation"], "separator": " · " },
+      "fields": [
+        { "name": "product_feature", "type": "relation_to_one", "subtype": "part_of", "target": "product_feature", "description": "Group offering the option" },
+        { "name": "optional_product", "type": "relation_to_one", "subtype": "related_to", "target": "product", "required": true, "description": "Product offered" },
+        { "name": "quantity", "type": "decimal", "required": true, "precision": 10, "scale": 2, "min": 0.01, "default": 1, "description": "Units added when the option is picked" },
+        { "name": "is_required", "type": "boolean", "default": false, "description": "Whether the option always comes with the bundle" },
+        { "name": "discount_percent", "type": "decimal", "precision": 5, "scale": 2, "min": 0, "max": 100, "default": 0, "description": "Discount granted for buying it inside the bundle" },
+        { "name": "sort_order", "type": "integer", "min": 0, "default": 100, "description": "Position inside the group" }
+      ]
+    },
+    {
+      "name": "quote_approval",
+      "plural_name": "quote_approvals",
+      "description": "Request to sign off a discount deeper than a rep may grant, and what the manager decided",
+      "id_presentation": { "fields": ["quote.id_presentation", "status"], "separator": " · " },
+      "fields": [
+        { "name": "quote", "type": "relation_to_one", "subtype": "part_of", "target": "quote", "description": "Offer needing sign-off" },
+        { "name": "requested_by", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Rep asking for the discount" },
+        { "name": "approver", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Manager who has to decide" },
+        { "name": "status", "type": "enum", "required": true, "enum_values": ["pending", "approved", "rejected", "withdrawn"], "default": "pending", "description": "Where the request stands" },
+        { "name": "requested_discount_percent", "type": "decimal", "required": true, "precision": 5, "scale": 2, "min": 0, "max": 100, "description": "Discount being asked for" },
+        { "name": "reason", "type": "string", "required": true, "max_length": 300, "size": "m", "description": "Why the deal needs it" },
+        { "name": "requested_on", "type": "date", "description": "Day it was raised" },
+        { "name": "decided_on", "type": "date", "description": "Day it was decided" },
+        { "name": "decision_notes", "type": "string", "max_length": 300, "size": "m", "description": "Conditions attached to the decision" }
+      ]
+    },
+    {
+      "name": "note",
+      "plural_name": "notes",
+      "description": "Free-form note kept on a record: meeting minutes, a competitor rumour, an internal warning",
+      "data_size": "m",
+      "id_presentation": { "fields": ["title"], "show": true },
+      "fields": [
+        { "name": "title", "type": "string", "required": true, "min_length": 3, "max_length": 120, "size": "m", "description": "What the note is about" },
+        { "name": "body", "type": "markdown", "required": true, "description": "The note itself" },
+        { "name": "author", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Who wrote it" },
+        { "name": "is_private", "type": "boolean", "default": false, "description": "Whether only the author's team should read it" },
+        { "name": "account", "type": "relation_to_one", "subtype": "related_to", "target": "account", "on_delete": "set_null", "description": "Account it belongs to" },
+        { "name": "contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Person it is about" },
+        { "name": "opportunity", "type": "relation_to_one", "subtype": "related_to", "target": "opportunity", "on_delete": "set_null", "description": "Deal it belongs to" },
+        { "name": "support_case", "type": "relation_to_one", "subtype": "related_to", "target": "support_case", "on_delete": "set_null", "description": "Case it belongs to" }
+      ]
+    },
+    {
+      "name": "event",
+      "plural_name": "events",
+      "description": "Calendar entry with a time slot: a meeting, a demo, a workshop. Tasks and logged calls live in 'activity' instead.",
+      "data_size": "m",
+      "id_presentation": { "fields": ["subject"], "show": true },
+      "fields": [
+        { "name": "subject", "type": "string", "required": true, "min_length": 3, "max_length": 150, "size": "m", "description": "What the meeting is about" },
+        { "name": "event_type", "type": "enum", "required": true, "enum_values": ["meeting", "call", "demo", "workshop", "conference"], "default": "meeting", "description": "Kind of entry" },
+        { "name": "start_at", "type": "datetime", "required": true, "precision": "minute", "description": "When it starts" },
+        { "name": "end_at", "type": "datetime", "precision": "minute", "description": "When it ends" },
+        { "name": "all_day", "type": "boolean", "default": false, "description": "Whether it takes the whole day" },
+        { "name": "location", "type": "string", "max_length": 150, "size": "m", "description": "Room, address or meeting link" },
+        { "name": "owner", "type": "relation_to_one", "subtype": "related_to", "target": "sales_rep", "on_delete": "set_null", "description": "Who organises it" },
+        { "name": "account", "type": "relation_to_one", "subtype": "related_to", "target": "account", "on_delete": "set_null", "description": "Account it belongs to" },
+        { "name": "contact", "type": "relation_to_one", "subtype": "related_to", "target": "contact", "on_delete": "set_null", "description": "Main counterpart" },
+        { "name": "lead", "type": "relation_to_one", "subtype": "related_to", "target": "lead", "on_delete": "set_null", "description": "Lead it belongs to, before conversion" },
+        { "name": "opportunity", "type": "relation_to_one", "subtype": "related_to", "target": "opportunity", "on_delete": "set_null", "description": "Deal it moves forward" },
+        { "name": "attendees", "type": "relation_to_many", "target": "contact", "description": "Other people invited" },
+        { "name": "description", "type": "markdown", "description": "Agenda and notes" }
+      ]
+    },
+    {
+      // A view concept: no table, no create/edit/delete, read-only for every role. It is
+      // the pipeline report a sales manager lives in, and clicking a row opens the deal.
+      // Declared last because a view may only be built on concepts declared before it.
+      "name": "pipeline_report",
+      "plural_name": "pipeline_reports",
+      "description": "Open opportunities with their account, owner, stage, weighted amount and days left to close",
+      "id_presentation": { "fields": ["opportunity"] },
+      "view": {
+        "query": "SELECT 'opportunity'::text AS concept, o.id AS concept_id, o.name AS opportunity, a.name AS account, coalesce(r.first_name || ' ' || r.last_name, '—') AS owner, o.\"state\" AS stage, o.forecast_category, o.type AS deal_type, o.amount, o.probability, o.expected_revenue, o.close_date, (o.close_date - CURRENT_DATE)::int AS days_to_close FROM opportunity o JOIN account a ON a.id = o.account LEFT JOIN sales_rep r ON r.id = o.owner WHERE o.\"state\" <> 'closed'"
+      },
+      "fields": [
+        { "name": "concept", "type": "string", "description": "Concept each row stands for" },
+        { "name": "concept_id", "type": "integer", "description": "Identifier of the opportunity" },
+        { "name": "opportunity", "type": "string", "size": "m", "description": "Deal name" },
+        { "name": "account", "type": "string", "size": "m", "description": "Customer" },
+        { "name": "owner", "type": "string", "description": "Sales rep who owns the deal" },
+        { "name": "stage", "type": "string", "description": "Current stage of the deal" },
+        { "name": "forecast_category", "type": "string", "description": "Forecast bucket derived from the stage" },
+        { "name": "deal_type", "type": "string", "description": "New business, renewal, upsell..." },
+        { "name": "amount", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "description": "Value of the deal" },
+        { "name": "probability", "type": "integer", "description": "Chance of winning at this stage" },
+        { "name": "expected_revenue", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "description": "Amount weighted by the probability" },
+        { "name": "close_date", "type": "date", "description": "Expected close date" },
+        { "name": "days_to_close", "type": "integer", "description": "Days left until the expected close date (negative when overdue)" }
+      ]
+    },
+    {
+      // The service equivalent of the pipeline report: one row per commitment running on an
+      // open case. A generated column cannot call now(), so the "open and already late" case
+      // is decided here, where CURRENT_TIMESTAMP is allowed.
+      "name": "sla_report",
+      "plural_name": "sla_reports",
+      "description": "Service commitments on open cases, with the time left and whether the SLA is already breached",
+      "id_presentation": { "fields": ["support_case"] },
+      "view": {
+        "query": "SELECT 'support_case'::text AS concept, c.id AS concept_id, c.id_presentation AS support_case, a.name AS account, c.priority, c.\"state\" AS case_state, coalesce(m.name, 'No commitment') AS milestone, m.target_at, m.completed_at, coalesce(r.first_name || ' ' || r.last_name, '—') AS owner, round(EXTRACT(EPOCH FROM (m.target_at - CURRENT_TIMESTAMP)) / 3600.0, 1) AS hours_left, (m.completed_at IS NOT NULL AND m.target_at IS NOT NULL AND m.completed_at > m.target_at) OR (m.completed_at IS NULL AND m.target_at IS NOT NULL AND m.target_at < CURRENT_TIMESTAMP) AS is_breached FROM support_case c JOIN account a ON a.id = c.account LEFT JOIN case_milestone m ON m.support_case = c.id LEFT JOIN sales_rep r ON r.id = c.owner WHERE c.\"state\" <> 'closed'"
+      },
+      "fields": [
+        { "name": "concept", "type": "string", "description": "Concept each row stands for" },
+        { "name": "concept_id", "type": "integer", "description": "Identifier of the case" },
+        { "name": "support_case", "type": "string", "size": "m", "description": "Case" },
+        { "name": "account", "type": "string", "size": "m", "description": "Customer" },
+        { "name": "priority", "type": "string", "description": "How urgent the case is" },
+        { "name": "case_state", "type": "string", "description": "Where the case stands" },
+        { "name": "milestone", "type": "string", "description": "Commitment being measured" },
+        { "name": "target_at", "type": "datetime", "precision": "minute", "description": "Deadline of the commitment" },
+        { "name": "completed_at", "type": "datetime", "precision": "minute", "description": "When it was met" },
+        { "name": "owner", "type": "string", "description": "Support engineer on the case" },
+        { "name": "hours_left", "type": "decimal", "precision": 8, "scale": 1, "description": "Hours until the deadline (negative when it has passed)" },
+        { "name": "is_breached", "type": "boolean", "description": "Whether the commitment is already missed" }
+      ]
+    },
+    {
+      // An aggregate view: 'concept' and 'concept_id' are null together, so the rows stand
+      // for no record and the generated id falls back to the id_presentation, which the
+      // grouping keys keep unique.
+      "name": "revenue_by_product",
+      "plural_name": "revenue_by_products",
+      "description": "Invoiced and outstanding amount per product and quarter, straight from the invoice lines",
+      "id_presentation": { "fields": ["period", "product"], "separator": " · " },
+      "view": {
+        "query": "SELECT NULL::text AS concept, NULL::integer AS concept_id, to_char(coalesce(i.issue_date, CURRENT_DATE), 'YYYY\"-Q\"Q') AS period, coalesce(p.name, 'Uncatalogued') AS product, coalesce(p.family, 'other') AS family, sum(il.total_price)::numeric(10,2) AS invoiced, sum(CASE WHEN i.\"state\" <> 'paid' THEN il.total_price ELSE 0 END)::numeric(10,2) AS outstanding, count(DISTINCT i.id)::int AS invoice_count FROM invoice_line il JOIN invoice i ON i.id = il.invoice LEFT JOIN product p ON p.id = il.product GROUP BY 3, 4, 5"
+      },
+      "fields": [
+        { "name": "concept", "type": "string", "description": "Always empty: the row is an aggregate, not a record" },
+        { "name": "concept_id", "type": "integer", "description": "Always empty: the row is an aggregate, not a record" },
+        { "name": "period", "type": "string", "description": "Quarter the invoices were issued in" },
+        { "name": "product", "type": "string", "size": "m", "description": "Product billed" },
+        { "name": "family", "type": "string", "description": "Product family" },
+        { "name": "invoiced", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "description": "Amount billed in the period" },
+        { "name": "outstanding", "type": "decimal", "subtype": "money", "precision": 10, "scale": 2, "description": "Part of it not paid yet" },
+        { "name": "invoice_count", "type": "integer", "description": "Invoices involved" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "$schema": "../../schemas/rules_schema.json",
+  // Rules are evaluated by the FEEL (Friendly Enough Expression Language) engine.
+  //
+  // action types:
+  //   check  — validates; { error: "..." } aborts the transition
+  //
+  // FEEL context: db.<concept> = current record, plus one list per child concept
+  // (by its plural name) that the expression mentions — db.opportunity.opportunity_lines
+  // below loads the deal's line items.
+  //
+  // These are the validation rules a CRM administrator configures on the sales process
+  // and the support process. They run wherever the transition comes from — the backoffice
+  // workflow selector or a card dropped on the pipeline page — because both go through
+  // the same workflow-transition backend function, and the frontend cannot bypass them.
+  "rules": [
+    {
+      "concept": "opportunity",
+      "name": "opportunity-check-amount",
+      // No proposal without a number: the forecast is built on 'amount', so a deal
+      // cannot reach the stage where it is supposed to be priced without one.
+      "feel_expr": "if db.opportunity.amount != null and db.opportunity.amount > 0 then true else { error: \"Set the deal amount before moving to the proposal stage\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_proposal"]
+    },
+    {
+      "concept": "opportunity",
+      "name": "opportunity-check-products",
+      // A priced offer is made of line items; without them nobody knows what was sold,
+      // and opportunity.products_total (the rollup) stays empty.
+      "feel_expr": "if count(db.opportunity.opportunity_lines) > 0 then true else { error: \"Add at least one product line before moving to the proposal stage\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_proposal"]
+    },
+    {
+      "concept": "opportunity",
+      "name": "opportunity-check-commit",
+      // Entering negotiation means committing the deal to a quarter: the close date has
+      // to be a real, future-facing commitment and somebody has to own the deal.
+      "feel_expr": "if db.opportunity.owner = null then { error: \"Assign an owner to the deal before negotiating it\" } else if db.opportunity.next_step = null then { error: \"Record the next step before negotiating the deal\" } else true",
+      "action": "check",
+      "when": ["on_state_changed_to_negotiation"]
+    },
+    {
+      "concept": "opportunity",
+      "name": "opportunity-check-outcome",
+      // Closing records how it ended, and a loss records why — that is what the win/loss
+      // analysis on the forecast page is built from.
+      "feel_expr": "if db.opportunity.outcome = null then { error: \"Set the outcome (won or lost) before closing the deal\" } else if db.opportunity.outcome = \"lost\" and db.opportunity.loss_reason = null then { error: \"Set the loss reason before closing a lost deal\" } else true",
+      "action": "check",
+      "when": ["on_state_changed_to_closed"]
+    },
+    {
+      "concept": "work_order",
+      "name": "work-order-check-dispatch",
+      // Dispatching is a promise to the customer: somebody has to be going, on a day.
+      "feel_expr": "if count(db.work_order.service_appointments) = 0 then { error: \"Book a service appointment before dispatching the job\" } else if db.work_order.scheduled_start = null then { error: \"Set the scheduled start before dispatching the job\" } else true",
+      "action": "check",
+      "when": ["on_state_changed_to_dispatched"]
+    },
+    {
+      "concept": "work_order",
+      "name": "work-order-check-completion",
+      // A finished job is a billable job: what was done and how long it took.
+      "feel_expr": "if count(db.work_order.work_order_lines) = 0 then { error: \"Record the work performed (at least one line) before completing the job\" } else if db.work_order.duration_hours = null then { error: \"Record the hours spent on site before completing the job\" } else true",
+      "action": "check",
+      "when": ["on_state_changed_to_completed"]
+    },
+    {
+      "concept": "invoice",
+      "name": "invoice-check-issue",
+      // Nothing goes out to a customer without lines and a due date.
+      "feel_expr": "if count(db.invoice.invoice_lines) = 0 then { error: \"Add at least one line before issuing the invoice\" } else if db.invoice.due_date = null then { error: \"Set the due date before issuing the invoice\" } else true",
+      "action": "check",
+      "when": ["on_state_changed_to_issued"]
+    },
+    {
+      "concept": "invoice",
+      "name": "invoice-check-balance",
+      // The balance is a calculated column (total minus the payments rolled up), so this
+      // guard cannot be talked around by editing a field: money has to have arrived.
+      "feel_expr": "if db.invoice.balance <= 0 then true else { error: \"The invoice still has an outstanding balance: register the payment before closing it\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_paid"]
+    },
+    {
+      "concept": "support_case",
+      "name": "case-check-escalation",
+      // An escalation without a stated reason cannot be triaged by whoever picks it up.
+      "feel_expr": "if db.support_case.escalation_reason != null then true else { error: \"Explain the escalation reason before escalating the case\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_escalated"]
+    },
+    {
+      "concept": "support_case",
+      "name": "case-check-resolution",
+      // Every closed case is classified, which is what the service reports break down by.
+      "feel_expr": "if db.support_case.resolution_code != null then true else { error: \"Set a resolution code before closing the case\" }",
+      "action": "check",
+      "when": ["on_state_changed_to_closed"]
+    }
+  ]
+}

@@ -1,0 +1,238 @@
+{
+  "$schema": "../../schemas/presentation_schema.json",
+  "html_head_title": "UBK CRM Demo",
+  "locale": "en-GB",
+  "number_locale": "en-GB",
+  "currency": "EUR",
+  // Design mode also ships in production builds: authenticated users keep a personal
+  // design in the generated _design table; admins review them all.
+  "designer": "production",
+  "designer_admin_role": "admin",
+  // The menu is grouped the way a CRM splits into apps: Sales, Marketing, Service,
+  // Products, Commerce and Reports. A user only sees the entries their role can read.
+  "menu": [
+    {
+      "label": "Sales",
+      "children": [
+        { "label": "Leads",               "concept": "lead" },
+        { "label": "Accounts",            "concept": "account" },
+        { "label": "Addresses",           "concept": "account_address" },
+        { "label": "Contacts",            "concept": "contact" },
+        { "label": "Opportunities",       "concept": "opportunity" },
+        { "label": "Opportunity Products", "concept": "opportunity_line" },
+        { "label": "Contact Roles",       "concept": "opportunity_contact_role" },
+        { "label": "Competitors",         "concept": "opportunity_competitor" },
+        { "label": "Deal Teams",          "concept": "opportunity_team_member" },
+        { "label": "Deal Splits",         "concept": "opportunity_split" },
+        { "label": "Account Teams",       "concept": "account_team_member" },
+        { "label": "Partners",            "concept": "partner" }
+      ]
+    },
+    {
+      "label": "Quotes & CPQ",
+      "children": [
+        { "label": "Quotes",              "concept": "quote" },
+        { "label": "Quote Lines",         "concept": "quote_line" },
+        { "label": "Discount Approvals",  "concept": "quote_approval" },
+        { "label": "Discount Schedules",  "concept": "discount_schedule" },
+        { "label": "Discount Tiers",      "concept": "discount_tier" },
+        { "label": "Bundle Features",     "concept": "product_feature" },
+        { "label": "Bundle Options",      "concept": "product_option" }
+      ]
+    },
+    {
+      "label": "Marketing",
+      "children": [
+        { "label": "Campaigns",           "concept": "campaign" },
+        { "label": "Campaign Members",    "concept": "campaign_member" },
+        { "label": "Campaign Influence",  "concept": "campaign_influence" },
+        { "label": "Email Templates",     "concept": "email_template" }
+      ]
+    },
+    {
+      "label": "Service",
+      "children": [
+        { "label": "Cases",               "concept": "support_case" },
+        { "label": "Case Comments",       "concept": "case_comment" },
+        { "label": "Case Emails",         "concept": "email_message" },
+        { "label": "Case Milestones",     "concept": "case_milestone" },
+        { "label": "Case Teams",          "concept": "case_team_member" },
+        { "label": "Entitlements",        "concept": "entitlement" },
+        { "label": "Service Contracts",   "concept": "service_contract" },
+        { "label": "Covered Items",       "concept": "service_contract_line" },
+        { "label": "Assets",              "concept": "asset" }
+      ]
+    },
+    {
+      "label": "Knowledge",
+      "children": [
+        { "label": "Articles",            "concept": "knowledge_article" },
+        { "label": "Categories",          "concept": "knowledge_category" }
+      ]
+    },
+    {
+      "label": "Field Service",
+      "children": [
+        { "label": "Work Orders",         "concept": "work_order" },
+        { "label": "Work Order Lines",    "concept": "work_order_line" },
+        { "label": "Appointments",        "concept": "service_appointment" },
+        { "label": "Material Used",       "concept": "product_consumed" },
+        { "label": "Resources",           "concept": "service_resource" },
+        { "label": "Resource Skills",     "concept": "resource_skill" },
+        { "label": "Work Types",          "concept": "work_type" }
+      ]
+    },
+    {
+      "label": "Products",
+      "children": [
+        { "label": "Products",            "concept": "product" },
+        { "label": "Price Books",         "concept": "price_book" },
+        { "label": "Price Book Entries",  "concept": "price_book_entry" }
+      ]
+    },
+    {
+      "label": "Commerce",
+      "children": [
+        { "label": "Contracts",           "concept": "contract" },
+        { "label": "Contract Roles",      "concept": "contract_contact_role" },
+        { "label": "Orders",              "concept": "sales_order" },
+        { "label": "Order Lines",         "concept": "order_line" }
+      ]
+    },
+    {
+      "label": "Billing",
+      "children": [
+        { "label": "Invoices",            "concept": "invoice" },
+        { "label": "Invoice Lines",       "concept": "invoice_line" },
+        { "label": "Payments",            "concept": "payment" },
+        { "label": "Credit Notes",        "concept": "credit_memo" },
+        { "label": "Subscriptions",       "concept": "subscription" },
+        { "label": "Revenue Schedules",   "concept": "revenue_schedule" }
+      ]
+    },
+    {
+      "label": "Activities",
+      "children": [
+        { "label": "Tasks & Calls",       "concept": "activity" },
+        { "label": "Events",              "concept": "event" },
+        { "label": "Notes",               "concept": "note" }
+      ]
+    },
+    {
+      "label": "Reports",
+      "children": [
+        { "label": "Pipeline",            "concept": "pipeline_report" },
+        { "label": "Service SLA",         "concept": "sla_report" },
+        { "label": "Revenue by product",  "concept": "revenue_by_product" }
+      ]
+    },
+    {
+      "label": "Setup",
+      "children": [
+        { "label": "Territories",         "concept": "territory" },
+        { "label": "Territory Accounts",  "concept": "territory_assignment" },
+        { "label": "Quotas",              "concept": "quota_period" },
+        { "label": "Business Hours",      "concept": "business_hours" },
+        { "label": "Holidays",            "concept": "holiday" },
+        { "label": "Milestone Types",     "concept": "milestone_type" },
+        { "label": "Skills",              "concept": "skill" }
+      ]
+    },
+    {
+      "label": "People",
+      "children": [
+        { "label": "Team",                "concept": "sales_rep" }
+      ]
+    },
+    {
+      "label": "Tasks",
+      "children": [
+        { "label": "Assignable tasks",   "workflow": "assignable_tasks" },
+        { "label": "My tasks",           "workflow": "my_tasks" }
+      ]
+    }
+  ],
+  "list_field_rules_level_2": {
+    // Opportunity list = the pipeline view: what it is, whose it is, where it
+    // is and what it is worth. The narrative fields live on the record.
+    "opportunity": "!*, id_presentation, account, state, amount, probability, forecast_category, close_date, owner",
+
+    // Lead list = the queue a rep works down: who, how warm, how to reach them
+    "lead": "!*, id_presentation, first_name, status, rating, email, phone, lead_source, owner",
+
+    // Account list: the health of the relationship, not its street address
+    "account": "!description, !billing_street, !billing_postal_code, !website, !parent_account",
+
+    // Contact list: how to reach the person and who owns them
+    "contact": "!description, !birthdate, !do_not_call, !email_opt_out, !reports_to, !salutation",
+
+    // Case list = the service console: age, priority and who is on it
+    "support_case": "!*, id_presentation, account, state, priority, type, origin, owner, opened_date",
+
+    // Activity list: the to-do view; the notes are inside the record
+    "activity": "!description, !attendees, !duration_minutes, !completed_date",
+
+    // Quote list: the money and the state of the offer
+    "quote": "!notes, !payment_terms, !quote_date",
+
+    // Campaign list: spend against response
+    "campaign": "!description, !target_audience",
+
+    // Catalogue lists: the commercial data, not the prose
+    "product": "!description",
+    "price_book": "!description",
+    "contract": "!terms",
+
+    // Directory: who they are and whether they are active
+    "sales_rep": "!quota_annual, !manager",
+
+    // Work order list = the dispatch board: what, where, when and how urgent
+    "work_order": "!*, id_presentation, account, state, priority, work_type, scheduled_start, owner, line_total",
+    // The service address is a block of eight columns: it belongs to the record, not to a list
+    "sales_order": "!shipping_address*",
+
+    // Billing lists read as a ledger: who owes what and since when
+    "invoice": "!*, id_presentation, account, state, issue_date, due_date, total, paid_amount, balance",
+    "payment": "!notes",
+    "subscription": "!contract, !owner",
+
+    // Knowledge: the question, where it lives and whether it is published
+    "knowledge_article": "!body, !summary, !keywords, !helpful_count",
+
+    // The long prose of these lives inside the record
+    "email_message": "!body, !to_address",
+    "email_template": "!body",
+    "note": "!body",
+    "quote_approval": "!decision_notes",
+    "service_contract": "!total_value",
+    "work_order_line": "!duration_hours"
+  },
+  // Quick action on the lists a rep works from: log a call without opening the record.
+  // The addon lives in presentation/addons/log_a_call.jsx.
+  "list_row_actions": {
+    "contact": ["log_a_call"],
+    "opportunity": ["log_a_call"],
+    "lead": ["log_a_call"],
+    "account": ["log_a_call"]
+  },
+  "list_sort": {
+    // A pipeline reads by what closes next; queues and timelines read newest first
+    "opportunity": "close_date ASC",
+    "pipeline_report": "close_date ASC",
+    "lead": "id DESC",
+    "support_case": "id DESC",
+    "case_comment": "id DESC",
+    "activity": "due_date ASC",
+    "quote": "id DESC",
+    "sales_order": "order_date DESC",
+    "work_order": "scheduled_start ASC",
+    "service_appointment": "scheduled_start ASC",
+    "invoice": "due_date ASC",
+    "payment": "paid_on DESC",
+    "email_message": "sent_at DESC",
+    "event": "start_at ASC",
+    "note": "id DESC",
+    "sla_report": "hours_left ASC",
+    "revenue_by_product": "period DESC"
+  }
+}

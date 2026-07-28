@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schemas/system_schema.json",
+  // host defaults to the local mail catcher; the dev SMTP mock listens on base+10 and the
+  // production values come from deployment.jsonc (prod_smtp_*).
+  "smtp": { "port": 3060, "from_email": "noreply@crm.local" },
+  // payments: generates the 'payment' edge function (Stripe proxy). dev_mode defaults to
+  // true — a built-in simulator, no credentials needed. It charges what the invoice still
+  // owes, so a partially paid invoice is only ever charged for the rest.
+  "payments": { "concept": "invoice", "amount_field": "balance", "currency": "eur" }
+}

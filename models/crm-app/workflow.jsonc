@@ -1,0 +1,52 @@
+{
+  "$schema": "../../schemas/workflow_schema.json",
+  "workflow_rules": [
+    {
+      "name": "opportunity_workflow",
+      "description": "The sales process: prospecting → qualification → needs_analysis → proposal → negotiation → closed. The stage drives probability, forecast category and expected revenue (calculated fields on the concept), so moving a deal is what updates the forecast. The backoffice selector advances one stage at a time; the pipeline page drops a card straight into any column and the workflow-transition function validates the target stage, not the distance.",
+      "concepts": "opportunity",
+      // A deal keeps its owner from the proposal on: whoever built the offer defends it
+      // through negotiation and closes it. Only managers may close (or reopen) a deal.
+      "states": [
+        { "name": "prospecting", "owners": ["sales_rep", "sales_manager", "admin"], "assigners": ["sales_manager", "admin"], "description": "Identified but not worked yet: the account fits, nobody has confirmed a need." },
+        { "name": "qualification", "owners": ["sales_rep", "sales_manager", "admin"], "assigners": ["sales_rep", "sales_manager", "admin"], "description": "Budget, authority, need and timing are being confirmed with the customer." },
+        { "name": "needs_analysis", "owners": ["sales_rep", "sales_manager", "admin"], "assigners": ["sales_rep", "sales_manager", "admin"], "description": "Requirements gathered and solution scoped, usually after a demo." },
+        { "name": "proposal", "owners": ["sales_rep", "sales_manager", "admin"], "assigners": ["sales_rep", "sales_manager", "admin"], "retain_task_owner": true, "description": "A priced offer is on the table: the deal needs an amount and its line items." },
+        { "name": "negotiation", "owners": ["sales_rep", "sales_manager", "admin"], "assigners": ["sales_rep", "sales_manager", "admin"], "retain_task_owner": true, "description": "Terms, discount and paperwork under discussion; the close date must be committed." },
+        { "name": "closed", "owners": ["sales_manager", "admin"], "assigners": ["sales_manager", "admin"], "retain_task_owner": true, "description": "Finished, won or lost — the outcome field says which, and a loss needs a reason." }
+      ]
+    },
+    {
+      "name": "work_order_workflow",
+      "description": "Field job lifecycle: new → dispatched → in_progress → completed. Dispatching is the commitment to the customer (there has to be a visit booked), and completing is what makes the job billable.",
+      "concepts": "work_order",
+      "states": [
+        { "name": "new", "owners": ["support", "sales_manager", "admin"], "assigners": ["support", "sales_manager", "admin"], "description": "Raised and waiting for the dispatcher: scope, site and priority are being confirmed." },
+        { "name": "dispatched", "owners": ["field_tech", "support", "sales_manager", "admin"], "assigners": ["support", "sales_manager", "admin"], "retain_task_owner": true, "description": "A visit is booked and the technician knows where to go." },
+        { "name": "in_progress", "owners": ["field_tech", "support", "sales_manager", "admin"], "assigners": ["field_tech", "support", "sales_manager", "admin"], "retain_task_owner": true, "description": "The technician is on site working the tasks." },
+        { "name": "completed", "owners": ["support", "sales_manager", "admin"], "assigners": ["support", "sales_manager", "admin"], "retain_task_owner": true, "description": "Work finished and written up, ready to be billed." }
+      ]
+    },
+    {
+      "name": "invoice_workflow",
+      "description": "Billing lifecycle: draft → issued → paid. The balance decides when an invoice may be closed, so 'paid' can never be set on an invoice that still owes money.",
+      "concepts": "invoice",
+      "states": [
+        { "name": "draft", "owners": ["sales_rep", "sales_manager", "admin"], "assigners": ["sales_manager", "admin"], "description": "Being prepared: lines, dates and terms may still change." },
+        { "name": "issued", "owners": ["sales_manager", "admin"], "assigners": ["sales_manager", "admin"], "retain_task_owner": true, "description": "Sent to the customer and waiting for the money." },
+        { "name": "paid", "owners": ["sales_manager", "admin"], "assigners": ["sales_manager", "admin"], "retain_task_owner": true, "description": "Settled in full: the payments cover the total." }
+      ]
+    },
+    {
+      "name": "case_workflow",
+      "description": "Support lifecycle: new → working → escalated → closed. A case that never needs escalating simply passes through it; sending a case back to working is how an escalation is resolved without closing it.",
+      "concepts": "support_case",
+      "states": [
+        { "name": "new", "owners": ["support", "sales_manager", "admin"], "assigners": ["support", "sales_manager", "admin"], "description": "Received and not triaged yet; it sits in the unassigned queue." },
+        { "name": "working", "owners": ["support", "sales_manager", "admin"], "assigners": ["support", "sales_manager", "admin"], "retain_task_owner": true, "description": "An agent is investigating and answering the customer." },
+        { "name": "escalated", "owners": ["support", "sales_manager", "admin"], "assigners": ["sales_manager", "admin"], "retain_task_owner": true, "description": "Handed to specialists or management; the escalation reason is mandatory." },
+        { "name": "closed", "owners": ["support", "sales_manager", "admin"], "assigners": ["sales_manager", "admin"], "retain_task_owner": true, "description": "Answered or resolved, with a resolution code recorded for reporting." }
+      ]
+    }
+  ]
+}

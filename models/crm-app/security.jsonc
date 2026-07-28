@@ -1,0 +1,170 @@
+{
+  "$schema": "../../schemas/security_schema.json",
+  // Accounts are provisioned by the administrator; no self-registration, no SSO (both
+  // default off). Everything behind the sign-in page requires authentication.
+  "registration": {},
+  "sso": {},
+  "roles": [
+    { "name": "admin", "description": "System administrator — full access to everything, including the version history" },
+    // The four working roles share one profile concept: a manager, a rep, a marketer and
+    // a support engineer are all people in the same directory, so their owned records,
+    // activities and comments hang from the same sales_rep row.
+    { "name": "sales_manager", "description": "Sales manager — owns the whole commercial operation: pipeline, price books, contracts and the team", "profile_concept": "sales_rep" },
+    { "name": "sales_rep", "description": "Account executive — works leads, accounts, contacts, opportunities, quotes and orders", "profile_concept": "sales_rep" },
+    { "name": "marketing", "description": "Marketing — runs campaigns, their members and the leads they generate", "profile_concept": "sales_rep" },
+    { "name": "support", "description": "Support engineer — handles cases and their comments against the customer's entitlements and assets", "profile_concept": "sales_rep" },
+    { "name": "field_tech", "description": "Field technician — works the jobs dispatched to them: appointments, tasks performed and material consumed", "profile_concept": "sales_rep" },
+    { "name": "executive", "description": "Executive — read-only access to the whole CRM, including the pipeline report" }
+  ],
+  // Seed users (development only). The manager also carries sales_rep so their name shows
+  // up in the team directory and deals can be assigned to them.
+  "users": [
+    { "email": "admin@crm.com", "password": "adminadmin", "roles": ["admin"] },
+    { "email": "manager@crm.com", "password": "managermanager", "roles": ["sales_rep", "sales_manager"] },
+    { "email": "rep1@crm.com", "password": "repreprep", "roles": ["sales_rep"] },
+    { "email": "rep2@crm.com", "password": "repreprep", "roles": ["sales_rep"] },
+    { "email": "marketing@crm.com", "password": "marketingmarketing", "roles": ["marketing"] },
+    { "email": "support@crm.com", "password": "supportsupport", "roles": ["support"] },
+    { "email": "tech@crm.com", "password": "techtechtech", "roles": ["field_tech"] },
+    { "email": "exec@crm.com", "password": "execexecexec", "roles": ["executive"] }
+  ],
+  // Access is enforced by Supabase RLS policies. Values:
+  //   read        — SELECT only
+  //   write       — INSERT, UPDATE, DELETE
+  //   owner_write — INSERT/UPDATE/DELETE only on records linked to the user's profile
+  //
+  // Level 1 is the baseline: everybody who works in a CRM sees the whole customer file —
+  // what changes between roles is who may *write* what. Giving every role plain read on
+  // '*' also keeps the shared menu honest: an entry pointing at a concept the role cannot
+  // read would render as a dead link, because the generated menu shows every configured
+  // item regardless of permissions.
+  //
+  // A wildcard write rule reaches the pipeline_report view as read (views are read-only
+  // by construction), so no view needs an exception here.
+  "rules_level_1": [
+    { "role": "admin", "concept": "*", "access": "write" },
+    // Managers run the commercial operation end to end
+    { "role": "sales_manager", "concept": "*", "access": "write" },
+    { "role": "sales_rep", "concept": "*", "access": "read" },
+    { "role": "marketing", "concept": "*", "access": "read" },
+    { "role": "support", "concept": "*", "access": "read" },
+    { "role": "field_tech", "concept": "*", "access": "read" },
+    // Executives look at everything, including the pipeline report, and change nothing
+    { "role": "executive", "concept": "*", "access": "read" }
+  ],
+  // Level 2 grants the writes, one concept at a time. Deliberately explicit: a rule only
+  // propagates to the concepts that are *directly* part_of the named one, so writing
+  // 'account' would reach opportunities but not their line items, quotes or quote lines.
+  "rules_level_2": [
+    // --- Account executives: the customer relationship and everything sold in it ----
+    // The team directory, the catalogue, the price books and the campaigns stay
+    // read-only for them: repricing a price book or launching a campaign is somebody
+    // else's job, and so are support cases and the support plans behind them.
+    { "role": "sales_rep", "concept": "account", "access": "write" },
+    { "role": "sales_rep", "concept": "contact", "access": "write" },
+    { "role": "sales_rep", "concept": "lead", "access": "write" },
+    { "role": "sales_rep", "concept": "opportunity", "access": "write" },
+    { "role": "sales_rep", "concept": "opportunity_line", "access": "write" },
+    { "role": "sales_rep", "concept": "quote", "access": "write" },
+    { "role": "sales_rep", "concept": "quote_line", "access": "write" },
+    { "role": "sales_rep", "concept": "contract", "access": "write" },
+    { "role": "sales_rep", "concept": "sales_order", "access": "write" },
+    { "role": "sales_rep", "concept": "order_line", "access": "write" },
+    { "role": "sales_rep", "concept": "asset", "access": "write" },
+    { "role": "sales_rep", "concept": "activity", "access": "write" },
+    { "role": "sales_rep", "concept": "note", "access": "write" },
+    { "role": "sales_rep", "concept": "event", "access": "write" },
+    { "role": "sales_rep", "concept": "account_address", "access": "write" },
+    { "role": "sales_rep", "concept": "account_team_member", "access": "write" },
+    { "role": "sales_rep", "concept": "contract_contact_role", "access": "write" },
+    { "role": "sales_rep", "concept": "partner", "access": "write" },
+    { "role": "sales_rep", "concept": "opportunity_contact_role", "access": "write" },
+    { "role": "sales_rep", "concept": "opportunity_competitor", "access": "write" },
+    { "role": "sales_rep", "concept": "opportunity_team_member", "access": "write" },
+    { "role": "sales_rep", "concept": "campaign_influence", "access": "write" },
+    { "role": "sales_rep", "concept": "revenue_schedule", "access": "write" },
+    { "role": "sales_rep", "concept": "subscription", "access": "write" },
+    { "role": "sales_rep", "concept": "invoice", "access": "write" },
+    { "role": "sales_rep", "concept": "invoice_line", "access": "write" },
+    // The rep raises the request; only a manager decides it (rules_level_3 below)
+    { "role": "sales_rep", "concept": "quote_approval", "access": "write" },
+
+    // --- Marketing: campaigns and the leads they generate --------------------------
+    { "role": "marketing", "concept": "campaign", "access": "write" },
+    { "role": "marketing", "concept": "campaign_member", "access": "write" },
+    { "role": "marketing", "concept": "lead", "access": "write" },
+    { "role": "marketing", "concept": "activity", "access": "write" },
+
+    // --- Marketing owns the mailing material it sends ------------------------------
+    { "role": "marketing", "concept": "email_template", "access": "write" },
+    { "role": "marketing", "concept": "campaign_influence", "access": "write" },
+    { "role": "marketing", "concept": "event", "access": "write" },
+    { "role": "marketing", "concept": "note", "access": "write" },
+
+    // --- Support: cases, the service commitments and the knowledge base -------------
+    { "role": "support", "concept": "support_case", "access": "write" },
+    { "role": "support", "concept": "case_comment", "access": "write" },
+    { "role": "support", "concept": "case_milestone", "access": "write" },
+    { "role": "support", "concept": "case_team_member", "access": "write" },
+    { "role": "support", "concept": "email_message", "access": "write" },
+    { "role": "support", "concept": "knowledge_category", "access": "write" },
+    { "role": "support", "concept": "knowledge_article", "access": "write" },
+    { "role": "support", "concept": "entitlement", "access": "write" },
+    { "role": "support", "concept": "service_contract", "access": "write" },
+    { "role": "support", "concept": "service_contract_line", "access": "write" },
+    { "role": "support", "concept": "asset", "access": "write" },
+    { "role": "support", "concept": "activity", "access": "write" },
+    { "role": "support", "concept": "note", "access": "write" },
+    // Support raises and dispatches the field jobs
+    { "role": "support", "concept": "work_order", "access": "write" },
+    { "role": "support", "concept": "work_order_line", "access": "write" },
+    { "role": "support", "concept": "service_appointment", "access": "write" },
+    { "role": "support", "concept": "service_resource", "access": "write" },
+    { "role": "support", "concept": "resource_skill", "access": "write" },
+
+    // --- Field technicians: only what they touch on site ----------------------------
+    // They read the whole customer file (level 1) but write just the job they are on.
+    { "role": "field_tech", "concept": "work_order", "access": "write" },
+    { "role": "field_tech", "concept": "work_order_line", "access": "write" },
+    { "role": "field_tech", "concept": "service_appointment", "access": "write" },
+    { "role": "field_tech", "concept": "product_consumed", "access": "write" },
+    { "role": "field_tech", "concept": "activity", "access": "write" },
+    { "role": "field_tech", "concept": "note", "access": "write" }
+  ],
+  "rules_level_3": [
+    // The conversion audit trail is written by the Convert Lead action with the
+    // privileged client, so nobody rewrites which account, contact and deal a lead
+    // became — or backdates the conversion.
+    { "role": "sales_rep", "concept": "lead", "field": "converted_date", "access": "read" },
+    { "role": "sales_rep", "concept": "lead", "field": "converted_account", "access": "read" },
+    { "role": "sales_rep", "concept": "lead", "field": "converted_contact", "access": "read" },
+    { "role": "sales_rep", "concept": "lead", "field": "converted_opportunity", "access": "read" },
+    { "role": "marketing", "concept": "lead", "field": "converted_date", "access": "read" },
+    { "role": "marketing", "concept": "lead", "field": "converted_account", "access": "read" },
+    { "role": "marketing", "concept": "lead", "field": "converted_contact", "access": "read" },
+    { "role": "marketing", "concept": "lead", "field": "converted_opportunity", "access": "read" },
+
+    // Who an account belongs to is a management decision, not a rep's
+    { "role": "sales_rep", "concept": "account", "field": "owner", "access": "read" },
+
+    // Quotas are visible to the person, their manager and the executives — not across
+    // departments
+    { "role": "marketing", "concept": "sales_rep", "field": "quota_annual", "access": "none" },
+    { "role": "support", "concept": "sales_rep", "field": "quota_annual", "access": "none" },
+
+    // Case comments are an audit trail: support engineers read who wrote what
+    { "role": "support", "concept": "case_comment", "field": "author", "access": "read" },
+
+    // A rep asks for a discount; the decision belongs to the manager, so the rep can
+    // raise the request but never sign it off
+    { "role": "sales_rep", "concept": "quote_approval", "field": "status", "access": "read" },
+    { "role": "sales_rep", "concept": "quote_approval", "field": "approver", "access": "read" },
+    { "role": "sales_rep", "concept": "quote_approval", "field": "decided_on", "access": "read" },
+    { "role": "sales_rep", "concept": "quote_approval", "field": "decision_notes", "access": "read" },
+
+    // The technician reports what happened on site; the price of the job is set by the
+    // office, not by the person holding the screwdriver
+    { "role": "field_tech", "concept": "work_order_line", "field": "unit_price", "access": "read" },
+    { "role": "field_tech", "concept": "product_consumed", "field": "unit_price", "access": "read" }
+  ]
+}
