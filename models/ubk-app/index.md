@@ -28,13 +28,13 @@ experience where it matters, without rebuilding the admin side or the security b
 - [**B2C shop**](/b2c/) — a customer-facing storefront (custom MDX/JSX) backed by the
   generated React-Admin backoffice. Sign in with the "fill test user" picker on the login
   form.
-- [**Intranet**](/intranet/) — an employee portal covering people, time & absence, an IT
-  helpdesk and internal content, with each concept scoped to the role that owns it (HR, IT,
-  employee).
 - [**Agile board**](/agile/) — agile software project management: projects, epics and
   issues with their own keys, a kanban board you drag cards across, sprint planning and
   reports. Dropping a card runs the model's workflow rules in the backend, so an issue with
   no assignee refuses to enter "in progress".
+- [**CRM**](/crm/) — customer relationship management for sales, service and field teams:
+  leads, accounts, opportunities, quotes, orders, invoices, support cases and dispatched
+  work, with workflows and reporting enforced by the generated backend.
 
 ## A walk through the B2C demo
 

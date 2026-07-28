@@ -2,7 +2,7 @@
 
 **UniBizKit** generates complete, secure business applications (e-commerce, CRM, ERP, intranets) from a declarative model. Define the model once; get a working full-stack application.
 
-Website: [www.unibizkit.dev](https://www.unibizkit.dev) — with live demos you can sign into (a B2C shop and an intranet).
+Website: [www.unibizkit.dev](https://www.unibizkit.dev) — with live demos you can sign into (a B2C shop, an agile board and a CRM).
 
 ## What it is
 
@@ -32,6 +32,8 @@ It is easier to obtain a quality application — without functional or security 
 * [`models/b2c-app`](models/b2c-app) — B2C storefront: custom MDX/JSX front for customers plus the generated admin UI.
 * [`models/cms-app`](models/cms-app) — content manager: a public news site plus an admin where employees publish articles with a markdown editor and photos.
 * [`models/intranet-app`](models/intranet-app) — employee intranet: people directory and org chart, work centers with public holidays, vacation/leave approval workflows, clock-in/out time tracking, sick leaves, internal news and a simple HR/IT ticketing system.
+* [`models/agile-app`](models/agile-app) — agile software project management with projects, issues, sprint planning, a kanban board and reports.
+* [`models/crm-app`](models/crm-app) — customer relationship management for sales, service and field teams, from leads and opportunities through orders, support and field work.
 
 ## Documentation
 

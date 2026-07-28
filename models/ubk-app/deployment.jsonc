@@ -8,6 +8,6 @@
     "domain": "www.unibizkit.dev",
     "acme_email": "gjimher@gmail.com",
     "html_head_title": "UniBizKit",
-    "models": ["b2c-app", "intranet-app", "agile-app"]
+    "models": ["b2c-app", "agile-app", "crm-app"]
   }
 }
