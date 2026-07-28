@@ -245,6 +245,20 @@ class TestAppFrontend:
                 )
                 assert install_result.returncode == 0, f"npm install failed with {install_result=}"
 
+            # Lint the secondary model too: the generated code depends on the shape of
+            # the model (which components a concept and its children end up using), so a
+            # model that test-app does not exercise can still produce code that does not
+            # compile cleanly — e.g. an inline child form using an input the parent
+            # resource never imports.
+            print("Checking generated js: executing 'npm run lint -- --max-warnings 0'")
+            lint_result = subprocess.run(
+                ['npm', 'run', 'lint', '--', '--max-warnings', '0'],
+                stdout=sys.stdout,
+                stderr=sys.stderr,
+                timeout=600,
+            )
+            assert lint_result.returncode == 0, f"Secondary frontend lint failed. {lint_result=}"
+
             print("Building secondary frontend: executing 'npm run build -- --mode development'")
             build_result = subprocess.run(
                 ['npm', 'run', 'build', '--', '--mode', 'development'],

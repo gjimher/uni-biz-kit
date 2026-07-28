@@ -233,7 +233,11 @@ def get_optimized_react_admin_imports(
     if concept["documents"]["enabled"]:
         needed_components.update(['TabbedForm', 'FormTab'])
 
-    if concept.get("_prefill_groups"):
+    # A descendant's prefill block is rendered by this resource's inline child form, so
+    # its hooks have to be imported here as well as in the child's own resource file.
+    if concept.get("_prefill_groups") or any(
+        child["concept"].get("_prefill_groups") for child in all_descendants
+    ):
         needed_components.update(['useDataProvider', 'useGetList'])
 
     if all_descendants:
@@ -243,6 +247,15 @@ def get_optimized_react_admin_imports(
                     needed_components.add(field["_fe_component"])
                 if field["_fe_list_component"] not in CUSTOM_FIELD_COMPONENTS:
                     needed_components.add(field["_fe_list_component"])
+                # A relation renders as <ReferenceInput> wrapping an inner input, and
+                # _fe_component only names the wrapper. The child's inline create form
+                # is emitted in this file, so the inner input has to be imported here
+                # too — a parent with no relation of its own would otherwise not import
+                # it at all (same expansion as the concept's own fields below).
+                if field["type"] == "relation_to_one":
+                    needed_components.update(['ReferenceInput', 'ReferenceField', 'SelectInput'])
+                    if field["_fe_component"] == "AutocompleteInput":
+                        needed_components.add('AutocompleteInput')
 
     if many_to_many_links:
         needed_components.update([

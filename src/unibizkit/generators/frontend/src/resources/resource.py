@@ -505,7 +505,17 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
         concept, ctx.concepts, owned_children, many_to_many_links
     )
 
-    has_prefill = bool(concept.get("_prefill_groups"))
+    # The inline create/edit dialogs of the descendants are emitted in this file, so a
+    # prefill block declared by a child (an address picked from the parent's saved ones)
+    # needs its component and its MUI imports here too, not only in the child's resource.
+    descendant_concepts = [
+        child["concept"] for child in collect_all_descendants(concept["name"], ctx.concepts)
+    ] if owned_children else []
+    prefill_concepts = [
+        candidate for candidate in [concept, *descendant_concepts]
+        if candidate.get("_prefill_groups")
+    ]
+    has_prefill = bool(prefill_concepts)
 
     mui_imports = ["Grid"]
     if owned_children or many_to_many_links:
@@ -534,10 +544,11 @@ def generate(ctx: Context, concept: Dict[str, Any]) -> str:
 
     child_dialog_components = "\n".join(child_dialog_components_list)
 
-    prefill_components = ""
-    if has_prefill:
-        prefill_parts = [_generate_prefill_component(concept, g) for g in concept["_prefill_groups"]]
-        prefill_components = "\n".join(prefill_parts)
+    prefill_components = "\n".join(
+        _generate_prefill_component(prefill_concept, group)
+        for prefill_concept in prefill_concepts
+        for group in prefill_concept["_prefill_groups"]
+    )
     validation_components = "\n".join(
         _generate_related_validation_component(ctx, validation_concept)
         for validation_concept in validation_concepts
