@@ -26,6 +26,7 @@ export const getPaymentStatus = notConfigured;
     provider = json.dumps(payments["provider"])
     currency = json.dumps(payments["currency"])
     return f"""import {{ supabaseClient }} from '../../supabaseClient';
+import {{ functionErrorMessage }} from './errors';
 
 // Payment configuration from system.json (payments section).
 export const paymentsEnabled = true;

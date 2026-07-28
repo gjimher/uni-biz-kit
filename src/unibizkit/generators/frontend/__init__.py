@@ -30,7 +30,7 @@ from .src.presentation.style import auth as style_auth
 from .src.presentation.lib import (
     auth as lib_auth, validations as lib_validations, format as lib_format,
     workflow as lib_workflow, storage as lib_storage, index as lib_index,
-    profile as lib_profile, payment as lib_payment,
+    profile as lib_profile, payment as lib_payment, errors as lib_errors,
 )
 from .src.presentation.pages import (
     signin as page_signin, register as page_register,
@@ -274,6 +274,7 @@ class ReactAdminGenerator:
         _write(lib_dir / "payment.js", lib_payment.generate(ctx))
         _write(lib_dir / "validations.js", lib_validations.generate(ctx))
         _write(lib_dir / "format.js", lib_format.generate(ctx))
+        _write(lib_dir / "errors.js", lib_errors.generate())
         _write(lib_dir / "workflow.js", lib_workflow.generate())
         _write(lib_dir / "storage.js", lib_storage.generate())
         _write(lib_dir / "index.js", lib_index.generate())

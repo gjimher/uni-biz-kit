@@ -7,6 +7,7 @@ import {
     useGetIdentity
 } from 'react-admin';
 import { supabaseClient } from '../supabaseClient';
+import { functionErrorMessage } from '../presentation/lib/errors';
 import {
     Autocomplete,
     Box,
@@ -201,11 +202,7 @@ __STATES_BLOCK__
             handleCancel();
             refresh();
         } catch (error) {
-            let body = error.context;
-            if (typeof body === 'string') {
-                try { body = JSON.parse(body); } catch { body = null; }
-            }
-            notify(body?.error || error.message || 'Error updating state', { type: 'warning' });
+            notify(await functionErrorMessage(error, 'Error updating state'), { type: 'warning' });
         }
     };
     return (

@@ -7,6 +7,7 @@ export * from './auth';
 export * from './profile';
 export * from './validations';
 export * from './format';
+export * from './errors';
 export * from './workflow';
 export * from './storage';
 export * from './payment';
