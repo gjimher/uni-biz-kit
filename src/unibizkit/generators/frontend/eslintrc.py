@@ -2,13 +2,16 @@ import json
 
 
 def generate() -> str:
+    # The linter must not be stricter than the bundler: Vite/esbuild compiles
+    # current JS, so pinning an older ecmaVersion would reject valid model code
+    # (a '??=' in a presentation page is a parse error under es2020).
     config = {
-        "env": {"browser": True, "es2020": True},
+        "env": {"browser": True, "es2022": True},
         "extends": ["eslint:recommended", "plugin:react/recommended"],
         "plugins": ["react"],
         "settings": {"react": {"version": "detect"}},
         "parserOptions": {
-            "ecmaVersion": 2020,
+            "ecmaVersion": "latest",
             "sourceType": "module",
             "ecmaFeatures": {"jsx": True}
         },
