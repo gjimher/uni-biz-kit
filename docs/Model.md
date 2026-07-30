@@ -72,6 +72,7 @@ What a model can express today, and where each is documented in detail:
 * **Security** — roles, users, and per-role/per-field access rules generated as PostgreSQL RLS policies, profile concepts, and SSO → [Security.md](Security.md)
 * **Backend actions** — model-defined JavaScript functions exposed on list, edit and show views, including multi-row selection → [Backend.md](Backend.md#action-functions)
 * **Presentation** — UI-wide settings, menus, list field/sort rules, declarative per-row buttons backed by JSX addons, and hand-written custom pages on top of the generated backend → [Frontend.md](Frontend.md)
+* **Model documentation** — in-app reference pages generated from the extended IR and linked from the menu: roles, concepts with their fields, workflow states, and the effective permission matrix down to per-field access — the generated concepts and permissions included → [Frontend.md](Frontend.md#model-documentation-pages)
 * **Presentation designer** — visual in-app customization of menus, lists, forms, field labels and workflow-state visibility, with role-scoped overlays during development and per-user designs persisted in production → [Frontend.md](Frontend.md#design-mode)
 * **Seed data** — initial and sample records, including embedded documents → [Backend.md](Backend.md#seed-data-seed_datajsonc)
 * **Deployed data** — transactional upserts keyed by local `id_presentation` fields, with explicit ignore or delete behavior for rows removed from the authoritative model data → [Backend.md](Backend.md#deployed-data-deployed_datajsonc)

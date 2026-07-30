@@ -121,6 +121,11 @@
           "enum": ["assignable_tasks", "my_tasks"],
           "description": "Link to a built-in workflow task page: 'assignable_tasks' (unassigned records the user can claim or assign) or 'my_tasks' (records assigned to the user)."
         },
+        "docs": {
+          "type": "string",
+          "enum": ["roles", "concepts", "workflows", "security"],
+          "description": "Link to a generated model documentation page (route '/_docs/<page>', visible to any signed-in user): 'roles' (roles and their profile concept), 'concepts' (concepts and their fields), 'workflows' (workflows and their states) or 'security' (the effective role/concept permission matrix, with the per-field detail). The pages describe the enriched model, so they also cover the concepts and permissions the generator injects."
+        },
         "children": {
           "type": "array",
           "description": "Sub-menu items",
@@ -133,6 +138,7 @@
       "oneOf": [
         { "required": ["concept"] },
         { "required": ["workflow"] },
+        { "required": ["docs"] },
         { "required": ["children"] }
       ],
       "additionalProperties": false

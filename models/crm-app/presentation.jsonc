@@ -150,6 +150,17 @@
         { "label": "Assignable tasks",   "workflow": "assignable_tasks" },
         { "label": "My tasks",           "workflow": "my_tasks" }
       ]
+    },
+    {
+      // What this CRM is made of, read from the enriched model: the injected
+      // concepts and permissions show up here too.
+      "label": "Documentation",
+      "children": [
+        { "label": "Roles",              "docs": "roles" },
+        { "label": "Concepts",           "docs": "concepts" },
+        { "label": "Workflows",          "docs": "workflows" },
+        { "label": "Security",           "docs": "security" }
+      ]
     }
   ],
   "list_field_rules_level_2": {

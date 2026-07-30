@@ -25,6 +25,8 @@ from .src.devtools import (
     pending_changes_dialog, ui as devtools_ui
 )
 from .src.resources import resource
+from .src import docs
+from .src.docs import docs_model, docs_page
 from .src.presentation import model_js, router, custom_page
 from .src.presentation.style import auth as style_auth
 from .src.presentation.style import theme as style_theme
@@ -148,7 +150,13 @@ class ReactAdminGenerator:
             _write(ctx.output_dir / "src" / "layout" / "MyLayout.jsx", my_layout.generate(has_auth_provider))
             has_custom_menu = True
 
-        _write(ctx.output_dir / "src" / "App.jsx", app.generate(ctx, has_custom_menu, has_auth_provider))
+        # Model documentation pages, generated only when the menu links them.
+        has_docs = docs.linked_from_menu(ctx)
+        if has_docs:
+            _write(ctx.output_dir / "src" / "docs" / "docsModel.js", docs_model.generate(ctx))
+            _write(ctx.output_dir / "src" / "docs" / "DocsPage.jsx", docs_page.generate(has_auth_provider))
+
+        _write(ctx.output_dir / "src" / "App.jsx", app.generate(ctx, has_custom_menu, has_auth_provider, has_docs))
 
         # Presentation customization runtime (overlays merged per role) and the
         # design mode editor. With designer 'off' none of it is emitted and the
@@ -358,6 +366,10 @@ class ReactAdminGenerator:
             (src_dir / "devtools").mkdir(exist_ok=True)
         elif (src_dir / "devtools").exists():
             shutil.rmtree(src_dir / "devtools")
+        if docs.linked_from_menu(ctx):
+            (src_dir / "docs").mkdir(exist_ok=True)
+        elif (src_dir / "docs").exists():
+            shutil.rmtree(src_dir / "docs")
         (src_dir / "utils").mkdir(exist_ok=True)
         (src_dir / "layout").mkdir(exist_ok=True)
         (src_dir / "presentation").mkdir(exist_ok=True)

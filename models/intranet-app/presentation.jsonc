@@ -45,6 +45,16 @@
         { "label": "Articles",   "concept": "article" },
         { "label": "Categories", "concept": "category" }
       ]
+    },
+    {
+      // Documentation of the model itself, generated from its enriched form
+      "label": "Documentation",
+      "children": [
+        { "label": "Roles",     "docs": "roles" },
+        { "label": "Concepts",  "docs": "concepts" },
+        { "label": "Workflows", "docs": "workflows" },
+        { "label": "Security",  "docs": "security" }
+      ]
     }
   ],
   "list_field_rules_level_2": {

@@ -34,6 +34,17 @@
         { "label": "Assignable tasks", "workflow": "assignable_tasks" },
         { "label": "My tasks", "workflow": "my_tasks" }
       ]
+    },
+    {
+      // Model documentation generated from the enriched model: it also covers
+      // the concepts and permissions the generator injects
+      "label": "Documentation",
+      "children": [
+        { "label": "Roles", "docs": "roles" },
+        { "label": "Concepts", "docs": "concepts" },
+        { "label": "Workflows", "docs": "workflows" },
+        { "label": "Security", "docs": "security" }
+      ]
     }
   ],
   "list_field_rules_level_2": {

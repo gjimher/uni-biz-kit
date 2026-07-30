@@ -26,6 +26,9 @@ const canReadResource = (permissions, resource) => Boolean(
 const isMenuItemVisible = (item, permissions) => {
     if (item.children) return item.children.some((child) => isMenuItemVisible(child, permissions));
     if (item.workflow) return canReadResource(permissions, WORKFLOW_PAGE_ROUTES[item.workflow].slice(1));
+    // The documentation pages describe the model, not its data: they are open to
+    // every signed-in user (the same model already ships in the app bundle).
+    if (item.docs) return true;
     return canReadResource(permissions, item.concept);
 };"""
 
@@ -43,6 +46,7 @@ const RenderMenu = ({ items, state, handleToggle, permissions, path = [] }) => {
      if (item.children) {
          let Icon = SubMenuIcon;
          if (item.label === 'Security') Icon = SecurityIcon;
+         if (item.children.length > 0 && item.children.every((child) => child.docs)) Icon = DocsIcon;
 
          return (
              <SubMenu
@@ -65,6 +69,16 @@ const RenderMenu = ({ items, state, handleToggle, permissions, path = [] }) => {
                 to={WORKFLOW_PAGE_ROUTES[item.workflow]}
                 primaryText={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{item.label}{badge}</span>}
                 leftIcon={Icon}
+             />
+         );
+     } else if (item.docs) {
+         const { route, Icon } = DOCS_PAGES[item.docs];
+         return (
+             <Menu.Item
+                key={`docs-${item.docs}`}
+                to={route}
+                primaryText={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>{item.label}{badge}</span>}
+                leftIcon={<Icon />}
              />
          );
      } else {
@@ -95,6 +109,7 @@ _RENDER_MENU_PLAIN = """const RenderMenu = ({ items, state, handleToggle, permis
      if (item.children) {
          let Icon = SubMenuIcon;
          if (item.label === 'Security') Icon = SecurityIcon;
+         if (item.children.length > 0 && item.children.every((child) => child.docs)) Icon = DocsIcon;
 
          return (
              <SubMenu
@@ -117,6 +132,9 @@ _RENDER_MENU_PLAIN = """const RenderMenu = ({ items, state, handleToggle, permis
                 leftIcon={Icon}
              />
          );
+     } else if (item.docs) {
+         const { route, Icon } = DOCS_PAGES[item.docs];
+         return <Menu.Item key={`docs-${item.docs}`} to={route} primaryText={item.label} leftIcon={<Icon />} />;
      } else {
          let Icon = null;
          if (item.concept === 'user') Icon = <UserIcon />;
@@ -215,6 +233,9 @@ import {{
     Settings as OperationsIcon,
     Sync as IntegrationsIcon,
     History as VersionsIcon,
+    Schema as ConceptsIcon,
+    AccountTree as WorkflowsIcon,
+    MenuBook as DocsIcon,
 {custom_icons}}} from '@mui/icons-material';
 
 // The built-in task pages are generated resources like any other; the menu
@@ -222,6 +243,15 @@ import {{
 const WORKFLOW_PAGE_ROUTES = {{
     assignable_tasks: '/_assignable_task',
     my_tasks: '/_my_task',
+}};
+
+// Model documentation pages (see src/docs/): custom routes under /admin, not
+// resources, so they carry their own icon here.
+const DOCS_PAGES = {{
+    roles: {{ route: '/_docs/roles', Icon: RoleIcon }},
+    concepts: {{ route: '/_docs/concepts', Icon: ConceptsIcon }},
+    workflows: {{ route: '/_docs/workflows', Icon: WorkflowsIcon }},
+    security: {{ route: '/_docs/security', Icon: SecurityIcon }},
 }};
 
 const menuItems = {menu_items_json};

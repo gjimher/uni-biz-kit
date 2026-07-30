@@ -45,7 +45,8 @@ A concept's `id_presentation` (declared in `concepts.jsonc`) is the human-readab
 Configuration in `presentation.jsonc`:
 
 * `locale`, `number_locale`, `currency` — UI language and number/currency formatting.
-* `menu` — custom left menu; defaults to a flat list of all resources. Entries the signed-in role cannot read are hidden (and a group disappears once all of its entries are), so one menu can serve every role without offering dead links.
+* `menu` — custom left menu; defaults to a flat list of all resources. Entries the signed-in role cannot read are hidden (and a group disappears once all of its entries are), so one menu can serve every role without offering dead links. A leaf entry links a `concept`, a built-in `workflow` task page, or a `docs` page (see below).
+* `docs` menu entries — generated model documentation pages (see below).
 * `list_field_rules_level_1..3`, `list_sort` — which columns list views show and their default sort (see below).
 * `list_row_actions` — model-provided buttons rendered on individual list rows (see below).
 * `authenticated_pages` — which custom pages require login (see below).
@@ -215,6 +216,19 @@ The CSV format:
 Import first validates the whole file and reports **all** problems at once with their record number (the header is line 1): unknown columns, type errors, missing required values, unresolvable or ambiguous relation values, and update keys that match no record — or more than one, since `id_presentation` is not necessarily unique. If the file is clean, a summary (`X inserts, Y updates`) asks for confirmation before anything is written; execution then runs in chunks with a progress bar and lists any per-row failures at the end.
 
 Update semantics: only the columns present in the file are written — an absent column leaves the field (or the many-to-many links) untouched, while a present-but-empty cell clears it. Imports run with the logged-in user's permissions, so row-level security applies as in the rest of the UI.
+
+### Model documentation pages
+
+A `docs` menu entry links a generated documentation page for the model itself, served under `#/admin/_docs/<page>`:
+
+* `roles` — every role with its description and profile concept, plus the built-in `_anon` when some rule grants it access.
+* `concepts` — each concept (filterable) with its archetype, workflow, storage and versioning, and a table of its fields: type, target concept, enum values, constraints, requiredness and description.
+* `workflows` — each workflow with its states: owners, assigners, what happens to the task owner on entry, and the state description.
+* `security` — the effective permission matrix as `concept · role · access`, filterable by role and concept; clicking a row opens the access **per field**, marking the fields that do not follow the concept-level access.
+
+The source is the [extended IR](Model.md#the-extended-ir), not the hand-written model, so the pages also document what the generator injects: concepts such as `_version`, `_integration` or `_design`, the permissions added for them, and the virtual `_documents` field that governs attachments. Internal `_`-prefixed columns are left out — they are plumbing, not model.
+
+The pages are generated only when the menu links them, and they require a session; any signed-in role can read them, since the same model already ships in the application bundle.
 
 ## Custom Pages (MDX / JSX)
 

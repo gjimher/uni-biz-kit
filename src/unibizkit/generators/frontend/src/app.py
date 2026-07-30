@@ -4,7 +4,8 @@ from ..context import Context
 from .presentation.lib import profile as lib_profile
 
 
-def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: bool = False) -> str:
+def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: bool = False,
+             has_docs: bool = False) -> str:
     if ctx.customization:
         customization_import = "import { CustomizationProvider } from './components/customization';\n"
         customization_open = "      <CustomizationProvider>\n"
@@ -19,7 +20,19 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
     admin_route_segments = [concept["name"] for concept in ctx.concepts]
     if has_integrations:
         admin_route_segments.extend(["_integration", "_integration_run"])
+    if has_docs:
+        # Not a resource, but its links must get the same /admin prefix.
+        admin_route_segments.append("_docs")
     admin_resource_names = json.dumps(admin_route_segments)
+
+    docs_import = ""
+    docs_routes = ""
+    if has_docs:
+        docs_import = "import { DocsPage } from './docs/DocsPage';\n"
+        docs_routes = """                <CustomRoutes>
+                  <Route path="/_docs/:page" element={<DocsPage />} />
+                </CustomRoutes>
+"""
 
     for concept in ctx.concepts:
         resource_name = concept["name"]
@@ -62,6 +75,8 @@ def generate(ctx: Context, has_custom_layout: bool = False, has_auth_provider: b
     sso_redirect_helpers = ""
     sso_redirect_element = ""
     ra_extra_imports = "AdminContext, AdminUI, Resource, localStorageStore"
+    if has_docs:
+        ra_extra_imports += ", CustomRoutes"
     profile_gate_element = ""
     if has_auth_provider:
         sso_enabled = ctx.security_config["sso"]["enabled"]
@@ -173,7 +188,7 @@ import {{ adminTheme }} from './presentation/style/theme';
 {auth_import}
 {sso_redirect_import}
 import {{ PresentationRouter }} from './presentation/PresentationRouter';
-{chr(10).join(import_statements)}
+{docs_import}{chr(10).join(import_statements)}
 {i18n_provider_def}
 // Custom routerProvider so that React-Admin links and navigation prepend /admin
 // when the path is absolute (e.g. /product → /admin/product).
@@ -238,7 +253,7 @@ const App = () => (
             {{permissions => (
               <>
 {chr(10).join(resource_components)}
-              </>
+{docs_routes}              </>
             )}}
           </AdminUI>
         </>}} />

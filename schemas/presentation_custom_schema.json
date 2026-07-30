@@ -226,6 +226,11 @@
           "enum": ["assignable_tasks", "my_tasks"],
           "description": "Link to a built-in workflow task page: 'assignable_tasks' (unassigned records the user can claim or assign) or 'my_tasks' (records assigned to the user)."
         },
+        "docs": {
+          "type": "string",
+          "enum": ["roles", "concepts", "workflows", "security"],
+          "description": "Link to a generated model documentation page: 'roles', 'concepts', 'workflows' or 'security'. The pages are only generated when the base menu in presentation.jsonc references them."
+        },
         "children": {
           "type": "array",
           "description": "Sub-menu items",
@@ -238,6 +243,7 @@
       "oneOf": [
         { "required": ["concept"] },
         { "required": ["workflow"] },
+        { "required": ["docs"] },
         { "required": ["children"] }
       ],
       "additionalProperties": false

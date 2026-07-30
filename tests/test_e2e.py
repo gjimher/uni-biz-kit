@@ -447,6 +447,81 @@ def test_list_selection_follows_delete_permission(page: Page, app_server):
     expect(page.locator("table thead input[type=checkbox]")).to_have_count(1)
 
 
+def test_model_docs_pages(page: Page, app_server):
+    """The generated model documentation (#/admin/_docs/*): it needs a session,
+    it is open to every signed-in role (not only admins), and it is fed from the
+    enriched model — so what the generator injects (concepts, fields and the
+    permissions on them) is documented like the rest, with the per-field detail
+    behind each row of the security matrix.
+    """
+    import psycopg2
+    from dotenv import dotenv_values
+
+    with open(os.path.abspath("test-app/security_extended.json")) as f:
+        user1 = next(u for u in json.load(f)["users"] if "user" in u["roles"])
+
+    # The post-login profile gate (customer.first_name/last_name are
+    # "ask_after_login") would sit on top of the menu; complete the profile so
+    # this test does not depend on what ran before it.
+    conn = psycopg2.connect(dotenv_values("test-app/backend/.env")["DB_URL"])
+    conn.autocommit = True
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE customer SET "first_name" = COALESCE("first_name", %s), '
+                '"last_name" = COALESCE("last_name", %s) WHERE "_user_email" = %s',
+                ("Docs", "Reader", user1["email"]),
+            )
+    finally:
+        conn.close()
+
+    page.set_default_timeout(10000)
+
+    # Signed out, the docs bounce to the sign-in page.
+    page.goto(app_server + "/#/admin/_docs/security")
+    expect(page.locator('input[name="email"]')).to_be_visible()
+    page.locator('input[name="email"]').fill(user1["email"])
+    page.locator('input[name="password"]').fill(user1["password"])
+    page.get_by_role("button", name="Sign in").click()
+
+    page.get_by_text("Documentation").click()
+
+    page.get_by_role("menuitem", name="Roles").click()
+    page.wait_for_url("**#/admin/_docs/roles**")
+    expect(page.get_by_role("cell", name="System Administrator")).to_be_visible()
+
+    page.get_by_role("menuitem", name="Concepts").click()
+    page.wait_for_url("**#/admin/_docs/concepts**")
+    page.get_by_label("Filter").fill("order_item")
+    page.get_by_text("order_item", exact=True).click()
+    expect(page.get_by_role("cell", name="quantity", exact=True)).to_be_visible()
+    # Internal columns are plumbing, not model documentation
+    expect(page.get_by_role("cell", name="_security_owner_id", exact=True)).to_have_count(0)
+    # An injected concept is documented like a modelled one
+    page.get_by_label("Filter").fill("_design")
+    expect(page.get_by_text("_design", exact=True)).to_be_visible()
+
+    page.get_by_role("menuitem", name="Workflows").click()
+    page.wait_for_url("**#/admin/_docs/workflows**")
+    expect(page.get_by_role("cell", name="delivered", exact=True)).to_be_visible()
+
+    page.get_by_role("menuitem", name="Security").click()
+    page.wait_for_url("**#/admin/_docs/security**")
+    # An injected concept with injected permissions is part of the matrix
+    page.get_by_label("Concept").fill("_design")
+    expect(page.get_by_role("cell", name="_design", exact=True).first).to_be_visible()
+
+    page.get_by_label("Concept").fill("customer")
+    page.get_by_role("row").filter(has_text="customer").filter(
+        has_text="owner_write").first.click()
+    dialog = page.get_by_role("dialog")
+    # A level-3 field rule keeps admin_field read-only for the role the
+    # concept-level access lets write: that is what the detail is for.
+    admin_field_row = dialog.get_by_role("row").filter(has_text="admin_field")
+    expect(admin_field_row.get_by_text("read", exact=True)).to_be_visible()
+    expect(admin_field_row.get_by_text("differs", exact=True)).to_be_visible()
+
+
 def test_personal_designer_end_user(page: Page, app_server, request):
     """designer 'production' per-user personalization on the production bundle:
     a user edits and saves their own design (stored in the _design table), it
