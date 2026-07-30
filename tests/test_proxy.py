@@ -19,7 +19,7 @@ from unittest.mock import patch
 import pytest
 
 from unibizkit.cli import CLI
-from unibizkit.schema_loader import SchemaValidationError, SchemaLoader
+from unibizkit.schema_loader import SchemaValidationError, SchemaLoader, _load_jsonc_file
 
 
 def _write(path: Path, content):
@@ -59,16 +59,26 @@ class TestProxyGeneration:
         assert "www.unibizkit.dev {" in caddyfile
         assert "disable_http_challenge" in caddyfile
         assert "auto_https disable_redirects" in caddyfile
-        assert "redir /b2c /b2c/ 308" in caddyfile
-        assert "reverse_proxy /b2c/* 127.0.0.1:3050" in caddyfile
-        assert "redir /intranet /intranet/ 308" in caddyfile
-        assert "reverse_proxy /intranet/* 127.0.0.1:3100" in caddyfile
+        # Which demos are proxied is model content: the expectations are read
+        # from the model so the lineup can change, while the resolution stays
+        # pinned (base_uri redirected with a trailing slash, port taken from the
+        # target model's deployment.jsonc).
+        proxied = _load_jsonc_file("models/ubk-app/deployment.jsonc")["proxy"]["models"]
+        assert proxied, "the proxy model must reference at least one app model"
+        for model in proxied:
+            target = _load_jsonc_file(f"models/{model}/deployment.jsonc")
+            base_uri = target["base_uri"].rstrip("/")
+            port = target.get("prod_base_port", 3000)  # schema default
+            assert f"redir {base_uri} {base_uri}/ 308" in caddyfile
+            assert f"reverse_proxy {base_uri}/* 127.0.0.1:{port}" in caddyfile
         assert "file_server" in caddyfile
 
         # Landing page: GitHub link, demo link, screenshot images.
         index_html = (output_dir / "prod" / "docker" / "caddy" / "site" / "index.html").read_text()
         assert "https://github.com/gjimher/uni-biz-kit" in index_html
-        assert 'href="/b2c/"' in index_html
+        for model in proxied:
+            base_uri = _load_jsonc_file(f"models/{model}/deployment.jsonc")["base_uri"].rstrip("/")
+            assert f'href="{base_uri}/"' in index_html
         assert "<img" in index_html and "assets/" in index_html
         # assets/ tree copied into the site.
         assets_dir = output_dir / "prod" / "docker" / "caddy" / "site" / "assets"
